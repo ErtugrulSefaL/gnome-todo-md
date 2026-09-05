@@ -1,4 +1,5 @@
 import St from 'gi://St';
+import GLib from 'gi://GLib';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -20,10 +21,15 @@ export default class TodoExtension extends Extension {
         this._indicator.add_child(icon);
 
         // Refresh the list when the menu opens so external edits show up.
-        this._menuSignal = this._indicator.menu.connect('open-state-changed',
+        // Delay via GLib.idle_add so the menu opens first, then gets filled,
+        // avoiding layout issues from clearing items during the open transition.
+        this._openSignal = this._indicator.menu.connect('open-state-changed',
             (menu, open) => {
                 if (open) {
-                    this._refreshTodoMenu();
+                    GLib.idle_add(() => {
+                        this._refreshTodoMenu();
+                        return GLib.SOURCE_REMOVE;
+                    });
                 }
             });
 
@@ -32,7 +38,7 @@ export default class TodoExtension extends Extension {
     }
 
     disable() {
-        this._indicator.menu.disconnect(this._menuSignal);
+        this._indicator.menu.disconnect(this._openSignal);
         this._indicator?.destroy();
         this._indicator = null;
     }

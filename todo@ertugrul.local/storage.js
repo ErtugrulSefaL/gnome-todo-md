@@ -62,7 +62,13 @@ export function readTodo() {
     let content;
     try {
         const [, bytes] = file.load_contents(null);
-        content = bytes ? bytes.toString() : '';
+        // Decode bytes explicitly (TextDecoder) to avoid the deprecated
+        // Uint8Array.toString() behavior on empty/edge contents.
+        if (bytes) {
+            content = new TextDecoder().decode(bytes);
+        } else {
+            content = '';
+        }
     } catch (err) {
         // Missing/unreadable file is not an error: yield an empty list.
         content = '';
