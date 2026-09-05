@@ -142,6 +142,7 @@ export function addTask(content, text) {
  */
 export function writeTodo(content) {
     const file = Gio.File.new_for_path(TODO_PATH);
-    const bytes = new GLib.Bytes(content);
+    // replace_contents expects a Uint8Array (guint8[]), which TextEncoder yields.
+    const bytes = new TextEncoder().encode(content);
     file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
 }
