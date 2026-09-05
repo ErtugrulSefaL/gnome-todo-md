@@ -1,0 +1,45 @@
+# GNOME Shell Todo Extension — project context (local goosehints)
+
+A GNOME Shell 46 todo extension written in JavaScript (ESModules).
+Target: GNOME 46 only. Session: X11. Code language: English.
+
+## Data / architecture
+- Tasks are stored in a plain-text **markdown checkbox** file: `~/todo.md`
+  - Format: `- [ ] task` (incomplete) and `- [x] task` (complete)
+  - Standalone file (not Obsidian) -> anyone can use it (markdown is universal).
+- Keep UI (panel/menus), storage (file I/O), and business logic in separate
+  functions/files. Do not pile everything into one giant function.
+
+## Coding rules (to prevent spaghetti, from the start)
+- KISS: no unnecessary abstraction, design patterns, or "we'll need it later" code.
+- DRY — rule of three: copying twice is fine; extract a shared helper on the 3rd repeat.
+- Keep files small and single-responsibility; do not dogmatically force SOLID.
+- "Don't break what works": new code must not break existing structure.
+- Do not invent GJS/GNOME Shell APIs that don't exist. If unsure, use SearXNG MCP
+  to look up gjs.guide or the GNOME GitLab; don't guess.
+- Do not use legacy/Clutter/`imports` API — GNOME 45+ ESM and Shell's `St`/`misc` only.
+  Do not raise `shell-version` in `metadata.json` above `["46"]`; don't claim to
+  support versions you haven't tested.
+
+## Phase plan (priority order — desktop-pinned widget is a LATER phase)
+- Phase 1: core — read/list `~/todo.md` + add/delete + check/uncheck, clickability
+- Phase 2: native notifications, archiving
+- Phase 3: keyboard shortcut
+- Phase 4: desktop-pinned widget (NOT the first priority)
+
+## Testing / discipline
+- Test after each feature/compile: reload Shell (Alt+F2 -> r) + manual verification.
+- Error tracking: Looking Glass (Alt+F2 -> `lg`). `journalctl -f` is also usable;
+  `journalctl -u gnome-shell*` does NOT work on this system — don't use it.
+- Optional safe testing: `dbus-run-session -- gnome-shell --nested --wayland`.
+- Small, single-feature steps; don't add multiple features in one message.
+- Commit early and often; each commit message should summarize the change.
+
+## Process / interaction
+- Before starting a new feature, produce a short checklist/plan (list the steps) and
+  wait for my approval; don't start coding before I approve.
+- Before finishing a step, use `/goal` with a clear, testable completion criterion.
+- After a change, tell me EXACTLY how to test it (command + steps); don't proceed to
+  the next step until I test and approve.
+- Summarize the diff; we are in approve mode, don't proceed without approval.
+- Approval before action: present changes to me before applying them.
