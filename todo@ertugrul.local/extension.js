@@ -63,10 +63,12 @@ export default class TodoExtension extends Extension {
             can_focus: true,
         });
         this._addEntry.set_width(220);
-        this._addEntry.connect('key::release', (entry, event) => {
+        this._addEntry.connect('key-release-event', (entry, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 this._addTask(entry.get_text());
+                return Clutter.EVENT_STOP;
             }
+            return Clutter.EVENT_PROPAGATE;
         });
 
         // Wrap the entry in a menu item so it lays out like other rows.
