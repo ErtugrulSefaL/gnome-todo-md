@@ -100,6 +100,12 @@ export default class TodoExtension extends Extension {
             delBtn.connect('clicked', () => {
                 this._deleteTask(index);
             });
+
+            // Let the label grow so the delete button pins to the far right.
+            label.set_hexpand(true);
+            label.set_x_align(Clutter.ActorAlign.START);
+            delBtn.set_x_align(Clutter.ActorAlign.END);
+
             row.add_child(label);
             row.add_child(delBtn);
 
