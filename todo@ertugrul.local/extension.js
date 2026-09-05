@@ -106,6 +106,9 @@ export default class TodoExtension extends Extension {
             });
             if (task.done) {
                 row.setOrnament(PopupMenu.Ornament.CHECK);
+                // Fade completed rows via actor opacity (CSS opacity is not
+                // reliably honored by St.Label); 0.6 * 255.
+                label.opacity = 153;
             }
 
             // Delete button pinned to the right of the task text.

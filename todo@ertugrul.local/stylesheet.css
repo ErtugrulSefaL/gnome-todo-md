@@ -16,5 +16,4 @@
 /* Completed tasks get a line-through on the label text. */
 .todo-text.todo-done {
     text-decoration: line-through;
-    opacity: 0.6;
 }
