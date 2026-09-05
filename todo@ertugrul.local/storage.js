@@ -15,6 +15,14 @@ import Gio from 'gi://Gio';
 const TODO_PATH = GLib.get_home_dir() + '/todo.md';
 
 /**
+ * Absolute path of the todo file.
+ * @returns {string}
+ */
+export function todoPath() {
+    return TODO_PATH;
+}
+
+/**
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *

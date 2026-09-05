@@ -1,6 +1,7 @@
 import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
+import Gio from 'gi://Gio';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -40,9 +41,27 @@ export default class TodoExtension extends Extension {
         // Pre-fill the menu so it is not empty on first open (an empty popup
         // menu will not be shown by GNOME Shell).
         this._refreshTodoMenu();
+
+        // Watch ~/todo.md so externally-added tasks appear live, without
+        // needing a Shell reload.
+        this._todoMonitor = Gio.File.new_for_path(Storage.todoPath())
+            .monitor(Gio.FileMonitorFlags.NONE, null);
+        this._monitorSignal = this._todoMonitor.connect('changed', () => {
+            // Refresh live only while the menu is open; on next open it is
+            // freshly populated anyway. This keeps external edits visible
+            // immediately without needless rebuilds while closed.
+            if (this._indicator.menu.isOpen) {
+                this._refreshTodoMenu();
+            }
+        });
     }
 
     disable() {
+        if (this._todoMonitor) {
+            this._todoMonitor.disconnect(this._monitorSignal);
+            this._todoMonitor.cancel();
+            this._todoMonitor = null;
+        }
         this._indicator.menu.disconnect(this._openSignal);
         this._indicator?.destroy();
         this._indicator = null;
