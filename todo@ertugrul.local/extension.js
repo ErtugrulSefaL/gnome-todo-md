@@ -35,6 +35,10 @@ export default class TodoExtension extends Extension {
 
         // Add the indicator to the panel.
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+
+        // Pre-fill the menu so it is not empty on first open (an empty popup
+        // menu will not be shown by GNOME Shell).
+        this._refreshTodoMenu();
     }
 
     disable() {
