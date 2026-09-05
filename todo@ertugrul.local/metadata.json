@@ -1,0 +1,7 @@
+{
+  "uuid": "todo@ertugrul.local",
+  "name": "Todo",
+  "description": "TODO list from ~/todo.md in a panel menu",
+  "shell-version": ["46"],
+  "url": "https://github.com/ertugrul/todo-extension"
+}
