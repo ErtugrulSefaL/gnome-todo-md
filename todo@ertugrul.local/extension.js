@@ -100,7 +100,10 @@ export default class TodoExtension extends Extension {
 
         for (const task of tasks) {
             const row = new PopupMenu.PopupBaseMenuItem();
-            const label = new St.Label({text: task.text});
+            const label = new St.Label({
+                text: task.text,
+                style_class: task.done ? 'todo-text todo-done' : 'todo-text',
+            });
             if (task.done) {
                 row.setOrnament(PopupMenu.Ornament.CHECK);
             }

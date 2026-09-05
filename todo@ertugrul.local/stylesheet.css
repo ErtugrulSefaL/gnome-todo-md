@@ -12,3 +12,8 @@
 .todo-delete-button StIcon {
     icon-size: 12px;
 }
+
+/* Completed tasks get a line-through on the label text. */
+.todo-text.todo-done {
+    text-decoration: line-through;
+}
