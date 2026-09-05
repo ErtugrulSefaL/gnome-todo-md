@@ -69,3 +69,71 @@ export function readTodo() {
 
     return splitLines(content);
 }
+
+/**
+ * Toggle the checkbox state of the line at `index`.
+ * Lines that are not checkboxes are left untouched.
+ *
+ * @param {string} content - Raw file content.
+ * @param {number} index - 0-based line index.
+ * @returns {string} Updated content.
+ */
+export function toggleTask(content, index) {
+    const lines = content.split('\n');
+    const line = lines[index];
+    if (line === undefined) {
+        return content;
+    }
+
+    const match = line.match(/^(\s*-\s+\[)([ xX])(\]\s+.*)$/);
+    if (!match) {
+        return content;
+    }
+
+    const newMark = match[2].toLowerCase() === 'x' ? ' ' : 'x';
+    lines[index] = match[1] + newMark + match[3];
+    return lines.join('\n');
+}
+
+/**
+ * Delete the line at `index`.
+ *
+ * @param {string} content - Raw file content.
+ * @param {number} index - 0-based line index.
+ * @returns {string} Updated content.
+ */
+export function deleteTask(content, index) {
+    const lines = content.split('\n');
+    if (index < 0 || index >= lines.length) {
+        return content;
+    }
+
+    lines.splice(index, 1);
+    return lines.join('\n');
+}
+
+/**
+ * Append a new incomplete task to the end of the file.
+ *
+ * @param {string} content - Raw file content.
+ * @param {string} text - Task text (may contain any characters).
+ * @returns {string} Updated content.
+ */
+export function addTask(content, text) {
+    // Keep the file clean when empty so the first task starts on line 0.
+    const trimmed = (content === '' || content.endsWith('\n'))
+        ? content
+        : content + '\n';
+    return trimmed + `- [ ] ${text}\n`;
+}
+
+/**
+ * Write content back to ~/todo.md.
+ *
+ * @param {string} content - Full file content to write.
+ */
+export function writeTodo(content) {
+    const file = Gio.File.new_for_path(TODO_PATH);
+    const bytes = new GLib.Bytes(content);
+    file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
+}
