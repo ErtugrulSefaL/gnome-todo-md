@@ -102,9 +102,10 @@ export default class TodoExtension extends Extension {
             });
 
             // Let the label grow so the delete button pins to the far right.
-            label.set('hexpand', true);
-            label.set('x_align', Clutter.ActorAlign.START);
-            delBtn.set('x_align', Clutter.ActorAlign.END);
+            // (Clutter uses x_expand, not GTK's hexpand.)
+            label.set_x_expand(true);
+            label.set_x_align(Clutter.ActorAlign.START);
+            delBtn.set_x_align(Clutter.ActorAlign.END);
 
             row.add_child(label);
             row.add_child(delBtn);
