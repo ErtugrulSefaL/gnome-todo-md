@@ -90,7 +90,7 @@ export default class TodoExtension extends Extension {
 
             // Delete button pinned to the right of the task text.
             const delBtn = new St.Button({
-                style_class: 'button',
+                style_class: 'todo-delete-button button',
                 child: new St.Icon({
                     icon_name: 'user-trash-symbolic',
                     style_class: 'system-status-icon',
