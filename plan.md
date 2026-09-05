@@ -9,7 +9,7 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 - [x] 2. storage.js — `~/todo.md` okuma/ayrıştırma (satırları koru)
 - [x] 3. storage.js — yazma (checkbox güncelle, başlık/not koru, yeni görev sona)
 - [x] 4. logic — storage içinde (A seçeneği): addTask / deleteTask / toggleTask
-- [ ] 5. UI — menüde görev listesi + tıklanabilir check/uncheck (Ornament.CHECK)
+- [x] 5. UI — menüde görev listesi + tıklanabilir check/uncheck (Ornament.CHECK)
 - [ ] 6. UI — üstte St.Entry ile ekleme (Enter ile)
 - [ ] 7. UI — satır başına sil düğmesi (St.Button)
 - [ ] 8. Entegrasyon + elle test + commit

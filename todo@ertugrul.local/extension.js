@@ -1,5 +1,6 @@
 import St from 'gi://St';
 import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -55,6 +56,24 @@ export default class TodoExtension extends Extension {
         menu.removeAll();
 
         const {tasks} = Storage.readTodo();
+
+        // Add-task entry pinned at the top.
+        this._addEntry = new St.Entry({
+            hint_text: 'Add a task…',
+            can_focus: true,
+        });
+        this._addEntry.set_width(220);
+        this._addEntry.connect('key::release', (entry, event) => {
+            if (event.get_key_symbol() === Clutter.KEY_Return) {
+                this._addTask(entry.get_text());
+            }
+        });
+
+        // Wrap the entry in a menu item so it lays out like other rows.
+        const entryItem = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
+        entryItem.add_child(this._addEntry);
+        menu.addMenuItem(entryItem);
+
         if (tasks.length === 0) {
             menu.addAction('No tasks', () => {});
             return;
@@ -71,6 +90,23 @@ export default class TodoExtension extends Extension {
             });
             menu.addMenuItem(item);
         }
+    }
+
+    /**
+     * Add a task to the end of ~/todo.md and refresh the menu.
+     *
+     * @param {string} text - Task text to add.
+     */
+    _addTask(text) {
+        if (!text || !text.trim()) {
+            return;
+        }
+
+        const parsed = Storage.readTodo();
+        const updated = Storage.addTask(parsed.raw, text.trim());
+        Storage.writeTodo(updated);
+        this._addEntry.set_text('');
+        this._refreshTodoMenu();
     }
 
     /**
