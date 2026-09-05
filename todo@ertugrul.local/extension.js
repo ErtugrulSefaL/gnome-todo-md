@@ -47,12 +47,10 @@ export default class TodoExtension extends Extension {
         this._todoMonitor = Gio.File.new_for_path(Storage.todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
-            // Refresh live only while the menu is open; on next open it is
-            // freshly populated anyway. This keeps external edits visible
-            // immediately without needless rebuilds while closed.
-            if (this._indicator.menu.isOpen) {
-                this._refreshTodoMenu();
-            }
+            // Rebuild whenever the file changes. Refreshing while closed is
+            // harmless (the next open shows fresh data) and avoids any
+            // dependence on menu isOpen state for live updates.
+            this._refreshTodoMenu();
         });
     }
 
