@@ -52,8 +52,9 @@ export function splitLines(content) {
 /**
  * Read and parse ~/todo.md.
  *
- * @returns {{tasks: Array<Object>, other: Array<{index, line}>}} Parsed content.
- *          Returns an empty file model if the file is missing or unreadable.
+ * @returns {{tasks: Array<Object>, other: Array<{index, line}>, raw: string}}
+ *          Parsed content plus the raw file text. Returns an empty file model
+ *          if the file is missing or unreadable.
  */
 export function readTodo() {
     const file = Gio.File.new_for_path(TODO_PATH);
@@ -67,7 +68,8 @@ export function readTodo() {
         content = '';
     }
 
-    return splitLines(content);
+    const {tasks, other} = splitLines(content);
+    return {tasks, other, raw: content};
 }
 
 /**

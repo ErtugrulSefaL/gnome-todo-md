@@ -6,9 +6,9 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 ## Faz 1 — Çekirdek (panel menüsü: göster/ekle/sil/check-uncheck)
 
 - [x] 1. İskelet: metadata.json + extension.js + minimal panel düğmesi
-- [ ] 2. storage.js — `~/todo.md` okuma/ayrıştırma (satırları koru)
-- [ ] 3. storage.js — yazma (checkbox güncelle, başlık/not koru, yeni görev sona)
-- [ ] 4. logic — addTask / deleteTask / toggleTask
+- [x] 2. storage.js — `~/todo.md` okuma/ayrıştırma (satırları koru)
+- [x] 3. storage.js — yazma (checkbox güncelle, başlık/not koru, yeni görev sona)
+- [x] 4. logic — storage içinde (A seçeneği): addTask / deleteTask / toggleTask
 - [ ] 5. UI — menüde görev listesi + tıklanabilir check/uncheck (Ornament.CHECK)
 - [ ] 6. UI — üstte St.Entry ile ekleme (Enter ile)
 - [ ] 7. UI — satır başına sil düğmesi (St.Button)
