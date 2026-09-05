@@ -11,8 +11,12 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 - [x] 4. logic — storage içinde (A seçeneği): addTask / deleteTask / toggleTask
 - [x] 5. UI — menüde görev listesi + tıklanabilir check/uncheck (Ornament.CHECK)
 - [x] 6. UI — üstte St.Entry ile ekleme (Enter ile)
-- [ ] 7. UI — satır başına sil düğmesi (St.Button)
-- [ ] 8. Entegrasyon + elle test + commit
+- [x] 7. UI — satır başına sil düğmesi (St.Button) — ikon boyutu polish backlog'a alındı
+- [x] 8. Entegrasyon + elle test + commit
+
+## Polish (fonksiyonel faz bittikten sonra)
+
+- [ ] Sil düğmesi çöp kutusu ikonunu menü boyutuna uydur (stylesheet.css / ikon ikon boyutu)
 
 ## Faz 2 — Bildirimler + arşivleme (ileride)
 
@@ -30,4 +34,4 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 
 - `Alt+F2 → r` ile GNOME Shell'i yeniden yükle.
 - Hata takibi: `journalctl -f` veya Looking Glass (`lg`).
-- Onayı alınmadan bir sonraki adıma geçme.
+- Onayı alınmadan bir sonraki adıma geçme.\n
