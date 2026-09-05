@@ -82,15 +82,31 @@ export default class TodoExtension extends Extension {
         }
 
         for (const task of tasks) {
-            const item = new PopupMenu.PopupMenuItem(task.text);
+            const row = new PopupMenu.PopupBaseMenuItem();
+            const label = new St.Label({text: task.text});
             if (task.done) {
-                item.setOrnament(PopupMenu.Ornament.CHECK);
+                row.setOrnament(PopupMenu.Ornament.CHECK);
             }
+
+            // Delete button pinned to the right of the task text.
+            const delBtn = new St.Button({
+                style_class: 'button',
+                child: new St.Icon({
+                    icon_name: 'user-trash-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
             const index = task.index;
-            item.connect('activate', () => {
+            delBtn.connect('clicked', () => {
+                this._deleteTask(index);
+            });
+            row.add_child(label);
+            row.add_child(delBtn);
+
+            row.connect('activate', () => {
                 this._toggleTask(index);
             });
-            menu.addMenuItem(item);
+            menu.addMenuItem(row);
         }
     }
 
@@ -119,6 +135,18 @@ export default class TodoExtension extends Extension {
     _toggleTask(index) {
         const parsed = Storage.readTodo();
         const updated = Storage.toggleTask(parsed.raw, index);
+        Storage.writeTodo(updated);
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Delete a task line and refresh the menu.
+     *
+     * @param {number} index - 0-based line index of the task.
+     */
+    _deleteTask(index) {
+        const parsed = Storage.readTodo();
+        const updated = Storage.deleteTask(parsed.raw, index);
         Storage.writeTodo(updated);
         this._refreshTodoMenu();
     }
