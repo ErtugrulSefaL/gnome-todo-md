@@ -102,9 +102,9 @@ export default class TodoExtension extends Extension {
             });
 
             // Let the label grow so the delete button pins to the far right.
-            label.set_hexpand(true);
-            label.set_x_align(Clutter.ActorAlign.START);
-            delBtn.set_x_align(Clutter.ActorAlign.END);
+            label.set('hexpand', true);
+            label.set('x_align', Clutter.ActorAlign.START);
+            delBtn.set('x_align', Clutter.ActorAlign.END);
 
             row.add_child(label);
             row.add_child(delBtn);
