@@ -16,7 +16,8 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 
 ## Polish (fonksiyonel faz bittikten sonra)
 
-- [ ] Sil düğmesi çöp kutusu ikonunu menü boyutuna uydur (stylesheet.css / ikon ikon boyutu)
+- [x] Sil düğmesi çöp kutusu ikonunu menü boyutuna uydur (stylesheet.css / ikon ikon boyutu)
+- [x] Sil düğmesini satırın en sağına yasla (Clutter x_expand + ActorAlign)
 
 ## Faz 2 — Bildirimler + arşivleme (ileride)
 

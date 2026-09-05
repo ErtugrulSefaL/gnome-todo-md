@@ -2,7 +2,7 @@
 
 **Son güncelleme:** 2026-09-05
 **Koşul ortamı:** GJS (`gjs -m tests/run_tests.mjs`) — gerçek `storage.js` modülü + gerçek `~/todo.md`
-**Sonuç:** ✅ **18 geçti / 0 kaldı** (tümü başarılı)
+**Sonuç:** ✅ **18 geçti / 0 kaldı** (tümü başarılı) + sentaks/yapı/stil kontrolleri geçerli
 
 > **Güvenlik:** Test suite, `~/todo.md`'yi başlangıçta anlık görüntüler (snapshot) alarak saklar ve her
 > yazma testinden sonra **test edilmiş `Storage.writeTodo()` API'si** ile geri yükler. `teardown` testi,
@@ -51,6 +51,14 @@
 ### 7. Teardown / bütünlük
 
 - [x] Testler sonrası `~/todo.md` ön-test içeriğiyle **byte-byte aynı** (kullanıcı verisi korundu)
+
+### 8. Sentaks / yapı / stil (polish sonrası tam faz kontrolü)
+
+- [x] `extension.js`, `storage.js`, `tests/run_tests.mjs` sentaks OK
+- [x] `metadata.json` geçerli (uuid, `shell-version: ["46"]`, name)
+- [x] `stylesheet.css` yerinde ve dolu (sil ikonu boyutu)
+- [x] Test suite koşusu hâlâ **18/0**
+- [x] `~/todo.md` korundu
 
 ---
 
