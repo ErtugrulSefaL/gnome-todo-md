@@ -123,6 +123,27 @@ function testDeleteTask() {
         oob === base, '');
 }
 
+// ---- editTask ------------------------------------------------------------
+
+function testEditTask() {
+    const base = '# H\n- [ ] a\n- [x] b\n';
+    const editDone = Storage.editTask(base, 2, 'b edited');
+    record('editTask: keeps checkbox state, replaces text',
+        editDone === '# H\n- [ ] a\n- [x] b edited\n', JSON.stringify(editDone));
+
+    const openEdit = Storage.editTask('# H\n- [ ] a\n', 1, 'a2');
+    record('editTask: incomplete task text updated',
+        openEdit === '# H\n- [ ] a2\n', JSON.stringify(openEdit));
+
+    const nonCheck = Storage.editTask(base, 0, 'renamed heading');
+    record('editTask: non-checkbox line replaced as plain text',
+        nonCheck === 'renamed heading\n- [ ] a\n- [x] b\n', JSON.stringify(nonCheck));
+
+    const oob = Storage.editTask(base, 99, 'x');
+    record('editTask: out-of-range index is no-op',
+        oob === base, '');
+}
+
 // ---- addTask -------------------------------------------------------------
 
 function testAddTask() {
@@ -159,6 +180,7 @@ testSplitLines();
 testReadTodo();
 testToggleTask();
 testDeleteTask();
+testEditTask();
 testAddTask();
 testWriteRead();
 restoreOriginal();

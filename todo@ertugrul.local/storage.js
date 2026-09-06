@@ -112,6 +112,32 @@ export function toggleTask(content, index) {
 }
 
 /**
+ * Replace the text of the task line at `index`, keeping its checkbox state.
+ * Non-checkbox lines are replaced verbatim (kept as their own line text).
+ *
+ * @param {string} content - Raw file content.
+ * @param {number} index - 0-based line index.
+ * @param {string} text - New task text (checkbox marker is not included).
+ * @returns {string} Updated content.
+ */
+export function editTask(content, index, text) {
+    const lines = content.split('\n');
+    if (index < 0 || index >= lines.length) {
+        return content;
+    }
+
+    const match = lines[index].match(/^(\s*-\s+\[[ xX]\]\s+).*$/);
+    if (match) {
+        lines[index] = match[1] + text;
+    } else {
+        // Not a checkbox line: replace with plain text (keeps it a line).
+        lines[index] = text;
+    }
+
+    return lines.join('\n');
+}
+
+/**
  * Delete the line at `index`.
  *
  * @param {string} content - Raw file content.
