@@ -15,11 +15,41 @@ Target: GNOME 46 only. Session: X11. Code language: English.
 - DRY — rule of three: copying twice is fine; extract a shared helper on the 3rd repeat.
 - Keep files small and single-responsibility; do not dogmatically force SOLID.
 - "Don't break what works": new code must not break existing structure.
-- Do not invent GJS/GNOME Shell APIs that don't exist. If unsure, use SearXNG MCP
-  to look up gjs.guide or the GNOME GitLab; don't guess.
 - Do not use legacy/Clutter/`imports` API — GNOME 45+ ESM and Shell's `St`/`misc` only.
   Do not raise `shell-version` in `metadata.json` above `["46"]`; don't claim to
   support versions you haven't tested.
+
+### VERIFY-BEFORE-WRITE (hard rule — learned from the edit failure)
+This project repeatedly broke because APIs were guessed instead of verified.
+The edit feature had to be reverted after a pile of invented methods. To prevent it:
+- **No GJS/GNOME Shell API call is written on assumption.** Every St / Clutter /
+  PopupMenu / Gio / Main API must be checked against gjs.guide or GNOME GitLab
+  BEFORE it goes into code. An unverified API never enters a commit.
+  This echo of the old "don't invent" rule is now a hard gate, not a hint.
+- When the intended API name differs from GNOME/GTK habits (set_hexpand vs
+  x_expand, key::release vs key-release-event, CSS opacity vs actor opacity),
+  STOP and surface the verified name rather than guessing.
+- **Known-verified patterns (do NOT re-derive or "improve"):**
+  - `set_x_expand(true)` + `set_x_align(Clutter.ActorAlign.START/END)` for
+    expand/align on St actors (NOT GTK `hexpand`/`set_hexpand`).
+  - St.Entry Enter handling: `connect('key-release-event', (entry, event) => {
+    if (event.get_key_symbol() === Clutter.KEY_Return) ... })`
+    (NOT a `key::release` GObject signal).
+  - `Gio.File.replace_contents(bytes, ...)` takes a `Uint8Array` (yielded by
+    `new TextEncoder().encode(content)`), NOT `GLib.Bytes`.
+  - Fade completed labels via actor `label.opacity`, not CSS `opacity` (unreliable
+    on St.Label); line-through via `stylesheet.css` `.todo-done`.
+  - File reading uses `new TextDecoder().decode(bytes)`.
+- **Stop-and-flag rule:** if an API fix does not work within a couple of attempts,
+  do NOT stack more guessed fixes (this is how the edit fiasco snowballed). Stop,
+  look up the upstream source/docs, or revert to the last known-good state.
+
+### Where state-changing logic lives
+- All file mutation (add / toggle / delete / edit / archive) is a **pure function
+  in `storage.js`** returning the updated content string. `extension.js` only reads
+  the file, calls the storage function, writes back, then rebuilds the UI.
+- `extension.js` stays a thin UI layer. Do NOT move parsing/writing logic into it
+  — the Phase-1 edit failure exactly violates this boundary.
 
 ## Phase plan (priority order — desktop-pinned widget is a LATER phase)
 - Phase 1: core — read/list `~/todo.md` + add/delete + check/uncheck, clickability
@@ -34,6 +64,18 @@ Target: GNOME 46 only. Session: X11. Code language: English.
 - Optional safe testing: `dbus-run-session -- gnome-shell --nested --wayland`.
 - Small, single-feature steps; don't add multiple features in one message.
 - Commit early and often; each commit message should summarize the change.
+
+### Tests
+- Run `tests/run_tests.mjs` (pure `storage.js` logic) after every storage change.
+- Run `tests/smoke.sh` (ext is still `State: ACTIVE`) after every UI change.
+- Principle: logic that can be pure goes in `storage.js` and is unit-tested (no GJS
+  runtime needed). Logic that is inherently UI stays in `extension.js` and is only
+  smoke-checked — its correctness comes from VERIFY-BEFORE-WRITE, not from tests.
+
+### Commit hygiene
+- ONE concern per commit. Do not bundle `fix + style + polish` together; it makes
+  history unreadable and reverts hard.
+- Commit message summarizes exactly the one change (see git log for the convention).
 
 ## Process / interaction
 - Before starting a new feature, produce a short checklist/plan (list the steps) and
