@@ -19,6 +19,11 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 - [x] Sil düğmesi çöp kutusu ikonunu menü boyutuna uydur (stylesheet.css / ikon ikon boyutu)
 - [x] Sil düğmesini satırın en sağına yasla (Clutter x_expand + ActorAlign)
 
+## Eklenen iyileştirmeler (Faz 1 sonrası)
+
+- [x] Canlı dosya izleme: `~/todo.md` dışarıdan değişince menü anında yenilenir (Gio.FileMonitor)
+- [x] Tamamlanan görevlerin üzeri çizilir (strikethrough) + soluklaştırılır (actor opacity)
+
 ## Faz 2 — Bildirimler + arşivleme (ileride)
 
 - [ ] ...

@@ -1,6 +1,6 @@
 # Test Raporu — GNOME Todo Extension (Faz 1)
 
-**Son güncelleme:** 2026-09-05
+**Son güncelleme:** 2026-09-07
 **Koşul ortamı:** GJS (`gjs -m tests/run_tests.mjs`) — gerçek `storage.js` modülü + gerçek `~/todo.md`
 **Sonuç:** ✅ **18 geçti / 0 kaldı** (tümü başarılı) + sentaks/yapı/stil kontrolleri geçerli
 
@@ -87,9 +87,20 @@ RESULT_OK=true
 - Sil düğmesi çöp kutusu ikonunun **büyük görünmesi** fonksiyonel değil kozmetik bir konudur —
   polish backlog'da (bkz. `plan.md`).
 
-## Git geçmişi (Faz 1)
+## Git geçmişi (Faz 1 + iyileştirmeler)
 
 ```
+d1bba59 fix: apply completed-task fade via actor opacity instead of CSS opacity
+ee3d947 style: fade completed task labels (opacity) so strikethrough reads as muted
+61d6184 style: strikethrough completed task labels
+063f8cf fix: rebuild todo menu on every file change (drop unreliable isOpen gate)
+dc58465 feat: watch ~/todo.md via Gio file monitor so external edits appear live
+2eaf28a docs: mark polish + Phase 1 complete; add final syntax/style checks to test.md
+2182bc9 fix: use Clutter x_expand (not GTK hexpand) so delete button pins right
+9e8c4da fix: use GObject set() for hexpand/x_align (set_hexpand doesn't exist on St.Label)
+038fa82 style: pin delete trash button to the far right of each task row
+86c33c3 style: shrink trash icon to fit menu rows via stylesheet.css
+a936a9e test: add GJS unit+integration test suite for Phase 1 and test.md report
 cbe7982 docs(plan): close Phase 1 (integration verified); add polish backlog for trash icon size
 a8e982d feat: per-task delete button in todo menu rows
 5f68ffb fix: use key-release-event (Clutter) instead of nonexistent key::release signal on St.Entry
