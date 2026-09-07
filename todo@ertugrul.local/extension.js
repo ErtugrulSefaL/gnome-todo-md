@@ -60,9 +60,11 @@ export default class TodoExtension extends Extension {
             this._todoMonitor.cancel();
             this._todoMonitor = null;
         }
-        this._indicator.menu.disconnect(this._openSignal);
-        this._indicator?.destroy();
-        this._indicator = null;
+        if (this._indicator) {
+            this._indicator.menu.disconnect(this._openSignal);
+            this._indicator.destroy();
+            this._indicator = null;
+        }
     }
 
     /**
