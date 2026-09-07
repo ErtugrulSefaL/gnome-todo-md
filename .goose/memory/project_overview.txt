@@ -1,0 +1,3 @@
+# todo-extension gnome-shell project
+GNOME Shell 46 todo extension project at /home/ertugrul/projects/todo-extension. Extension: todo@ertugrul.local (active). Files: todo@ertugrul.local/{metadata.json, extension.js, storage.js, stylesheet.css}, tests/run_tests.mjs, plan.md, test.md. Test command: `gjs -m tests/run_tests.mjs` (18 passing tests). Features: Phase 1 (show/add/delete/toggle tasks in ~/todo.md), live file watching (Gio.FileMonitor), strikethrough + fade on completed tasks, delete button styling polish. Session is X11, GNOME 46 only. Project detailed context is in .goosehints.
+
