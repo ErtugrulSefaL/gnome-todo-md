@@ -16,6 +16,18 @@ Target: GNOME 46 only. Session: X11. Code language: English.
   - https://gjs-docs.gnome.org/
   - https://gjs.guide/extensions/development/
   
+### API verification sources (offline-first, but ALWAYS verify online when in doubt)
+- **Offline mirror** of gjs-docs at `~/.local/share/gjs-docs-offline/`
+  (downloaded from gjs-docs.gnome.org DevDocs static API; docs match GNOME 46:
+  `st14~14`, `shell14~14`, `clutter14~14`, `meta14~14`, `gio20~2.0`, `glib20~2.0`, `gjs`).
+  - Each package has `db.json` = `{ "<page.path>": "<html content>" }` and
+    `index.json` = `{ "entries": [{name, path, type}] }`.
+  - Use the `gjsdoc` helper (`~/.local/bin/gjsdoc`): `gjsdoc list`,
+    `gjsdoc search <slug> <term>`, `gjsdoc show <slug> <page-path>`.
+- The offline mirror can be OUTDATED or INCOMPLETE (it is a snapshot).
+  **When an API is missing there, or the answer is ambiguous or version-sensitive,
+  ALWAYS re-verify online** against gjs.guide / gjs-docs.gnome.org / GNOME GitLab
+  source (gitlab.gnome.org raw files with version tags) before writing code.
 - KISS: no unnecessary abstraction, design patterns, or "we'll need it later" code.
 - DRY — rule of three: copying twice is fine; extract a shared helper on the 3rd repeat.
 - Keep files small and single-responsibility; do not dogmatically force SOLID.
