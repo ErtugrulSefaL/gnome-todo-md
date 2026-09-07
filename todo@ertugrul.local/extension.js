@@ -94,7 +94,8 @@ export default class TodoExtension extends Extension {
         menu.addMenuItem(entryItem);
 
         if (tasks.length === 0) {
-            menu.addAction('No tasks', () => {});
+            // Non-reactive: the row must not look clickable.
+            menu.addMenuItem(new PopupMenu.PopupMenuItem('No tasks', {reactive: false}));
             return;
         }
 
