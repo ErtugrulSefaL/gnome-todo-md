@@ -24,6 +24,16 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 - [x] Canlı dosya izleme: `~/todo.md` dışarıdan değişince menü anında yenilenir (Gio.FileMonitor)
 - [x] Tamamlanan görevlerin üzeri çizilir (strikethrough) + soluklaştırılır (actor opacity)
 
+## Faz 1.5 — Yerinde görev düzenleme (Faz 2 öncesi)
+
+- [ ] UI: satıra edit butonu (`document-edit-symbolic`) → satır yerinde St.Entry'e dönüşür
+- [ ] Tek-edit invariant: `_editingIndex` TEK state alanı; satır bazlı local state YASAK.
+  Şu eylemler açık düzenlemeyi kapatır: başka edit butonu (replace), add-entry
+  fokus, toggle, delete, add, menü kapanması, harici dosya değişimi.
+  → Birden fazla açık edit kutusu yapısal olarak imkansız.
+- [ ] Enter = kaydet (boş metin = iptal), Escape = iptal
+- [ ] Test (unit + smoke + manuel) + commit
+
 ## Faz 2 — Bildirimler + arşivleme (ileride)
 
 - [ ] ...
