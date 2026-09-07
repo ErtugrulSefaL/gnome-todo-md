@@ -178,5 +178,12 @@ export function writeTodo(content) {
     const file = Gio.File.new_for_path(TODO_PATH);
     // replace_contents expects a Uint8Array (guint8[]), which TextEncoder yields.
     const bytes = new TextEncoder().encode(content);
-    file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
+    try {
+        file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
+    } catch (e) {
+        // Surface failures (disk full, permissions) without crashing the
+        // extension; the next refresh keeps showing the on-disk content, so
+        // the UI stays consistent with the file.
+        console.error(`todo: failed to write ${TODO_PATH}: ${e}`);
+    }
 }
