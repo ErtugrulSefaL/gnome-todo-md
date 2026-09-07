@@ -26,13 +26,14 @@ Depolama: `~/todo.md` (markdown checkbox; başlıklar/notlar korunur).
 
 ## Faz 1.5 — Yerinde görev düzenleme (Faz 2 öncesi)
 
-- [ ] UI: satıra edit butonu (`document-edit-symbolic`) → satır yerinde St.Entry'e dönüşür
-- [ ] Tek-edit invariant: `_editingIndex` TEK state alanı; satır bazlı local state YASAK.
+- [x] UI: satıra edit butonu (`document-edit-symbolic`) → satır yerinde St.Entry'e dönüşür
+- [x] Tek-edit invariant: `_editingIndex` TEK state alanı; satır bazlı local state YASAK.
   Şu eylemler açık düzenlemeyi kapatır: başka edit butonu (replace), add-entry
   fokus, toggle, delete, add, menü kapanması, harici dosya değişimi.
   → Birden fazla açık edit kutusu yapısal olarak imkansız.
-- [ ] Enter = kaydet (boş metin = iptal), Escape = iptal
-- [ ] Test (unit + smoke + manuel) + commit
+- [x] Enter = kaydet (boş metin = iptal); Escape GNOME native (menü kapatır,
+      invariant edit'i iptal eder — capture fazında yakalanıyor)
+- [x] Test (unit + smoke + manuel) + commit
 
 ## Faz 2 — Bildirimler + arşivleme (ileride)
 

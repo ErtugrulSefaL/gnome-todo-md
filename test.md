@@ -140,3 +140,10 @@ tetiklenmiyordu; (3) grab_key_focus eksikti → edit entry odaklanmıyordu;
 davranış kabul: Escape = menü kapat, invariant edit'i iptal eder).
 
 Fix commit'leri: e4a56fd (idle_add imzası), 24523eb (edit UX).
+
+## Faz 1.5 — Kullanıcı testi v2: HEPSİ ÇALIŞIYOR (2026-09-08) ✅
+
+Escape-invariant, add-focus cancel, edit odak/kaydet, tek-edit kuralı doğrulandı.
+Faz 1.5 kapandı. Öğrenilen ders: 4 bug'dan 3'ü UI katmanındaydı ve hiçbiri
+otomatik testlerle yakalanmadı (UI katmanında otomatik test yok) —
+bkz. test stratejisi tartışması.
