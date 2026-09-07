@@ -32,6 +32,8 @@ export default class TodoExtension extends Extension {
         this._openSignal = this._indicator.menu.connect('open-state-changed',
             (menu, open) => {
                 if (open) {
+                    // GLib.idle_add takes (priority, func). A single-argument
+                    // call throws and the rebuild silently never runs.
                     GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                         this._refreshTodoMenu();
                         return GLib.SOURCE_REMOVE;
@@ -98,9 +100,16 @@ export default class TodoExtension extends Extension {
             }
             return Clutter.EVENT_PROPAGATE;
         });
-        // Focusing the add entry means the user left any edit: close it
-        // (single-edit rule). Guarded so focus does not re-trigger a rebuild.
+        // Cancel an in-progress edit when the add entry gains focus.
+        // A mouse click moves Clutter's key focus to the INNER Clutter.Text
+        // (st-entry.c wires the press to the inner text actor), so connect on
+        // both the entry (keyboard navigation) and its clutter_text (clicks).
         this._addEntry.connect('key-focus-in', () => {
+            if (this._editingIndex !== -1) {
+                this._cancelEditing();
+            }
+        });
+        this._addEntry.get_clutter_text().connect('key-focus-in', () => {
             if (this._editingIndex !== -1) {
                 this._cancelEditing();
             }
@@ -122,7 +131,11 @@ export default class TodoExtension extends Extension {
             // usual label + buttons. Render derives solely from _editingIndex,
             // so two open editors can never coexist.
             if (task.index === this._editingIndex) {
-                menu.addMenuItem(this._makeEditRow(task));
+                const editRow = this._makeEditRow(task);
+                menu.addMenuItem(editRow.row);
+                // Grab focus only after the row is on stage; an actor that is
+                // not yet mapped cannot take key focus.
+                editRow.entry.grab_key_focus();
                 continue;
             }
 
@@ -223,10 +236,14 @@ export default class TodoExtension extends Extension {
 
     /**
      * Build the inline edit row: an entry prefilled with the current text.
-     * Enter commits, Escape cancels.
+     * Enter commits, Escape cancels. Note: Escape is actually intercepted by
+     * the shell's MenuManager in the capture phase (popupMenu.js
+     * _onCapturedEvent), so it closes the menu; the edit is then discarded by
+     * the open-state-changed invariant instead.
      *
      * @param {object} task - Parsed task line ({index, text, done}).
-     * @returns {PopupMenu.PopupBaseMenuItem} The edit row.
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
      */
     _makeEditRow(task) {
         const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
@@ -239,14 +256,10 @@ export default class TodoExtension extends Extension {
                 this._finishEditing(e.get_text());
                 return Clutter.EVENT_STOP;
             }
-            if (symbol === Clutter.KEY_Escape) {
-                this._cancelEditing();
-                return Clutter.EVENT_STOP;
-            }
             return Clutter.EVENT_PROPAGATE;
         });
         row.add_child(entry);
-        return row;
+        return {row, entry};
     }
 
     /**
