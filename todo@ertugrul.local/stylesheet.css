@@ -1,15 +1,15 @@
-/* Todo extension: per-task delete button styling.
- * The trash icon is a "places" symbolic glyph that renders oversized inside
- * a menu row; this keeps it small and aligned with the row text. */
+/* Todo extension: small icon buttons (edit + delete) inside task rows.
+ * Symbolic glyphs render oversized inside a menu row; this keeps them small
+ * and aligned with the row text. */
 
-.todo-delete-button {
+.todo-icon-button {
     border-radius: 3px;
     padding: 0px 6px;
     min-height: 18px;
     min-width: 18px;
 }
 
-.todo-delete-button StIcon {
+.todo-icon-button StIcon {
     icon-size: 12px;
 }
 

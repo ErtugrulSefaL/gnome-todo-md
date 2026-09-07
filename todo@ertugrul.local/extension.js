@@ -12,6 +12,10 @@ import * as Storage from './storage.js';
 
 export default class TodoExtension extends Extension {
     enable() {
+        // Single-edit invariant: at most one row is being edited at any time.
+        // Reset on enable — the Extension instance survives disable/enable.
+        this._editingIndex = -1;
+
         // Create a panel button.
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
 
@@ -32,6 +36,9 @@ export default class TodoExtension extends Extension {
                         this._refreshTodoMenu();
                         return GLib.SOURCE_REMOVE;
                     });
+                } else {
+                    // Menu closed: an uncommitted edit must not survive.
+                    this._editingIndex = -1;
                 }
             });
 
@@ -47,9 +54,10 @@ export default class TodoExtension extends Extension {
         this._todoMonitor = Gio.File.new_for_path(Storage.todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
-            // Rebuild whenever the file changes. Refreshing while closed is
-            // harmless (the next open shows fresh data) and avoids any
-            // dependence on menu isOpen state for live updates.
+            // Any file write (external or our own) may shift line indexes, so
+            // an in-progress edit cannot be trusted: close it (single-edit
+            // rule) and rebuild.
+            this._editingIndex = -1;
             this._refreshTodoMenu();
         });
     }
@@ -90,6 +98,13 @@ export default class TodoExtension extends Extension {
             }
             return Clutter.EVENT_PROPAGATE;
         });
+        // Focusing the add entry means the user left any edit: close it
+        // (single-edit rule). Guarded so focus does not re-trigger a rebuild.
+        this._addEntry.connect('key-focus-in', () => {
+            if (this._editingIndex !== -1) {
+                this._cancelEditing();
+            }
+        });
 
         // Wrap the entry in a menu item so it lays out like other rows.
         const entryItem = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
@@ -103,6 +118,14 @@ export default class TodoExtension extends Extension {
         }
 
         for (const task of tasks) {
+            // The row being edited renders as an inline entry instead of the
+            // usual label + buttons. Render derives solely from _editingIndex,
+            // so two open editors can never coexist.
+            if (task.index === this._editingIndex) {
+                menu.addMenuItem(this._makeEditRow(task));
+                continue;
+            }
+
             const row = new PopupMenu.PopupBaseMenuItem();
             const label = new St.Label({
                 text: task.text,
@@ -117,7 +140,7 @@ export default class TodoExtension extends Extension {
 
             // Delete button pinned to the right of the task text.
             const delBtn = new St.Button({
-                style_class: 'todo-delete-button button',
+                style_class: 'todo-icon-button button',
                 child: new St.Icon({
                     icon_name: 'user-trash-symbolic',
                     style_class: 'system-status-icon',
@@ -128,13 +151,29 @@ export default class TodoExtension extends Extension {
                 this._deleteTask(index);
             });
 
-            // Let the label grow so the delete button pins to the far right.
+            // Edit button next to delete: switches the row into an inline
+            // entry. St.Button consumes its press/release (st-button.c returns
+            // TRUE), so the row's activate (toggle) never fires.
+            const editBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'document-edit-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            editBtn.connect('clicked', () => {
+                this._startEditing(index);
+            });
+
+            // Let the label grow so the buttons pin to the far right.
             // (Clutter uses x_expand, not GTK's hexpand.)
             label.set_x_expand(true);
             label.set_x_align(Clutter.ActorAlign.START);
+            editBtn.set_x_align(Clutter.ActorAlign.END);
             delBtn.set_x_align(Clutter.ActorAlign.END);
 
             row.add_child(label);
+            row.add_child(editBtn);
             row.add_child(delBtn);
 
             row.connect('activate', () => {
@@ -142,6 +181,72 @@ export default class TodoExtension extends Extension {
             });
             menu.addMenuItem(row);
         }
+    }
+
+    /**
+     * Switch a row into inline edit mode. Replaces any existing edit
+     * (single-edit rule: render derives solely from _editingIndex).
+     *
+     * @param {number} index - 0-based line index of the task to edit.
+     */
+    _startEditing(index) {
+        this._editingIndex = index;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Close the current edit without writing anything.
+     */
+    _cancelEditing() {
+        this._editingIndex = -1;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Commit the inline edit via Storage.editTask and close it.
+     *
+     * @param {string} text - New task text (empty/whitespace cancels the edit).
+     */
+    _finishEditing(text) {
+        const trimmed = text ? text.trim() : '';
+        if (!trimmed) {
+            // Never wipe a task with an empty edit; treat it as cancel.
+            this._cancelEditing();
+            return;
+        }
+        const parsed = Storage.readTodo();
+        const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
+        Storage.writeTodo(updated);
+        this._editingIndex = -1;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Build the inline edit row: an entry prefilled with the current text.
+     * Enter commits, Escape cancels.
+     *
+     * @param {object} task - Parsed task line ({index, text, done}).
+     * @returns {PopupMenu.PopupBaseMenuItem} The edit row.
+     */
+    _makeEditRow(task) {
+        const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
+        const entry = new St.Entry({style_class: 'todo-edit-entry'});
+        entry.set_text(task.text);
+        entry.set_x_expand(true);
+        entry.connect('key-release-event', (e, event) => {
+            const symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Return) {
+                this._finishEditing(e.get_text());
+                return Clutter.EVENT_STOP;
+            }
+            if (symbol === Clutter.KEY_Escape) {
+                this._cancelEditing();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.add_child(entry);
+        return row;
     }
 
     /**
@@ -154,6 +259,7 @@ export default class TodoExtension extends Extension {
             return;
         }
 
+        this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.addTask(parsed.raw, text.trim());
         Storage.writeTodo(updated);
@@ -167,6 +273,7 @@ export default class TodoExtension extends Extension {
      * @param {number} index - 0-based line index of the task.
      */
     _toggleTask(index) {
+        this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.toggleTask(parsed.raw, index);
         Storage.writeTodo(updated);
@@ -179,6 +286,7 @@ export default class TodoExtension extends Extension {
      * @param {number} index - 0-based line index of the task.
      */
     _deleteTask(index) {
+        this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.deleteTask(parsed.raw, index);
         Storage.writeTodo(updated);
