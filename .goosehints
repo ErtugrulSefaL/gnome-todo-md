@@ -11,6 +11,11 @@ Target: GNOME 46 only. Session: X11. Code language: English.
   functions/files. Do not pile everything into one giant function.
 
 ## Coding rules (to prevent spaghetti, from the start)
+- Always use official and trusted resources, don't make guess. Here is the some resources for GNOME extensions:
+  - https://gjs.guide/
+  - https://gjs-docs.gnome.org/
+  - https://gjs.guide/extensions/development/
+  
 - KISS: no unnecessary abstraction, design patterns, or "we'll need it later" code.
 - DRY — rule of three: copying twice is fine; extract a shared helper on the 3rd repeat.
 - Keep files small and single-responsibility; do not dogmatically force SOLID.
