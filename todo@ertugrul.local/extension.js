@@ -81,7 +81,8 @@ export default class TodoExtension extends Extension {
             hint_text: 'Add a task…',
             can_focus: true,
         });
-        this._addEntry.set_width(220);
+        // Let the entry expand with the menu width instead of a fixed 220px.
+        this._addEntry.set_x_expand(true);
         this._addEntry.connect('key-release-event', (entry, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 this._addTask(entry.get_text());
