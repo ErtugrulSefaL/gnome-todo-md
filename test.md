@@ -113,3 +113,16 @@ a2ebe5a feat: storage write operations (toggle/delete/add) and writeTodo persist
 9604d47 feat: storage module reading and parsing ~/todo.md (preserve non-checkbox lines)
 245fc87 feat: initial skeleton with panel indicator (metadata.json + extension.js)
 ```
+## Faz 1.5 — Yerinde görev düzenleme (2026-09-08)
+
+- Unit/integration: `gjs -m tests/run_tests.mjs` → 22/22 passed (storage tarafı
+  değişmedi; `editTask` zaten 3 testle kaplıydı: checkbox state korunumu,
+  görev metni güncellemesi, checkbox olmayan satır davranışı).
+- Smoke: `./tests/smoke.sh` → OK: todo@ertugrul.local is ACTIVE (reload sonrası).
+- Manuel test listesi (kullanıcı):
+  1. Edit butonuna bas → satır Entry'e dönüşür, metin prefill + odaklı
+  2. Enter ile kaydet; Escape ile iptal; boş metinle Enter → iptal (silme yok)
+  3. Edit açıkken başka edit butonu → yalnızca yeni satır açık (tek invariant)
+  4. Edit açıkken add alanına tıkla / toggle / delete / menü kapat → edit kapanır
+  5. Edit açıkken ~/todo.md'yi vim ile değiştir → edit kapanır, liste tazelenir
+  6. Delete butonu satır toggle'ını tetiklememeye devam ediyor mu (style rename sonrası)

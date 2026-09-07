@@ -52,6 +52,11 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | `file.monitor(Gio.FileMonitorFlags.NONE, null)` + `changed` signal + `monitor.cancel()` | live reload | docs.gtk.org `Gio.FileMonitor`; `changed(monitor, file, other_file, event_type)` | OK |
 | `GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, ...)` + `GLib.SOURCE_REMOVE` | defer refresh | GLib docs; runtime-proven | OK |
 | FileMonitor survives atomic replace (rename) | risk check | Local experiment (`gjs` + `/tmp` file): in-place CHANGED → rename DELETED+CREATED → post-rename CHANGED still delivered | OK — live watching survives vim-style atomic writes |
+| St.Button press/release consume their events (`return TRUE`) | edit/delete buttons never trigger the row's activate (toggle) | gnome-shell `46.0` `src/st/st-button.c` — `st_button_button_press` (:199) and `st_button_button_release` (:228) return TRUE when button mask matches | OK (2026-09-08) |
+| `Clutter.Actor::key-focus-in` signal + `grab_key_focus()` | cancel edit when the add entry gains focus; focus the edit entry | offline mirror `clutter14~14` → `clutter.actor#signal-key-focus-in`, `clutter.actor#method-grab_key_focus` | OK (2026-09-08) |
+| `Clutter.KEY_Escape` | cancel editing | mutter `46.0` `clutter-keysyms.h` → `#define CLUTTER_KEY_Escape 0xff1b` | OK (2026-09-08) |
+| `document-edit-symbolic` icon | edit button glyph | present in local Adwaita icon theme (`/usr/share/icons/Adwaita/symbolic/actions/document-edit-symbolic.svg`) | OK (2026-09-08) |
+| `St.Entry.set_text()` (constructor prop not assumed) | prefill edit entry | runtime-proven (used by add entry: `set_text('')`); constructor `text` prop not verified, deliberately avoided | OK |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
@@ -67,5 +72,7 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
   gjs.guide "Notifications" topic + gnome-shell `46.0` `js/ui/messageTray.js`
   BEFORE writing any code.
 - Phase 2 (archiving): pure `storage.js` functions + tests first (no new API risk).
+  Interaction note: archiving shifts line indexes → must go through the same
+  `_editingIndex = -1` invariant used by add/toggle/delete (single-edit rule).
 - Phase 3 (keybinding): `Shell.util`? / metadata `keybindings` + Settings schema —
   verify against gjs.guide + extension docs before implementing.
