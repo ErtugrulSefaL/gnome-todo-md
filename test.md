@@ -126,3 +126,17 @@ a2ebe5a feat: storage write operations (toggle/delete/add) and writeTodo persist
   4. Edit açıkken add alanına tıkla / toggle / delete / menü kapat → edit kapanır
   5. Edit açıkken ~/todo.md'yi vim ile değiştir → edit kapanır, liste tazelenir
   6. Delete butonu satır toggle'ını tetiklememeye devam ediyor mu (style rename sonrası)
+
+## Faz 1.5 — Fix turu (2026-09-08, kullanıcı testi sonrası)
+
+Kullanıcı raporu: Escape'te menü kapanıp tekrar açılınca edit kutusu açık kalıyordu;
+add alanına tıklamak edit'i kapatmıyordu.
+
+Kökler (kanıtlı): (1) GLib.idle_add tek-arg çağrısı Faz 1'den beri exception
+fırlatıyordu → menü açılış rebuild'i hiç çalışmıyordu (monitor maskeliyordu);
+(2) tıklama focus'u St.Entry'nin içteki Clutter.Text'ine gidiyor → key-focus-in
+tetiklenmiyordu; (3) grab_key_focus eksikti → edit entry odaklanmıyordu;
+(4) Escape'i capture fazında MenuManager kesiyor → entry'de yakalanamaz (native
+davranış kabul: Escape = menü kapat, invariant edit'i iptal eder).
+
+Fix commit'leri: e4a56fd (idle_add imzası), 24523eb (edit UX).

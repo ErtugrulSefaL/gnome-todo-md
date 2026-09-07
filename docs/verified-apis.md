@@ -57,6 +57,10 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | `Clutter.KEY_Escape` | cancel editing | mutter `46.0` `clutter-keysyms.h` → `#define CLUTTER_KEY_Escape 0xff1b` | OK (2026-09-08) |
 | `document-edit-symbolic` icon | edit button glyph | present in local Adwaita icon theme (`/usr/share/icons/Adwaita/symbolic/actions/document-edit-symbolic.svg`) | OK (2026-09-08) |
 | `St.Entry.set_text()` (constructor prop not assumed) | prefill edit entry | runtime-proven (used by add entry: `set_text('')`); constructor `text` prop not verified, deliberately avoided | OK |
+| `GLib.idle_add(priority, func)` — TWO args | menu-open deferred rebuild | runtime proof (gjs): arity=2; 1-arg call throws "At least 2 arguments required"; callback never ran. Latent Phase-1 bug: menu open rebuild never executed (masked by monitor rebuilds) | OK (2026-09-08) |
+| Escape handling in menus | edit cancel path | gnome-shell `46.0` `popupMenu.js` `_onCapturedEvent` (~:1422): KEY_Escape intercepted in the CAPTURE phase → menu.close(); key events never reach entry handlers → Escape branch in entry handlers is dead code | OK (2026-09-08) |
+| St.Entry mouse click focus target | cancel-edit-on-add-focus | gnome-shell `46.0` `st-entry.c:1083` wires the inner Clutter.Text's button-press; key focus lands on the inner Clutter.Text, so `key-focus-in` on St.Entry does NOT fire on click; use `entry.get_clutter_text()` (st14 mirror: `Entry.get_clutter_text()`) | OK (2026-09-08) |
+| `Actor.grab_key_focus()` requires mapped actor | focus edit entry | grab after `menu.addMenuItem(...)` (row on stage); unmapped actors cannot take key focus | OK (2026-09-08) |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
