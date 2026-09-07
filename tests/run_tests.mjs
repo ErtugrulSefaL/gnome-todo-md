@@ -173,6 +173,54 @@ function testWriteRead() {
     restoreOriginal();
 }
 
+// ---- static UI regression checks -----------------------------------------
+// The UI layer (extension.js) cannot be unit-tested without a GNOME Shell
+// runtime, so we statically guard against the API mistakes that actually
+// happened in this project (VERIFY-BEFORE-WRITE escape-hatches). Each check
+// cites the real incident it prevents.
+
+function readFileText(relPath) {
+    const file = Gio.File.new_for_path(GLib.get_current_dir() + '/' + relPath);
+    const [, bytes] = file.load_contents(null);
+    return new TextDecoder().decode(bytes);
+}
+
+function noMatch(name, content, forbiddenPattern, incident) {
+    const m = content.match(forbiddenPattern);
+    record(name, m === null, m === null ? incident : `found: "${m[0]}" — ${incident}`);
+}
+
+function testStaticChecks() {
+    const ui = readFileText('todo@ertugrul.local/extension.js');
+    const store = readFileText('todo@ertugrul.local/storage.js');
+    const meta = readFileText('todo@ertugrul.local/metadata.json');
+    const css = readFileText('todo@ertugrul.local/stylesheet.css');
+    const all = ui + '\n' + store;
+
+    // Real incident: idle_add(() => ...) threw on every menu open (Phase 1).
+    record('static: every GLib.idle_add call passes (priority, func)',
+        ui.match(/idle_add\(/g)?.length === ui.match(/idle_add\(GLib\.PRIORITY/g)?.length,
+        'GLib.idle_add takes (priority, func); single-arg calls throw at runtime');
+
+    // Real incidents from the historical edit-feature revert.
+    noMatch('static: no GTK hexpand/vexpand (Clutter uses set_x_expand)',
+        all, /set_hexpand\(|hexpand:|vexpand/, 'GTK layout API on St actors silently misbehaves');
+    noMatch('static: no GLib.Bytes for replace_contents',
+        all, /GLib\.Bytes/, 'replace_contents needs a Uint8Array from TextEncoder');
+    noMatch('static: no key::release / key::press pseudo-signals',
+        all, /key::(release|press)/, 'GObject signals use dashes: key-release-event');
+    noMatch('static: no legacy imports.* API',
+        all, /\bimports\./, 'GNOME 45+ is ESM; imports.* is removed in Shell');
+    noMatch('static: no legacy .add( child call',
+        all, /\.add\(/, 'use add_child() on Clutter/St actors');
+
+    // Project rules that must not drift.
+    record('static: metadata shell-version is exactly ["46"]',
+        /"shell-version"\s*:\s*\[\s*"46"\s*\]/.test(meta), 'do not claim untested versions');
+    noMatch('static: no opacity in CSS (actor label.opacity is used instead)',
+        css, /opacity\s*:/, 'CSS opacity is unreliable on St.Label; use actor opacity');
+}
+
 // ---- runner --------------------------------------------------------------
 
 snapshotOriginal();
@@ -184,6 +232,7 @@ testEditTask();
 testAddTask();
 testWriteRead();
 restoreOriginal();
+testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
 const finalRead = Storage.readTodo();
