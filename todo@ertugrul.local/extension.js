@@ -32,7 +32,7 @@ export default class TodoExtension extends Extension {
         this._openSignal = this._indicator.menu.connect('open-state-changed',
             (menu, open) => {
                 if (open) {
-                    GLib.idle_add(() => {
+                    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
                         this._refreshTodoMenu();
                         return GLib.SOURCE_REMOVE;
                     });
