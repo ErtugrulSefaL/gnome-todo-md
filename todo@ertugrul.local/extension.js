@@ -84,7 +84,7 @@ export default class TodoExtension extends Extension {
         const menu = this._indicator.menu;
         menu.removeAll();
 
-        const {tasks} = Storage.readTodo();
+        const doc = Storage.parseDocument(Storage.readTodo().raw);
 
         // Add-task entry pinned at the top.
         this._addEntry = new St.Entry({
@@ -120,80 +120,111 @@ export default class TodoExtension extends Extension {
         entryItem.add_child(this._addEntry);
         menu.addMenuItem(entryItem);
 
-        if (tasks.length === 0) {
+        // Categories with at least one task render as a non-clickable header
+        // row followed by their task rows. Task-less categories are skipped
+        // (nothing interactive to show); their extras stay in the file.
+        const sections = [];
+        for (const category of doc.categories) {
+            const tasks = Storage.categoryTasks(category);
+            if (tasks.length > 0) {
+                sections.push({name: category.name, tasks});
+            }
+        }
+
+        if (sections.length === 0) {
             // Non-reactive: the row must not look clickable.
             menu.addMenuItem(new PopupMenu.PopupMenuItem('No tasks', {reactive: false}));
             return;
         }
 
-        for (const task of tasks) {
-            // The row being edited renders as an inline entry instead of the
-            // usual label + buttons. Render derives solely from _editingIndex,
-            // so two open editors can never coexist.
-            if (task.index === this._editingIndex) {
-                const editRow = this._makeEditRow(task);
-                menu.addMenuItem(editRow.row);
-                // Grab focus only after the row is on stage; an actor that is
-                // not yet mapped cannot take key focus.
-                editRow.entry.grab_key_focus();
-                continue;
+        for (const section of sections) {
+            const header = new PopupMenu.PopupMenuItem(section.name,
+                {reactive: false, can_focus: false});
+            // PopupMenuItem exposes its St.Label (popupMenu.js 46.0 :285-298);
+            // there is no first-class section-header widget in the shell.
+            header.label.style_class = 'todo-category-header';
+            menu.addMenuItem(header);
+
+            for (const task of section.tasks) {
+                // The row being edited renders as an inline entry instead of
+                // the usual label + buttons. Render derives solely from
+                // _editingIndex, so two open editors can never coexist.
+                if (task.index === this._editingIndex) {
+                    const editRow = this._makeEditRow(task);
+                    menu.addMenuItem(editRow.row);
+                    // Grab focus only after the row is on stage; an actor that
+                    // is not yet mapped cannot take key focus.
+                    editRow.entry.grab_key_focus();
+                    continue;
+                }
+
+                menu.addMenuItem(this._makeTaskRow(task));
             }
-
-            const row = new PopupMenu.PopupBaseMenuItem();
-            const label = new St.Label({
-                text: task.text,
-                style_class: task.done ? 'todo-text todo-done' : 'todo-text',
-            });
-            if (task.done) {
-                row.setOrnament(PopupMenu.Ornament.CHECK);
-                // Fade completed rows via actor opacity (CSS opacity is not
-                // reliably honored by St.Label); 0.6 * 255.
-                label.opacity = 153;
-            }
-
-            // Delete button pinned to the right of the task text.
-            const delBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                child: new St.Icon({
-                    icon_name: 'user-trash-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            const index = task.index;
-            delBtn.connect('clicked', () => {
-                this._deleteTask(index);
-            });
-
-            // Edit button next to delete: switches the row into an inline
-            // entry. St.Button consumes its press/release (st-button.c returns
-            // TRUE), so the row's activate (toggle) never fires.
-            const editBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                child: new St.Icon({
-                    icon_name: 'document-edit-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            editBtn.connect('clicked', () => {
-                this._startEditing(index);
-            });
-
-            // Let the label grow so the buttons pin to the far right.
-            // (Clutter uses x_expand, not GTK's hexpand.)
-            label.set_x_expand(true);
-            label.set_x_align(Clutter.ActorAlign.START);
-            editBtn.set_x_align(Clutter.ActorAlign.END);
-            delBtn.set_x_align(Clutter.ActorAlign.END);
-
-            row.add_child(label);
-            row.add_child(editBtn);
-            row.add_child(delBtn);
-
-            row.connect('activate', () => {
-                this._toggleTask(index);
-            });
-            menu.addMenuItem(row);
         }
+    }
+
+    /**
+     * Build a clickable task row: label (strikethrough + fade when done),
+     * edit and delete buttons pinned to the right of the text.
+     *
+     * @param {object} task - Document task item ({index, raw, done, tags, text}).
+     * @returns {PopupMenu.PopupBaseMenuItem} The task row.
+     */
+    _makeTaskRow(task) {
+        const row = new PopupMenu.PopupBaseMenuItem();
+        const label = new St.Label({
+            text: task.text,
+            style_class: task.done ? 'todo-text todo-done' : 'todo-text',
+        });
+        if (task.done) {
+            row.setOrnament(PopupMenu.Ornament.CHECK);
+            // Fade completed rows via actor opacity (CSS opacity is not
+            // reliably honored by St.Label); 0.6 * 255.
+            label.opacity = 153;
+        }
+
+        // Delete button pinned to the right of the task text.
+        const delBtn = new St.Button({
+            style_class: 'todo-icon-button button',
+            child: new St.Icon({
+                icon_name: 'user-trash-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        const index = task.index;
+        delBtn.connect('clicked', () => {
+            this._deleteTask(index);
+        });
+
+        // Edit button next to delete: switches the row into an inline
+        // entry. St.Button consumes its press/release (st-button.c returns
+        // TRUE), so the row's activate (toggle) never fires.
+        const editBtn = new St.Button({
+            style_class: 'todo-icon-button button',
+            child: new St.Icon({
+                icon_name: 'document-edit-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        editBtn.connect('clicked', () => {
+            this._startEditing(index);
+        });
+
+        // Let the label grow so the buttons pin to the far right.
+        // (Clutter uses x_expand, not GTK's hexpand.)
+        label.set_x_expand(true);
+        label.set_x_align(Clutter.ActorAlign.START);
+        editBtn.set_x_align(Clutter.ActorAlign.END);
+        delBtn.set_x_align(Clutter.ActorAlign.END);
+
+        row.add_child(label);
+        row.add_child(editBtn);
+        row.add_child(delBtn);
+
+        row.connect('activate', () => {
+            this._toggleTask(index);
+        });
+        return row;
     }
 
     /**
@@ -241,14 +272,16 @@ export default class TodoExtension extends Extension {
      * _onCapturedEvent), so it closes the menu; the edit is then discarded by
      * the open-state-changed invariant instead.
      *
-     * @param {object} task - Parsed task line ({index, text, done}).
+     * @param {object} task - Document task item ({index, raw, text, done, tags}).
      * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
      *   and its entry, so the caller can grab focus after adding to the menu.
      */
     _makeEditRow(task) {
         const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
         const entry = new St.Entry({style_class: 'todo-edit-entry'});
-        entry.set_text(task.text);
+        // Prefill with `raw` (tags inline), NOT the tag-stripped display text:
+        // committing the edit rewrites the whole line, and raw keeps the tags.
+        entry.set_text(task.raw);
         entry.set_x_expand(true);
         entry.connect('key-release-event', (e, event) => {
             const symbol = event.get_key_symbol();

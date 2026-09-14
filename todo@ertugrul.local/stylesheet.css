@@ -17,3 +17,9 @@
 .todo-text.todo-done {
     text-decoration: line-through;
 }
+
+/* Category section headers in the todo menu (non-clickable, bold). */
+.todo-category-header {
+    font-weight: bold;
+    padding: 4px 8px 2px 8px;
+}

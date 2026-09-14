@@ -17,7 +17,7 @@ import Gio from 'gi://Gio';
  *                             items: Array }] }
  *   `items` is an ORDERED list (preserves interleaving of notes/blank lines,
  *   required for byte-identical round-trip) whose entries are either
- *     { type: 'task',  raw, done, tags, text }   (tags: [[key, value], ...])
+ *     { type: 'task',  raw, done, tags, text, index }  (tags: [[key, value], ...])
  *     { type: 'extra', raw }                     (non-task line, verbatim)
  *   Use categoryTasks(category) for the flat task-list view.
  *   Categories carry `implicit: true` when created by the fallback (no '##'
@@ -128,8 +128,9 @@ const makeTaskItem = (raw, done) => ({
  * - The first '# ' line is the document title; its content is ignored but the
  *   raw line is kept for round-trip. Any further '# ' line is an extra.
  * - Every '##' heading starts a category ('###' or deeper is NOT a category).
- * - Checkbox lines '- [ ]/- [x]/- [X] text @tag(value)' become task items.
- *   Tags are free-form (no whitelist) and kept as an ordered pair list.
+ * - Checkbox lines '- [ ]/- [x]/- [X] text @tag(value)' become task items
+ *   carrying their 0-based line index (`index`) for the line-based mutation
+ *   helpers. Tags are free-form (no whitelist) and kept as an ordered pair list.
  * - Everything else (notes, blank lines, plain list items) is an extra kept
  *   verbatim, in original order.
  * - Lines before the first '##' land in the FALLBACK_CATEGORY ('Genel').
@@ -154,8 +155,8 @@ export function parseDocument(content) {
         lines.pop();
     }
 
-    for (const rawLine of lines) {
-        const line = rawLine.replace(/\r$/, '');
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i].replace(/\r$/, '');
 
         // '##' category heading ('###' or deeper is not a category).
         const h2 = line.match(/^##(?!#)\s?(.*)$/);
@@ -186,11 +187,13 @@ export function parseDocument(content) {
             continue;
         }
 
-        // Checkbox task line — same shape splitLines() accepts.
+        // Checkbox task line — same shape splitLines() accepts. The item
+        // carries its 0-based line index for the line-based mutation helpers.
         const taskMatch = line.match(/^\s*-\s+\[([ xX])\]\s+(.*)$/);
         if (taskMatch) {
-            ensureCategory().items.push(
-                makeTaskItem(taskMatch[2], taskMatch[1].toLowerCase() === 'x'));
+            const item = makeTaskItem(taskMatch[2], taskMatch[1].toLowerCase() === 'x');
+            item.index = i;
+            ensureCategory().items.push(item);
             continue;
         }
 

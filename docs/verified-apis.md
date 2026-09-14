@@ -62,6 +62,8 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | St.Entry mouse click focus target | cancel-edit-on-add-focus | gnome-shell `46.0` `st-entry.c:1083` wires the inner Clutter.Text's button-press; key focus lands on the inner Clutter.Text, so `key-focus-in` on St.Entry does NOT fire on click; use `entry.get_clutter_text()` (st14 mirror: `Entry.get_clutter_text()`) | OK (2026-09-08) |
 | `Actor.grab_key_focus()` requires mapped actor | focus edit entry | grab after `menu.addMenuItem(...)` (row on stage); unmapped actors cannot take key focus | OK (2026-09-08) |
 | `Gio.File.replace_contents` is atomic for local files (temp + rename) | Faz 2 safe-write requirement | docs.gtk.org `gio/method.File.replace_contents.html`: "atomic renames are used when replacing local files' contents"; consistent with the /tmp rename experiment above; write path pinned by the static guard + end-to-end write/read round-trip test in `run_tests.mjs` | OK (2026-09-14) |
+| `PopupBaseMenuItem` params `{reactive, activate, hover, style_class, can_focus}` | menu row construction (entry wrapper, edit row) | gnome-shell `46.0` `js/ui/popupMenu.js` `PopupBaseMenuItem._init` (:82-89, Params.parse) | OK (2026-09-14) |
+| `PopupMenuItem(text, params)` exposes `.label` (St.Label); no first-class section-header widget exists in the shell | category header rows | gnome-shell `46.0` `js/ui/popupMenu.js` (:285-298); headers built as non-reactive PopupMenuItem + styled label (same pattern as the proven 'No tasks' row) | OK (2026-09-14) |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 

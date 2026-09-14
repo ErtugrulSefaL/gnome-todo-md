@@ -357,6 +357,14 @@ function testParseDocument() {
         twoH1.title === '# One' && twoH1.categories[0].items[0].raw === '# Two',
         JSON.stringify(twoH1));
 
+    record('parseDocument: task items carry their 0-based line index',
+        genel.items[0].index === 1
+        && notes.items[2].index === 6
+        && is.items[0].index === 8
+        && is.items[1].index === 9,
+        JSON.stringify([genel.items[0].index, notes.items[2].index,
+            is.items[0].index, is.items[1].index]));
+
     record('parseDocument: empty content → empty document',
         Storage.parseDocument('').title === null
         && Storage.parseDocument('').categories.length === 0,
