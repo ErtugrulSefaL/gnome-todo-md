@@ -214,6 +214,14 @@ function testStaticChecks() {
     noMatch('static: no legacy .add( child call',
         all, /\.add\(/, 'use add_child() on Clutter/St actors');
 
+    // Faz 2 step 3: the write path must stay atomic (temp + rename) — the
+    // ONLY permitted write mechanism is Gio.File.replace_contents.
+    record('static: writes go through Gio.File.replace_contents (atomic temp+rename)',
+        /replace_contents\(/.test(store), 'the single write path; do not add others');
+    noMatch('static: no in-place/truncate write APIs (truncate-and-write forbidden)',
+        store, /open_output_stream|create_readwrite|create_sync|append_to|truncate|output_stream_write|write_bytes/,
+        'use Gio.File.replace_contents (atomic temp+rename) only');
+
     // Project rules that must not drift.
     record('static: metadata shell-version is exactly ["46"]',
         /"shell-version"\s*:\s*\[\s*"46"\s*\]/.test(meta), 'do not claim untested versions');
@@ -382,6 +390,31 @@ function testSerializeDocument() {
         Storage.serializeDocument(Storage.parseDocument(once)) === once, '');
 }
 
+// ---- atomic write path (Faz 2 step 3) ------------------------------------
+
+function testAtomicWritePath() {
+    // Normal writes keep working: fixed content survives a real disk write
+    // and comes back complete (no partial/truncated state).
+    const CONTENT = '# My TODOs\n\n## Genel\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
+    Storage.writeTodo(CONTENT);
+    record('atomicWrite: write → read back is byte-identical (complete file)',
+        Storage.readTodo().raw === CONTENT, JSON.stringify(Storage.readTodo().raw));
+
+    // The Document pipeline connects to the real write path: mutate the model
+    // → serialize → writeTodo → read back must equal the serialized string.
+    // (Hand-built task object on purpose: mutation helpers arrive later.)
+    const doc = Storage.parseDocument(CONTENT);
+    doc.categories[0].items.push({type: 'task', raw: 'gamma', done: false, tags: [], text: 'gamma'});
+    const rewritten = Storage.serializeDocument(doc);
+    Storage.writeTodo(rewritten);
+    record('atomicWrite: Document mutation → serialize → write → read is consistent',
+        Storage.readTodo().raw === rewritten, '');
+
+    restoreOriginal();
+    record('atomicWrite: file restored to the original content after write tests',
+        Storage.readTodo().raw === ORIGINAL_RAW, '');
+}
+
 // ---- runner --------------------------------------------------------------
 
 snapshotOriginal();
@@ -395,6 +428,7 @@ testWriteRead();
 restoreOriginal();
 testParseDocument();
 testSerializeDocument();
+testAtomicWritePath();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
