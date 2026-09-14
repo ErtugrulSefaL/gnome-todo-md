@@ -111,7 +111,7 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
 
 ### Uygulama adımları (sırayla, her biri ayrı test + commit)
 
-- [ ] 1. **Parser (okuma)** — Örnek bir `.md` dosyasını yukarıdaki kurallara
+- [x] 1. **Parser (okuma)** — Örnek bir `.md` dosyasını yukarıdaki kurallara
       göre `Document { title, categories: [{ name, items }] }` yapısına çevir.
       `items` SIRALIDIR (interleaving + byte round-trip için): `{type:'task',
       raw, done, tags, text}` ya da `{type:'extra', raw}` (görev olmayan
@@ -122,34 +122,34 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
       /goal: H1, birden fazla H2, tag'li/tag'siz görevler ve ilk `##`'den önceki
       görevler içeren elle hazırlanmış bir test dosyası doğru parse ediliyor
       (doğrulama: saf storage kodu — run_tests.mjs unit testi yeterli).
-- [ ] 2. **Serializer (yazma)** — Yukarıdaki yapıyı geri markdown metnine çevir.
+- [x] 2. **Serializer (yazma)** — Yukarıdaki yapıyı geri markdown metnine çevir.
       Kategori/görev sırası ve tag sırası birebir korunmalı.
       /goal: değişiklik yapılmadan parse → serialize edilen bir dosya,
       orijinaliyle byte-byte aynı çıkıyor (round-trip testi).
-- [ ] 3. **Atomic write doğrulaması** — Mevcut sync `Gio.File.replace_contents`
+- [x] 3. **Atomic write doğrulaması** — Mevcut sync `Gio.File.replace_contents`
       yolu atomiktir (temp+rename; docs.gtk.org + /tmp rename deneyi). Async'e
       geçilmez; mevcut yazma, serializer'a bağlanır; atomiklik belgelenir
       (docs/verified-apis.md) ve truncate-and-write olmadığı test edilir.
       /goal: yazma sırasında (simüle ederek) kesinti olsa bile orijinal dosya
       yarım/bozuk kalmıyor; normal yazımlar da çalışmaya devam ediyor.
-- [ ] 4. **"Genel" fallback davranışı** — UI'dan kategori seçmeden eklenen görev
+- [x] 4. **"Genel" fallback davranışı** — UI'dan kategori seçmeden eklenen görev
       "Genel" altına düşsün ve dosyada gerçek bir `## Genel` başlığı olarak
       yazılsın.
       /goal: kategori seçmeden eklenen bir görev, kaydedilen dosyada `## Genel`
       altında görünüyor.
-- [ ] 5. **Kategori başlıkları menüde** — (faz2_plan.md'de ayrı adım olarak
+- [x] 5. **Kategori başlıkları menüde** — (faz2_plan.md'de ayrı adım olarak
       yazmıyordu, tamamlayıcı eklendi) Her `## Kategori` menüde tıklanamaz bölüm
       başlığı olarak görünür; görevler kendi kategorisi altında gruplanır. Kullanılan
       PopupMenu deseni 46.0 kaynağından doğrulanacak.
       /goal: iki kategorili dosyada başlıklar doğru sırada, görevler doğru
       grupta görünüyor.
-- [ ] 6. **Yukarı/aşağı taşıma** — Her görev satırının yanına ↑/↓ butonu ekle;
+- [x] 6. **Yukarı/aşağı taşıma** — Her görev satırının yanına ↑/↓ butonu ekle;
       tıklanınca ilgili kategorinin task dizisinde index swap yap, sonra kaydet.
       Kategorinin ilk öğesinde ↑, son öğesinde ↓ pasif/gizli olmalı.
       /goal: 5 görevlik bir kategoride 3. görevi iki kez yukarı taşımak onu
       1. sıraya getiriyor — hem UI'da hem kaydedilen dosyada satır sırası
       doğrulanıyor.
-- [ ] 7. **Genişletilebilirlik iskeleti** — `addCategory(name)` fonksiyonunu
+- [x] 7. **Genişletilebilirlik iskeleti** — `addCategory(name)` fonksiyonunu
       (henüz UI'sız) ve tag listesine push eden bir yardımcı fonksiyonu ekle;
       ikisi de mevcut UI'dan çağrılmasa bile izole şekilde var olsun.
       /goal: Looking Glass üzerinden veya geçici bir test çağrısıyla
@@ -158,13 +158,13 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
 
 ### Manuel test checklist'i (her adımdan sonra değil, faz sonunda genel geçiş)
 
-- [ ] Boş dosyadan ilk görevi ekle → "Genel" altına düştü mü?
-- [ ] Dosyaya elle `## İş` ekleyip extension'ı yeniden yükle → yeni kategori
+- [x] Boş dosyadan ilk görevi ekle → "Genel" altına düştü mü?
+- [x] Dosyaya elle `## İş` ekleyip extension'ı yeniden yükle → yeni kategori
       doğru okunuyor mu?
-- [ ] Tag'li görev ekle/gözlemle → dosyada `@tag(değer)` bozulmadan duruyor mu?
-- [ ] Bir görevi yukarı/aşağı taşı → dosyadaki satır sırası değişti mi?
-- [ ] Bir görevi tamamla → kategorisinde kaldı mı, sadece `[x]` oldu mu?
-- [ ] Extension'ı disable/enable et → veri kayıpsız geri geldi mi?
+- [x] Tag'li görev ekle/gözlemle → dosyada `@tag(değer)` bozulmadan duruyor mu?
+- [x] Bir görevi yukarı/aşağı taşı → dosyadaki satır sırası değişti mi?
+- [x] Bir görevi tamamla → kategorisinde kaldı mı, sadece `[x]` oldu mu?
+- [x] Extension'ı disable/enable et → veri kayıpsız geri geldi mi?
 
 ### Karara bağlananlar (2026-09-14, kullanıcı onaylı)
 

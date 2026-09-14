@@ -147,3 +147,37 @@ Escape-invariant, add-focus cancel, edit odak/kaydet, tek-edit kuralı doğrulan
 Faz 1.5 kapandı. Öğrenilen ders: 4 bug'dan 3'ü UI katmanındaydı ve hiçbiri
 otomatik testlerle yakalanmadı (UI katmanında otomatik test yok) —
 bkz. test stratejisi tartışması.
+
+## Faz 2 — Kategorizasyon, sıralama, etiketler (2026-09-14/15) ✅
+
+7 adımın tamamı ayrı commit + test ile tamamlandı. Her UI/storage adımından
+sonra `gjs -m tests/run_tests.mjs`; her UI adımında ek olarak `node --check`
+(extension.js sözdizimi — testler extension.js'i import etmediği için) ve
+`./tests/smoke.sh` çalıştırıldı.
+
+- Adım commit'leri: a0dbc5c (parser), 77dde0a (serializer), 618bdae (atomic
+  write pin), 1a6c9f7 (Genel fallback), 3f7d426 (kategori başlıkları),
+  9015911 (↑/↓ taşıma), 139a4a3 (addCategory + addTaskTag iskeleti).
+- Son test durumu: `gjs -m tests/run_tests.mjs` → 84/84 passed; smoke ACTIVE.
+- Static regression guard'a YENİ eklendi: yazma yolu `replace_contents`'e
+  pinlendi, in-place/truncate API'leri yasaklandı — guard, geçici ihlal
+  eklenerek FAIL aldığı doğrulanarak validate edildi.
+- Testlerin yakaladığı gerçek bug'lar:
+  1. Strict round-trip: explicit '## Genel' başlığı implicit zone ile
+     birleşince, başlıktan önce parse edilmiş satırlar başlığın altına
+     kayıyordu → `preItems` ile düzeltildi (canonical fixture FAIL verdi,
+     düzeltme sonrası 53/53).
+  2. Edit prefill: Document `text` alanı tag'siz olduğu için inline edit her
+     commit'te tag'leri silecekti → edit entry artık `raw` ile dolduruluyor
+     (adım-5 turunda yakalandı; tag korumaları artık davranış garantisi).
+- Manuel doğrulama (kullanıcı): her adım ayrı onaylandı; faz sonu 6 maddelik
+  genel geçiş checklist'i TAMAMI OLUMLU (2026-09-15). Kullanıcı ~/todo.md'yi
+  elle yeni formata taşıdı (Genel/Notes/Todo Extension) — parser tümünü
+  doğru okudu; byte-identical round-trip gerçek dosyada da doğrulandı.
+- /goal: addCategory/addTaskTag, UI'a dokunmadan (unit test + gerçek dosya
+  üzerinde yazmadan) çağrılarak doğrulandı.
+- Bilinen sınırlar (bilinçli, belgeli): preItems'taki görevler bu fazda
+  taşınamaz/etiketlenemez; etiketler menü etiketlerinde görünmez (dosyada
+  dururlar); tasksiz kategoriler menüde render edilmez; normalizasyonlar:
+  [X]→[x], ##Name→## Name, '- [ ] ' prefix, tek trailing newline, H1 yoksa
+  '# TODO'.
