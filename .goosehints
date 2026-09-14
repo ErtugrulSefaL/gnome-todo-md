@@ -68,11 +68,13 @@ The edit feature had to be reverted after a pile of invented methods. To prevent
 - `extension.js` stays a thin UI layer. Do NOT move parsing/writing logic into it
   — the Phase-1 edit failure exactly violates this boundary.
 
-## Phase plan (priority order — desktop-pinned widget is a LATER phase)
+## Phase plan (priority order)
 - Phase 1: core — read/list `~/todo.md` + add/delete + check/uncheck, clickability
-- Phase 2: native notifications, archiving
-- Phase 3: keyboard shortcut
-- Phase 4: desktop-pinned widget (NOT the first priority)
+- Phase 2: categorization + within-category ordering + free-form tags
+  (file format: `#` title, `## Category`, `- [ ] text @tag(value)`; see plan.md)
+- Phase 3: native notifications, archiving
+- Phase 4: keyboard shortcut
+- Phase 5: desktop-pinned widget (NOT a priority)
 
 ## Testing / discipline
 - Test after each feature/compile: reload Shell (Alt+F2 -> r) + manual verification.
