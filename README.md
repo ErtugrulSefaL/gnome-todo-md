@@ -71,9 +71,10 @@ Tests snapshot `~/todo.md` before running and restore it byte-identically.
 
 ## Roadmap
 
-See `plan.md`. Phase 1 (core menu + live reload) is complete. Next:
-Phase 2 (notifications + archiving), Phase 3 (keyboard shortcut),
-Phase 4 (desktop-pinned widget).
+See `plan.md`. Phase 1 (core menu + live reload) and Phase 1.5 (in-place
+editing) are complete. Next: Phase 2 (categorization, ordering, tags),
+Phase 3 (notifications + archiving), Phase 4 (keyboard shortcut),
+Phase 5 (desktop-pinned widget).
 
 ## License
 
