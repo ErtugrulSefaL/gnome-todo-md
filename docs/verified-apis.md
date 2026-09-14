@@ -61,6 +61,7 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | Escape handling in menus | edit cancel path | gnome-shell `46.0` `popupMenu.js` `_onCapturedEvent` (~:1422): KEY_Escape intercepted in the CAPTURE phase → menu.close(); key events never reach entry handlers → Escape branch in entry handlers is dead code | OK (2026-09-08) |
 | St.Entry mouse click focus target | cancel-edit-on-add-focus | gnome-shell `46.0` `st-entry.c:1083` wires the inner Clutter.Text's button-press; key focus lands on the inner Clutter.Text, so `key-focus-in` on St.Entry does NOT fire on click; use `entry.get_clutter_text()` (st14 mirror: `Entry.get_clutter_text()`) | OK (2026-09-08) |
 | `Actor.grab_key_focus()` requires mapped actor | focus edit entry | grab after `menu.addMenuItem(...)` (row on stage); unmapped actors cannot take key focus | OK (2026-09-08) |
+| `Gio.File.replace_contents` is atomic for local files (temp + rename) | Faz 2 safe-write requirement | docs.gtk.org `gio/method.File.replace_contents.html`: "atomic renames are used when replacing local files' contents"; consistent with the /tmp rename experiment above | OK (2026-09-14) |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
@@ -72,11 +73,15 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 
 ## Pending (verify before writing, when the phase starts)
 
-- Phase 2 (notifications): `Main.notify` / MessageTray / Notification — read
+- Phase 2 (categorization/ordering/tags): parser/serializer are pure `storage.js`
+  logic (no new GNOME API risk); sync `Gio.File.replace_contents` stays (atomic —
+  row above). Before rendering category headers, verify the PopupMenu
+  section-header pattern in gnome-shell `46.0` `js/ui/popupMenu.js`.
+- Phase 3 (notifications): `Main.notify` / MessageTray / Notification — read
   gjs.guide "Notifications" topic + gnome-shell `46.0` `js/ui/messageTray.js`
   BEFORE writing any code.
-- Phase 2 (archiving): pure `storage.js` functions + tests first (no new API risk).
+- Phase 3 (archiving): pure `storage.js` functions + tests first (no new API risk).
   Interaction note: archiving shifts line indexes → must go through the same
   `_editingIndex = -1` invariant used by add/toggle/delete (single-edit rule).
-- Phase 3 (keybinding): `Shell.util`? / metadata `keybindings` + Settings schema —
+- Phase 4 (keybinding): `Shell.util`? / metadata `keybindings` + Settings schema —
   verify against gjs.guide + extension docs before implementing.
