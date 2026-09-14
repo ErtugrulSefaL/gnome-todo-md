@@ -10,6 +10,16 @@ import Gio from 'gi://Gio';
  *   { index: number,   // 0-based line index in the file
  *     text:  string,   // task text without the checkbox marker
  *     done:  boolean } // true for '- [x]', false for '- [ ]'
+ *
+ * Faz 2 Document model (parseDocument) — categorized file format:
+ *   Document { title: string|null,          // raw first '# ' line (round-trip)
+ *              categories: [{ name: string, // trimmed '##' heading text
+ *                             items: Array }] }
+ *   `items` is an ORDERED list (preserves interleaving of notes/blank lines,
+ *   required for byte-identical round-trip) whose entries are either
+ *     { type: 'task',  raw, done, tags, text }   (tags: [[key, value], ...])
+ *     { type: 'extra', raw }                     (non-task line, verbatim)
+ *   Use categoryTasks(category) for the flat task-list view.
  */
 
 const TODO_PATH = GLib.get_home_dir() + '/todo.md';
@@ -55,6 +65,106 @@ export function splitLines(content) {
     }
 
     return {tasks, other};
+}
+
+/**
+ * Name of the implicit category for tasks/lines that appear before the first
+ * '##' heading. Always serialized as a real '## Genel' heading.
+ */
+const FALLBACK_CATEGORY = 'Genel';
+
+/**
+ * Parse raw markdown content into the Faz 2 Document model.
+ *
+ * Rules (locked, see plan.md):
+ * - The first '# ' line is the document title; its content is ignored but the
+ *   raw line is kept for round-trip. Any further '# ' line is an extra.
+ * - Every '##' heading starts a category ('###' or deeper is NOT a category).
+ * - Checkbox lines '- [ ]/- [x]/- [X] text @tag(value)' become task items.
+ *   Tags are free-form (no whitelist) and kept as an ordered pair list.
+ * - Everything else (notes, blank lines, plain list items) is an extra kept
+ *   verbatim, in original order.
+ * - Lines before the first '##' land in the FALLBACK_CATEGORY ('Genel').
+ *
+ * @param {string} content - Raw file content.
+ * @returns {{title: string|null, categories: Array<{name: string, items: Array}>}}
+ */
+export function parseDocument(content) {
+    const doc = {title: null, categories: []};
+    let current = null;
+
+    const ensureCategory = () => {
+        if (current === null) {
+            current = {name: FALLBACK_CATEGORY, items: []};
+            doc.categories.push(current);
+        }
+        return current;
+    };
+
+    const lines = content.split('\n');
+    if (lines.length > 0 && lines[lines.length - 1] === '') {
+        lines.pop();
+    }
+
+    for (const rawLine of lines) {
+        const line = rawLine.replace(/\r$/, '');
+
+        // '##' category heading ('###' or deeper is not a category).
+        const h2 = line.match(/^##(?!#)\s?(.*)$/);
+        if (h2) {
+            current = {name: h2[1].trim(), items: []};
+            doc.categories.push(current);
+            continue;
+        }
+
+        // '# ' document title (first one only; later ones are extras).
+        if (/^#\s.*$/.test(line)) {
+            if (doc.title === null) {
+                doc.title = line;
+            } else {
+                ensureCategory().items.push({type: 'extra', raw: line});
+            }
+            continue;
+        }
+
+        // Checkbox task line — same shape splitLines() accepts.
+        const taskMatch = line.match(/^\s*-\s+\[([ xX])\]\s+(.*)$/);
+        if (taskMatch) {
+            const raw = taskMatch[2];
+            const tagRe = /@(\w+)\(([^)]+)\)/g;
+            const tags = [];
+            let m;
+            while ((m = tagRe.exec(raw)) !== null) {
+                tags.push([m[1], m[2]]);
+            }
+            // Derived display text: tags removed, whitespace collapsed, trimmed.
+            // `raw` stays verbatim for byte-identical round-trip.
+            const text = raw.replace(tagRe, '').replace(/\s+/g, ' ').trim();
+            ensureCategory().items.push({
+                type: 'task',
+                raw,
+                done: taskMatch[1].toLowerCase() === 'x',
+                tags,
+                text,
+            });
+            continue;
+        }
+
+        // Any other line (note, blank, plain list item) — keep verbatim.
+        ensureCategory().items.push({type: 'extra', raw: line});
+    }
+
+    return doc;
+}
+
+/**
+ * Flat task view of a category (the `tasks` the UI and mutations work on).
+ *
+ * @param {{name: string, items: Array}} category
+ * @returns {Array<{type: 'task', raw: string, done: boolean, tags: Array, text: string}>}
+ */
+export function categoryTasks(category) {
+    return category.items.filter(item => item.type === 'task');
 }
 
 /**

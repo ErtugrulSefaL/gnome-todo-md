@@ -221,6 +221,98 @@ function testStaticChecks() {
         css, /opacity\s*:/, 'CSS opacity is unreliable on St.Label; use actor opacity');
 }
 
+// ---- parseDocument (Faz 2 step 1: parser) --------------------------------
+
+function testParseDocument() {
+    const FIXTURE = [
+        '# My TODOs',
+        '- [ ] orphan task @tag(v)',
+        '',
+        '## Notes',
+        '- keep me',
+        '',
+        '- [x] done thing',
+        '## İş',
+        '- [ ] write report @due(monday) @p(1)',
+        '- [X] uppercase done',
+        'trailing note',
+    ].join('\n');
+    const doc = Storage.parseDocument(FIXTURE);
+
+    record('parseDocument: H1 stored raw as title',
+        doc.title === '# My TODOs', JSON.stringify(doc.title));
+
+    record('parseDocument: categories in file order (Genel first)',
+        doc.categories.length === 3
+        && doc.categories[0].name === 'Genel'
+        && doc.categories[1].name === 'Notes'
+        && doc.categories[2].name === 'İş',
+        JSON.stringify(doc.categories.map(c => c.name)));
+
+    const genel = doc.categories[0];
+    record('parseDocument: task before first ## falls into Genel (fallback)',
+        genel.items.length === 2
+        && genel.items[0].type === 'task'
+        && genel.items[0].text === 'orphan task'
+        && genel.items[0].done === false
+        && genel.items[1].type === 'extra' && genel.items[1].raw === '',
+        JSON.stringify(genel.items));
+
+    record('parseDocument: tags are free-form ordered [key, value] pairs',
+        JSON.stringify(genel.items[0].tags) === JSON.stringify([['tag', 'v']]),
+        JSON.stringify(genel.items[0].tags));
+
+    const notes = doc.categories[1];
+    record('parseDocument: extras kept verbatim, interleaved in original order',
+        notes.items.length === 3
+        && notes.items[0].type === 'extra' && notes.items[0].raw === '- keep me'
+        && notes.items[1].type === 'extra' && notes.items[1].raw === ''
+        && notes.items[2].type === 'task' && notes.items[2].text === 'done thing'
+        && notes.items[2].done === true,
+        JSON.stringify(notes.items));
+
+    const is = doc.categories[2];
+    record('parseDocument: task text excludes tags; multiple tags keep order',
+        is.items[0].text === 'write report'
+        && JSON.stringify(is.items[0].tags)
+            === JSON.stringify([['due', 'monday'], ['p', '1']]),
+        JSON.stringify(is.items[0]));
+
+    record('parseDocument: [X] accepted as done=true (normalized on write)',
+        is.items[1].done === true && is.items[1].text === 'uppercase done',
+        JSON.stringify(is.items[1]));
+
+    record('parseDocument: trailing non-task line is an extra of its category',
+        is.items[2].type === 'extra' && is.items[2].raw === 'trailing note',
+        JSON.stringify(is.items[2]));
+
+    record('parseDocument: categoryTasks() returns only task items',
+        Storage.categoryTasks(genel).length === 1
+        && Storage.categoryTasks(notes).length === 1
+        && Storage.categoryTasks(is).length === 2,
+        '');
+
+    const noTitle = Storage.parseDocument('- [ ] only task\n## A\n- [ ] x\n');
+    record('parseDocument: file without H1 → title null, Genel fallback works',
+        noTitle.title === null && noTitle.categories.length === 2
+        && noTitle.categories[0].name === 'Genel',
+        JSON.stringify(noTitle.categories.map(c => c.name)));
+
+    record('parseDocument: ### subheading is an extra, not a category',
+        Storage.parseDocument('## A\n### sub\n').categories[0].items[0].type === 'extra',
+        '');
+
+    const twoH1 = Storage.parseDocument('# One\n# Two\n');
+    record('parseDocument: second H1 line preserved as an extra (no data loss)',
+        twoH1.title === '# One' && twoH1.categories[0].items[0].raw === '# Two',
+        JSON.stringify(twoH1));
+
+    record('parseDocument: empty content → empty document',
+        Storage.parseDocument('').title === null
+        && Storage.parseDocument('').categories.length === 0,
+        '');
+}
+
 // ---- runner --------------------------------------------------------------
 
 snapshotOriginal();
@@ -232,6 +324,7 @@ testEditTask();
 testAddTask();
 testWriteRead();
 restoreOriginal();
+testParseDocument();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
