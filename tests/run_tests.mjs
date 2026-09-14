@@ -147,18 +147,60 @@ function testEditTask() {
 // ---- addTask -------------------------------------------------------------
 
 function testAddTask() {
+    // Faz 2 semantics: every UI-added task lands in 'Genel' (real heading).
     const base = '- [ ] a\n- [x] b\n';
-    const added = Storage.addTask(base, 'c');
-    record('addTask: appends unchecked task at end',
-        added === '- [ ] a\n- [x] b\n- [ ] c\n', JSON.stringify(added));
+    record('addTask: tasks before any ## form implicit Genel and gain the heading',
+        Storage.addTask(base, 'c') === '# TODO\n## Genel\n- [ ] a\n- [x] b\n- [ ] c\n',
+        JSON.stringify(Storage.addTask(base, 'c')));
 
-    const empty = Storage.addTask('', 'first');
-    record('addTask: empty file starts clean without leading newline',
-        empty === '- [ ] first\n', JSON.stringify(empty));
+    record('addTask: empty file starts clean under # TODO + ## Genel',
+        Storage.addTask('', 'first') === '# TODO\n## Genel\n- [ ] first\n',
+        JSON.stringify(Storage.addTask('', 'first')));
 
-    const noTrailNl = Storage.addTask('- [ ] a', 'b');
-    record('addTask: adds newline when missing before append',
-        noTrailNl === '- [ ] a\n- [ ] b\n', JSON.stringify(noTrailNl));
+    record('addTask: missing trailing newline is normalized',
+        Storage.addTask('- [ ] a', 'b') === '# TODO\n## Genel\n- [ ] a\n- [ ] b\n',
+        JSON.stringify(Storage.addTask('- [ ] a', 'b')));
+}
+
+// ---- addTask: Genel fallback (Faz 2 step 4) -------------------------------
+
+function testAddTaskCategorized() {
+    // File with categories but no Genel: 'Genel' appended at the end.
+    record('addTaskCategorized: no Genel in file → ## Genel appended at the end',
+        Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan')
+            === '# T\n## İş\n- [ ] a\n## Genel\n- [ ] orphan\n',
+        JSON.stringify(Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan')));
+
+    // Implicit Genel with trailing blank/notes: inserted after the LAST task,
+    // keeping trailing extras at the end of the block.
+    record('addTaskCategorized: inserted after last task, trailing extras stay at end',
+        Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new')
+            === '# T\n## Genel\n- [ ] a\n\n- [ ] b\n- [ ] new\n\n## Notes\n- [ ] x\n',
+        JSON.stringify(Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new')));
+
+    // Existing explicit Genel: appended to its task list.
+    record('addTaskCategorized: appended to existing explicit ## Genel',
+        Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new')
+            === '# T\n## Genel\n- [ ] a\n- [ ] new\n\n## B\n- [ ] b\n',
+        JSON.stringify(Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new')));
+
+    // Tags typed in the entry text are preserved and parse consistently.
+    const tagged = Storage.parseDocument(Storage.addTask('', 'buy milk @due(mon) @p(1)'));
+    const t = Storage.categoryTasks(tagged.categories[0])[0];
+    record('addTaskCategorized: @tag(value) in added text parses like parsed tasks',
+        t.raw === 'buy milk @due(mon) @p(1)'
+        && JSON.stringify(t.tags) === JSON.stringify([['due', 'mon'], ['p', '1']])
+        && t.text === 'buy milk',
+        JSON.stringify(t));
+
+    // Outputs are canonical: parse∘serialize round-trips byte-identical.
+    const outputs = [
+        Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan'),
+        Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new'),
+        Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new'),
+    ];
+    record('addTaskCategorized: outputs are canonical (round-trip stable)',
+        outputs.every(o => Storage.serializeDocument(Storage.parseDocument(o)) === o), '');
 }
 
 // ---- writeTodo / round-trip ---------------------------------------------
@@ -424,6 +466,7 @@ testToggleTask();
 testDeleteTask();
 testEditTask();
 testAddTask();
+testAddTaskCategorized();
 testWriteRead();
 restoreOriginal();
 testParseDocument();

@@ -78,6 +78,50 @@ export function splitLines(content) {
 const FALLBACK_CATEGORY = 'Genel';
 
 /**
+ * Extract free-form `@key(value)` tags from raw task text as an ordered
+ * [key, value] pair list. Locked rule: no whitelist — every match is kept,
+ * unknown keys are preserved and written back verbatim.
+ *
+ * @param {string} raw - Raw task text (tags still inline).
+ * @returns {Array<[string, string]>} Ordered tag pairs.
+ */
+const extractTags = raw => {
+    const tagRe = /@(\w+)\(([^)]+)\)/g;
+    const tags = [];
+    let m;
+    while ((m = tagRe.exec(raw)) !== null) {
+        tags.push([m[1], m[2]]);
+    }
+    return tags;
+};
+
+/**
+ * Derived display text of a task: tags removed, whitespace collapsed,
+ * trimmed. Only used for display/editing; `raw` stays the authoritative
+ * verbatim form for byte-identical round-trip.
+ *
+ * @param {string} raw - Raw task text (tags still inline).
+ * @returns {string} Text without tags.
+ */
+const deriveText = raw =>
+    raw.replace(/@(\w+)\(([^)]+)\)/g, '').replace(/\s+/g, ' ').trim();
+
+/**
+ * Build a task item from raw text and checkbox state.
+ *
+ * @param {string} raw - Raw task text after the checkbox (tags inline).
+ * @param {boolean} done - Checkbox state.
+ * @returns {{type: 'task', raw: string, done: boolean, tags: Array, text: string}}
+ */
+const makeTaskItem = (raw, done) => ({
+    type: 'task',
+    raw,
+    done,
+    tags: extractTags(raw),
+    text: deriveText(raw),
+});
+
+/**
  * Parse raw markdown content into the Faz 2 Document model.
  *
  * Rules (locked, see plan.md):
@@ -145,23 +189,8 @@ export function parseDocument(content) {
         // Checkbox task line — same shape splitLines() accepts.
         const taskMatch = line.match(/^\s*-\s+\[([ xX])\]\s+(.*)$/);
         if (taskMatch) {
-            const raw = taskMatch[2];
-            const tagRe = /@(\w+)\(([^)]+)\)/g;
-            const tags = [];
-            let m;
-            while ((m = tagRe.exec(raw)) !== null) {
-                tags.push([m[1], m[2]]);
-            }
-            // Derived display text: tags removed, whitespace collapsed, trimmed.
-            // `raw` stays verbatim for byte-identical round-trip.
-            const text = raw.replace(tagRe, '').replace(/\s+/g, ' ').trim();
-            ensureCategory().items.push({
-                type: 'task',
-                raw,
-                done: taskMatch[1].toLowerCase() === 'x',
-                tags,
-                text,
-            });
+            ensureCategory().items.push(
+                makeTaskItem(taskMatch[2], taskMatch[1].toLowerCase() === 'x'));
             continue;
         }
 
@@ -328,18 +357,36 @@ export function deleteTask(content, index) {
 }
 
 /**
- * Append a new incomplete task to the end of the file.
+ * Append a new incomplete task to the "Genel" category. Locked rule: tasks
+ * added without a category UI always land there, under a real '## Genel'
+ * heading in the file. Inserted after the last existing task of the category
+ * so trailing blank/note lines stay at the end of the block. Since Faz 2 this
+ * is Document-based (parse → mutate → serialize); string-in/string-out.
  *
  * @param {string} content - Raw file content.
- * @param {string} text - Task text (may contain any characters).
+ * @param {string} text - Task text (may contain @tag(value) pairs).
  * @returns {string} Updated content.
  */
 export function addTask(content, text) {
-    // Keep the file clean when empty so the first task starts on line 0.
-    const trimmed = (content === '' || content.endsWith('\n'))
-        ? content
-        : content + '\n';
-    return trimmed + `- [ ] ${text}\n`;
+    const doc = parseDocument(content);
+    let genel = doc.categories.find(category => category.name === FALLBACK_CATEGORY);
+    if (!genel) {
+        genel = {name: FALLBACK_CATEGORY, items: [], implicit: true};
+        doc.categories.push(genel);
+    }
+
+    // Insert after the last task item (or at the very end when the category
+    // holds only extras so far).
+    let insertAt = genel.items.length;
+    for (let i = genel.items.length - 1; i >= 0; i--) {
+        if (genel.items[i].type === 'task') {
+            insertAt = i + 1;
+            break;
+        }
+    }
+    genel.items.splice(insertAt, 0, makeTaskItem(text, false));
+
+    return serializeDocument(doc);
 }
 
 /**
