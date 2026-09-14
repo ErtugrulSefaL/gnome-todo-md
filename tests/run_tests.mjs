@@ -313,6 +313,75 @@ function testParseDocument() {
         '');
 }
 
+// ---- serializeDocument (Faz 2 step 2: serializer) ------------------------
+
+function testSerializeDocument() {
+    // Strict byte-identical round-trip on a canonical file.
+    const CANONICAL = [
+        '# My TODOs',
+        '',
+        '## Genel',
+        '- [ ] orphan task @tag(v)',
+        '',
+        '## Notes',
+        '- keep me',
+        '',
+        '- [x] done thing',
+        '## İş',
+        '- [ ] write report @due(monday) @p(1)',
+        '- [ ] uppercase done',
+        'trailing note',
+    ].join('\n') + '\n';
+    record('serializeDocument: canonical file round-trips byte-identical',
+        Storage.serializeDocument(Storage.parseDocument(CANONICAL)) === CANONICAL,
+        JSON.stringify(Storage.serializeDocument(Storage.parseDocument(CANONICAL))));
+
+    // Real-world shape: blanks between the title and the first '##' (implicit
+    // Genel holding only extras) must not gain a '## Genel' heading.
+    const REAL_LIKE = '# My TODOs\n\n\n## Notes\n- keep me\n\n- [x] done\n';
+    record('serializeDocument: extras-only implicit Genel stays headingless',
+        Storage.serializeDocument(Storage.parseDocument(REAL_LIKE)) === REAL_LIKE, '');
+
+    // Locked rule: tasks in an implicit Genel gain a real '## Genel' heading.
+    record('serializeDocument: implicit Genel with tasks gains ## Genel heading',
+        Storage.serializeDocument(Storage.parseDocument('# T\n- [ ] a\n## B\n- [ ] b\n'))
+            === '# T\n## Genel\n- [ ] a\n## B\n- [ ] b\n', '');
+
+    // An explicit '## Genel' takes over the implicit fallback bucket, keeping
+    // byte order: pre-heading items stay before the heading.
+    const merged = Storage.parseDocument('# T\n- [ ] a\n## Genel\n- [ ] b\n');
+    record('serializeDocument: implicit+explicit Genel merge keeps line order',
+        merged.categories.length === 1
+        && Storage.serializeDocument(merged) === '# T\n- [ ] a\n## Genel\n- [ ] b\n',
+        JSON.stringify(merged.categories));
+
+    // Locked rule: missing H1 gains '# TODO'.
+    record('serializeDocument: missing H1 gains # TODO',
+        Storage.serializeDocument(Storage.parseDocument('- [ ] a\n')) === '# TODO\n## Genel\n- [ ] a\n', '');
+
+    record('serializeDocument: empty document → only # TODO',
+        Storage.serializeDocument(Storage.parseDocument('')) === '# TODO\n', '');
+
+    // Locked rule: [X] normalized to [x] on write.
+    record('serializeDocument: [X] normalized to [x]',
+        Storage.serializeDocument(Storage.parseDocument('- [X] a\n')) === '# TODO\n## Genel\n- [x] a\n', '');
+
+    // Heading and task-prefix normalizations + trailing newline.
+    record('serializeDocument: headings, prefixes, trailing newline normalized',
+        Storage.serializeDocument(Storage.parseDocument('##Notes\n-  [ ] a'))
+            === '# TODO\n## Notes\n- [ ] a\n', '');
+
+    // Interleaved inline tags survive verbatim (raw is authoritative).
+    const INTERLEAVED = '# T\n## Genel\n- [ ] buy @due(x) milk\n';
+    record('serializeDocument: interleaved inline tags preserved verbatim',
+        Storage.serializeDocument(Storage.parseDocument(INTERLEAVED)) === INTERLEAVED, '');
+
+    // serialize ∘ parse is idempotent.
+    const once = Storage.serializeDocument(Storage.parseDocument(CANONICAL));
+    record('serializeDocument: idempotent (serialize∘parse applied twice is stable)',
+        Storage.serializeDocument(Storage.parseDocument(once)) === once, '');
+}
+
 // ---- runner --------------------------------------------------------------
 
 snapshotOriginal();
@@ -325,6 +394,7 @@ testAddTask();
 testWriteRead();
 restoreOriginal();
 testParseDocument();
+testSerializeDocument();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.

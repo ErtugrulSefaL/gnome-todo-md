@@ -20,6 +20,10 @@ import Gio from 'gi://Gio';
  *     { type: 'task',  raw, done, tags, text }   (tags: [[key, value], ...])
  *     { type: 'extra', raw }                     (non-task line, verbatim)
  *   Use categoryTasks(category) for the flat task-list view.
+ *   Categories carry `implicit: true` when created by the fallback (no '##'
+ *   heading seen yet); serializeDocument() writes their heading only when
+ *   they contain tasks (locked rule), so unchanged files round-trip
+ *   byte-identical.
  */
 
 const TODO_PATH = GLib.get_home_dir() + '/todo.md';
@@ -95,7 +99,7 @@ export function parseDocument(content) {
 
     const ensureCategory = () => {
         if (current === null) {
-            current = {name: FALLBACK_CATEGORY, items: []};
+            current = {name: FALLBACK_CATEGORY, items: [], implicit: true};
             doc.categories.push(current);
         }
         return current;
@@ -112,8 +116,19 @@ export function parseDocument(content) {
         // '##' category heading ('###' or deeper is not a category).
         const h2 = line.match(/^##(?!#)\s?(.*)$/);
         if (h2) {
-            current = {name: h2[1].trim(), items: []};
-            doc.categories.push(current);
+            const name = h2[1].trim();
+            if (name === FALLBACK_CATEGORY && current !== null && current.implicit) {
+                // An explicit '## Genel' takes over the fallback bucket so the
+                // model never holds two 'Genel' categories. Items parsed so far
+                // appeared BEFORE the heading in the file — kept in `preItems`
+                // and re-emitted headingless before it (round-trip fidelity).
+                current.implicit = false;
+                current.preItems = current.items;
+                current.items = [];
+            } else {
+                current = {name, items: [], implicit: false};
+                doc.categories.push(current);
+            }
             continue;
         }
 
@@ -165,6 +180,54 @@ export function parseDocument(content) {
  */
 export function categoryTasks(category) {
     return category.items.filter(item => item.type === 'task');
+}
+
+/**
+ * Serialize a Document model back to markdown content.
+ *
+ * Round-trip rules (locked, see plan.md):
+ * - Task lines are rebuilt from `raw` verbatim (raw is authoritative; it
+ *   keeps the original tag positions/spacing). Mutations that change text or
+ *   tags are responsible for keeping `raw` in sync.
+ * - An implicit 'Genel' category (parser fallback, no heading seen) gets its
+ *   '## Genel' heading written ONLY when it contains at least one task;
+ *   extras-only implicit content stays headingless so unchanged files
+ *   round-trip byte-identical. Explicit categories always get a heading.
+ * - When an explicit '## Genel' heading takes over the fallback bucket, items
+ *   parsed before the heading (`preItems`) are re-emitted verbatim BEFORE it,
+ *   mirroring the original file layout.
+ * - A missing document title gains a '# TODO' line.
+ * - Deliberate normalizations (locked decisions): '[X]' → '[x]',
+ *   '##Name' → '## Name', canonical '- [ ] ' task prefix, and exactly one
+ *   trailing newline.
+ *
+ * @param {{title: string|null, categories: Array}} doc - Document model.
+ * @returns {string} Markdown content.
+ */
+export function serializeDocument(doc) {
+    const lines = [];
+
+    lines.push(doc.title !== null ? doc.title : '# TODO');
+
+    const pushItems = items => {
+        for (const item of items) {
+            lines.push(item.type === 'task'
+                ? `- [${item.done ? 'x' : ' '}] ${item.raw}`
+                : item.raw);
+        }
+    };
+
+    for (const category of doc.categories) {
+        if (category.preItems !== undefined) {
+            pushItems(category.preItems);
+            lines.push(`## ${category.name}`);
+        } else if (!category.implicit || categoryTasks(category).length > 0) {
+            lines.push(`## ${category.name}`);
+        }
+        pushItems(category.items);
+    }
+
+    return lines.join('\n') + '\n';
 }
 
 /**
