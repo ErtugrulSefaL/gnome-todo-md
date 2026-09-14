@@ -2,6 +2,6 @@
   "uuid": "todo@ertugrul.local",
   "name": "Todo",
   "description": "TODO list from ~/todo.md in a panel menu",
-  "version-name": "0.2.0",
+  "version-name": "0.3.0",
   "shell-version": ["46"]
 }

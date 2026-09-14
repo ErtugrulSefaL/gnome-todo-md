@@ -4,6 +4,38 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.3.0 - 2026-09-15
+
+### Added
+- Categorized file format: `#` document title, `## Category` sections, and
+  tasks with free-form `@tag(value)` pairs (ordered pairs, no whitelist,
+  unknown tags are preserved and written back).
+- Category section headers in the menu (non-clickable, bold); tasks are
+  grouped under their category.
+- Within-category move up/down buttons (hidden at the category edges);
+  adjacent tasks swap positions and interleaved note/blank lines keep their
+  slots.
+- "Genel" fallback: tasks added without a category UI always land under a
+  real `## Genel` heading in the file.
+- Extensibility skeleton (no UI yet): `addCategory()` and `addTaskTag()`
+  storage helpers, unit-tested in isolation.
+- Atomic write path pinned: `Gio.File.replace_contents` (temp + rename) is
+  the only write mechanism, enforced by a static guard plus end-to-end
+  write/read round-trip tests.
+
+### Changed
+- Menu rows are built from the Document model; labels show tag-stripped text
+  while the inline editor prefills the raw text so edits keep tags.
+- Deliberate file normalizations: `[X]` → `[x]`, `##Name` → `## Name`,
+  canonical `- [ ] ` task prefix, exactly one trailing newline, and a
+  `# TODO` line added when the file has no H1.
+- Non-task lines (notes, blanks) are preserved verbatim and never rendered
+  in the menu.
+
+### Fixed
+- Byte-identical round-trip for unchanged files — including the real
+  `~/todo.md` (implicit-Genel / preItems handling).
+
 ## 0.2.0 - 2026-09-14
 
 ### Added
