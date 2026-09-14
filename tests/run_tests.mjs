@@ -478,6 +478,59 @@ function testMoveTask() {
         Storage.serializeDocument(Storage.parseDocument(twice)) === twice, '');
 }
 
+// ---- extensibility skeleton (Faz 2 step 7: no UI yet) --------------------
+
+function testExtensibilitySkeleton() {
+    // addCategory appends an explicit (always-headed) empty category.
+    record('skeleton: addCategory appends an explicit category',
+        Storage.addCategory('# T\n## A\n- [ ] a\n', 'Test')
+            === '# T\n## A\n- [ ] a\n## Test\n', '');
+
+    record('skeleton: addCategory on empty content gains # TODO',
+        Storage.addCategory('', 'Test') === '# TODO\n## Test\n', '');
+
+    // No-ops: duplicates and empty names leave the content untouched.
+    record('skeleton: addCategory duplicate name is a no-op',
+        Storage.addCategory('# T\n## Test\n- [ ] a\n', 'Test')
+            === '# T\n## Test\n- [ ] a\n', '');
+    record('skeleton: addCategory empty name is a no-op',
+        Storage.addCategory('# T\n', '  ') === '# T\n', '');
+
+    // An implicit 'Genel' counts as existing — no second 'Genel' section.
+    record('skeleton: implicit Genel counts as existing for addCategory',
+        Storage.addCategory('# T\n- [ ] a\n## A\n- [ ] b\n', 'Genel')
+            === '# T\n- [ ] a\n## A\n- [ ] b\n', '');
+
+    // addTaskTag appends the pair and keeps raw/text in sync.
+    const tagged = Storage.addTaskTag('# T\n## C\n- [ ] buy milk\n', 2, 'due', 'mon');
+    record('skeleton: addTaskTag appends @due(mon) and keeps raw in sync',
+        tagged === '# T\n## C\n- [ ] buy milk @due(mon)\n', JSON.stringify(tagged));
+    const reparsed = Storage.parseDocument(tagged);
+    const t = Storage.categoryTasks(reparsed.categories[0])[0];
+    record('skeleton: added tag parses back as a structured pair',
+        JSON.stringify(t.tags) === JSON.stringify([['due', 'mon']])
+        && t.text === 'buy milk', JSON.stringify(t));
+
+    // Targets the task at the given line index across categories.
+    record('skeleton: addTaskTag targets the task at the given line index',
+        Storage.addTaskTag('# T\n## A\n- [ ] a\n## B\n- [ ] b\n', 4, 'p', '1')
+            === '# T\n## A\n- [ ] a\n## B\n- [ ] b @p(1)\n', '');
+
+    // Invalid input is rejected (the tag could not be parsed back).
+    record('skeleton: addTaskTag rejects non-\\w keys',
+        Storage.addTaskTag('# T\n## C\n- [ ] a\n', 2, 'önem', '2')
+            === '# T\n## C\n- [ ] a\n', '');
+    record('skeleton: addTaskTag rejects ")" or newline in values',
+        Storage.addTaskTag('# T\n## C\n- [ ] a\n', 2, 'due', 'mo)n')
+            === '# T\n## C\n- [ ] a\n', '');
+    record('skeleton: addTaskTag rejects empty values',
+        Storage.addTaskTag('# T\n## C\n- [ ] a\n', 2, 'due', '')
+            === '# T\n## C\n- [ ] a\n', '');
+    record('skeleton: addTaskTag with unknown index is a no-op',
+        Storage.addTaskTag('# T\n## C\n- [ ] a\n', 99, 'due', 'mon')
+            === '# T\n## C\n- [ ] a\n', '');
+}
+
 // ---- atomic write path (Faz 2 step 3) ------------------------------------
 
 function testAtomicWritePath() {
@@ -514,6 +567,7 @@ testEditTask();
 testAddTask();
 testAddTaskCategorized();
 testMoveTask();
+testExtensibilitySkeleton();
 testWriteRead();
 restoreOriginal();
 testParseDocument();

@@ -434,6 +434,66 @@ export function moveTask(content, index, direction) {
 }
 
 /**
+ * Append a new empty, explicit category at the end of the document (Faz 2
+ * extensibility skeleton — no UI calls this yet; a future "+" button only
+ * needs to wire this in).
+ *
+ * No-op when the name is empty/whitespace or a category of that name already
+ * exists (case-sensitive file semantics; an implicit 'Genel' counts as
+ * existing, so no second 'Genel' section can ever be created).
+ *
+ * @param {string} content - Raw file content.
+ * @param {string} name - Category name (trimmed before use).
+ * @returns {string} Updated content (unchanged when the call is a no-op).
+ */
+export function addCategory(content, name) {
+    const trimmed = name.trim();
+    if (!trimmed) {
+        return content;
+    }
+    const doc = parseDocument(content);
+    if (doc.categories.some(category => category.name === trimmed)) {
+        return content;
+    }
+    doc.categories.push({name: trimmed, items: [], implicit: false});
+    return serializeDocument(doc);
+}
+
+/**
+ * Append an `@key(value)` tag to the task at line `index` (Faz 2
+ * extensibility skeleton — no UI calls this yet; a future "add tag" form
+ * only needs to wire this in). The ordered tags list gains the new pair and
+ * `raw` is kept in sync (raw is the authoritative serialized form).
+ *
+ * No-op when: no task owns the index, `key` does not match /^\w+$/ (such a
+ * tag could not be parsed back), or `value` is empty / contains ')' or a
+ * newline (it would break the `@key(value)` pattern).
+ *
+ * @param {string} content - Raw file content.
+ * @param {number} index - 0-based line index of the task.
+ * @param {string} key - Tag key (must match /^\w+$/).
+ * @param {string} value - Tag value (no ')' or newlines).
+ * @returns {string} Updated content (unchanged when the call is a no-op).
+ */
+export function addTaskTag(content, index, key, value) {
+    if (!/^\w+$/.test(key) || value.length === 0 || /[)\n\r]/.test(value)) {
+        return content;
+    }
+    const doc = parseDocument(content);
+    for (const category of doc.categories) {
+        const task = categoryTasks(category).find(item => item.index === index);
+        if (!task) {
+            continue;
+        }
+        task.tags.push([key, value]);
+        task.raw = `${task.raw} @${key}(${value})`;
+        task.text = deriveText(task.raw);
+        return serializeDocument(doc);
+    }
+    return content;
+}
+
+/**
  * Write content back to ~/todo.md.
  *
  * @param {string} content - Full file content to write.
