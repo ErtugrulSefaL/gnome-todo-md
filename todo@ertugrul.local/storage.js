@@ -393,6 +393,47 @@ export function addTask(content, text) {
 }
 
 /**
+ * Move the task at line `index` up or down within its own category (locked:
+ * no cross-category moves). The two adjacent tasks in the category's task
+ * sequence swap positions; interleaved extras (blank/note lines) keep their
+ * slots. Moving the first task up or the last task down is a no-op, and so
+ * is an index that no task owns.
+ *
+ * Note: tasks living in a merged '## Genel' preItems block (parsed before an
+ * explicit '## Genel' heading) are not movable in this phase — moveTask only
+ * operates on a category's main item list.
+ *
+ * @param {string} content - Raw file content.
+ * @param {number} index - 0-based line index of the task to move.
+ * @param {string} direction - 'up' or 'down'.
+ * @returns {string} Updated content (unchanged when the move is impossible).
+ */
+export function moveTask(content, index, direction) {
+    const doc = parseDocument(content);
+    for (const category of doc.categories) {
+        const tasks = categoryTasks(category);
+        const pos = tasks.findIndex(task => task.index === index);
+        if (pos === -1) {
+            continue;
+        }
+
+        const other = direction === 'up' ? pos - 1 : pos + 1;
+        if (other < 0 || other >= tasks.length) {
+            return content;
+        }
+
+        // Swap the two task items in place; extras between them stay put.
+        const items = category.items;
+        const ia = items.indexOf(tasks[pos]);
+        const ib = items.indexOf(tasks[other]);
+        items[ia] = tasks[other];
+        items[ib] = tasks[pos];
+        return serializeDocument(doc);
+    }
+    return content;
+}
+
+/**
  * Write content back to ~/todo.md.
  *
  * @param {string} content - Full file content to write.

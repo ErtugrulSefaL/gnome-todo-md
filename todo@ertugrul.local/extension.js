@@ -145,7 +145,9 @@ export default class TodoExtension extends Extension {
             header.label.style_class = 'todo-category-header';
             menu.addMenuItem(header);
 
-            for (const task of section.tasks) {
+            const tasks = section.tasks;
+            for (let ti = 0; ti < tasks.length; ti++) {
+                const task = tasks[ti];
                 // The row being edited renders as an inline entry instead of
                 // the usual label + buttons. Render derives solely from
                 // _editingIndex, so two open editors can never coexist.
@@ -158,19 +160,25 @@ export default class TodoExtension extends Extension {
                     continue;
                 }
 
-                menu.addMenuItem(this._makeTaskRow(task));
+                menu.addMenuItem(this._makeTaskRow(task,
+                    ti === 0, ti === tasks.length - 1));
             }
         }
     }
 
     /**
      * Build a clickable task row: label (strikethrough + fade when done),
-     * edit and delete buttons pinned to the right of the text.
+     * move up/down buttons, and edit + delete buttons pinned to the right.
      *
      * @param {object} task - Document task item ({index, raw, done, tags, text}).
+     * @param {boolean} isFirst - True when the task is first in its category
+     *   (the up button is hidden at the category's top edge).
+     * @param {boolean} isLast - True when the task is last in its category
+     *   (the down button is hidden at the category's bottom edge).
      * @returns {PopupMenu.PopupBaseMenuItem} The task row.
      */
-    _makeTaskRow(task) {
+    _makeTaskRow(task, isFirst, isLast) {
+        const index = task.index;
         const row = new PopupMenu.PopupBaseMenuItem();
         const label = new St.Label({
             text: task.text,
@@ -183,6 +191,36 @@ export default class TodoExtension extends Extension {
             label.opacity = 153;
         }
 
+        // Move up/down within the category (locked: no cross-category moves).
+        // Hidden at the category's edges; go-up/go-down-symbolic verified in
+        // the local Adwaita icon theme.
+        let upBtn = null;
+        let downBtn = null;
+        if (!isFirst) {
+            upBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'go-up-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            upBtn.connect('clicked', () => {
+                this._moveTask(index, 'up');
+            });
+        }
+        if (!isLast) {
+            downBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'go-down-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            downBtn.connect('clicked', () => {
+                this._moveTask(index, 'down');
+            });
+        }
+
         // Delete button pinned to the right of the task text.
         const delBtn = new St.Button({
             style_class: 'todo-icon-button button',
@@ -191,7 +229,6 @@ export default class TodoExtension extends Extension {
                 style_class: 'system-status-icon',
             }),
         });
-        const index = task.index;
         delBtn.connect('clicked', () => {
             this._deleteTask(index);
         });
@@ -214,10 +251,22 @@ export default class TodoExtension extends Extension {
         // (Clutter uses x_expand, not GTK's hexpand.)
         label.set_x_expand(true);
         label.set_x_align(Clutter.ActorAlign.START);
+        if (upBtn !== null) {
+            upBtn.set_x_align(Clutter.ActorAlign.END);
+        }
+        if (downBtn !== null) {
+            downBtn.set_x_align(Clutter.ActorAlign.END);
+        }
         editBtn.set_x_align(Clutter.ActorAlign.END);
         delBtn.set_x_align(Clutter.ActorAlign.END);
 
         row.add_child(label);
+        if (upBtn !== null) {
+            row.add_child(upBtn);
+        }
+        if (downBtn !== null) {
+            row.add_child(downBtn);
+        }
         row.add_child(editBtn);
         row.add_child(delBtn);
 
@@ -335,6 +384,21 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.deleteTask(parsed.raw, index);
+        Storage.writeTodo(updated);
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Move a task up/down within its category, persist and refresh.
+     * Closing any open edit first keeps the single-edit invariant.
+     *
+     * @param {number} index - 0-based line index of the task.
+     * @param {string} direction - 'up' or 'down'.
+     */
+    _moveTask(index, direction) {
+        this._editingIndex = -1;
+        const parsed = Storage.readTodo();
+        const updated = Storage.moveTask(parsed.raw, index, direction);
         Storage.writeTodo(updated);
         this._refreshTodoMenu();
     }

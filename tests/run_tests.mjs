@@ -440,6 +440,44 @@ function testSerializeDocument() {
         Storage.serializeDocument(Storage.parseDocument(once)) === once, '');
 }
 
+// ---- moveTask: within-category reordering (Faz 2 step 6) -----------------
+
+function testMoveTask() {
+    // /goal: 5-task category — moving the 3rd task up twice brings it to #1.
+    const FIVE = '# T\n## C\n- [ ] one\n- [ ] two\n- [ ] three\n- [ ] four\n- [ ] five\n';
+    const once = Storage.moveTask(FIVE, 4, 'up');
+    record('moveTask: 3rd task up once swaps with the 2nd',
+        once === '# T\n## C\n- [ ] one\n- [ ] three\n- [ ] two\n- [ ] four\n- [ ] five\n',
+        JSON.stringify(once));
+    const twice = Storage.moveTask(once, 3, 'up');
+    record('moveTask: up again → the 3rd task is now first',
+        twice === '# T\n## C\n- [ ] three\n- [ ] one\n- [ ] two\n- [ ] four\n- [ ] five\n',
+        JSON.stringify(twice));
+
+    record('moveTask: down swaps with the next task',
+        Storage.moveTask(FIVE, 2, 'down')
+            === '# T\n## C\n- [ ] two\n- [ ] one\n- [ ] three\n- [ ] four\n- [ ] five\n', '');
+
+    record('moveTask: first task up is a no-op',
+        Storage.moveTask(FIVE, 2, 'up') === FIVE, '');
+    record('moveTask: last task down is a no-op',
+        Storage.moveTask(FIVE, 6, 'down') === FIVE, '');
+
+    // Movement stays within the category (cross-category is impossible).
+    const TWO = '# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b1\n- [ ] b2\n';
+    record('moveTask: never crosses category boundaries',
+        Storage.moveTask(TWO, 3, 'down') === TWO, '');
+
+    // Extras keep their slots; tasks swap around them.
+    const EXTRA = '# T\n## C\n- [ ] a\n\nnote line\n- [ ] b\n';
+    record('moveTask: tasks swap around interleaved extras',
+        Storage.moveTask(EXTRA, 2, 'down') === '# T\n## C\n- [ ] b\n\nnote line\n- [ ] a\n', '');
+
+    // Moved output is canonical: parse∘serialize round-trips byte-identical.
+    record('moveTask: output round-trips byte-identical',
+        Storage.serializeDocument(Storage.parseDocument(twice)) === twice, '');
+}
+
 // ---- atomic write path (Faz 2 step 3) ------------------------------------
 
 function testAtomicWritePath() {
@@ -475,6 +513,7 @@ testDeleteTask();
 testEditTask();
 testAddTask();
 testAddTaskCategorized();
+testMoveTask();
 testWriteRead();
 restoreOriginal();
 testParseDocument();

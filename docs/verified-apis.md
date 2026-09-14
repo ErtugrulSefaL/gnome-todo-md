@@ -64,6 +64,7 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | `Gio.File.replace_contents` is atomic for local files (temp + rename) | Faz 2 safe-write requirement | docs.gtk.org `gio/method.File.replace_contents.html`: "atomic renames are used when replacing local files' contents"; consistent with the /tmp rename experiment above; write path pinned by the static guard + end-to-end write/read round-trip test in `run_tests.mjs` | OK (2026-09-14) |
 | `PopupBaseMenuItem` params `{reactive, activate, hover, style_class, can_focus}` | menu row construction (entry wrapper, edit row) | gnome-shell `46.0` `js/ui/popupMenu.js` `PopupBaseMenuItem._init` (:82-89, Params.parse) | OK (2026-09-14) |
 | `PopupMenuItem(text, params)` exposes `.label` (St.Label); no first-class section-header widget exists in the shell | category header rows | gnome-shell `46.0` `js/ui/popupMenu.js` (:285-298); headers built as non-reactive PopupMenuItem + styled label (same pattern as the proven 'No tasks' row) | OK (2026-09-14) |
+| `go-up-symbolic` / `go-down-symbolic` icons | task move buttons | present in local Adwaita icon theme (`/usr/share/icons/Adwaita/symbolic/actions/go-up-symbolic.svg`, `go-down-symbolic.svg`) | OK (2026-09-15) |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
