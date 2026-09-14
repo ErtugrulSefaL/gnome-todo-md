@@ -102,3 +102,16 @@ The edit feature had to be reverted after a pile of invented methods. To prevent
   the next step until I test and approve.
 - Summarize the diff; we are in approve mode, don't proceed without approval.
 - Approval before action: present changes to me before applying them.
+
+### Versioning
+- Use Semantic Versioning: MAJOR.MINOR.PATCH (e.g. 0.2.0).
+  - MINOR: new feature (without breaking existing behavior)
+  - PATCH: bug fix only, no behavior change
+  - MAJOR: backward-incompatible change
+- The project hasn't reached 1.0.0 yet, we're in the 0.y.z range.
+- When a phase is completed and approved, create a git tag (e.g. `git tag -a v0.2.0 -m "..."`)
+  and add a short entry to CHANGELOG.md. Don't assign version numbers to
+  intermediate steps/commits, only when a phase is done.
+- Write the same semver string into the `version-name` field in metadata.json.
+- NEVER touch the `version` field in metadata.json — it's a separate counter
+  auto-managed by extensions.gnome.org, not meant to be edited manually.
