@@ -112,10 +112,13 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
 ### Uygulama adımları (sırayla, her biri ayrı test + commit)
 
 - [ ] 1. **Parser (okuma)** — Örnek bir `.md` dosyasını yukarıdaki kurallara
-      göre `Document { categories: [{ name, tasks: [{ text, done, tags }], extras }] }`
-      yapısına çevir ("extras" = görev olmayan satırlar; aynen korunur, UI'da
-      gösterilmez). H1 satırı ham haliyle saklanır (içeriği yok sayılır ama
-      round-trip için geri yazılır). "Genel" fallback davranışını dahil et.
+      göre `Document { title, categories: [{ name, items }] }` yapısına çevir.
+      `items` SIRALIDIR (interleaving + byte round-trip için): `{type:'task',
+      raw, done, tags, text}` ya da `{type:'extra', raw}` (görev olmayan
+      satırlar — aynen korunur, UI'da gösterilmez); düz task görünümü
+      `categoryTasks()` ile türetilir. H1 satırı ham haliyle saklanır
+      (içeriği yok sayılır ama round-trip için geri yazılır). "Genel"
+      fallback davranışını dahil et.
       /goal: H1, birden fazla H2, tag'li/tag'siz görevler ve ilk `##`'den önceki
       görevler içeren elle hazırlanmış bir test dosyası doğru parse ediliyor
       (doğrulama: saf storage kodu — run_tests.mjs unit testi yeterli).
