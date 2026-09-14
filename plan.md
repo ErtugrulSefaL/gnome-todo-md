@@ -74,6 +74,18 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
   normal ve sorun değil, veri boyutu çok küçük) ama yazma sırasında yarıda
   kesilme riskine karşı `Gio.File.replace_contents_async()` (veya eşdeğer güvenli
   replace deseni) kullanılmalı. Doğrudan truncate-and-write YOK.
+  (2026-09-14 kararı: mevcut sync `replace_contents` temp+rename ile bu şartı
+  zaten sağlıyor — async'e geçilmiyor.)
+- **Uyumsuz satırlar korunur (2026-09-14 kararı):** Görev olmayan satırlar
+  (notlar, düz liste öğeleri vb.) kategorilerine bağlı saklanır, serialize'da
+  aynen geri yazılır, UI'da gösterilmez — sıfır veri kaybı. Her `##` satırı bir
+  kategoridir (örn. mevcut `## Notes` bir kategori başlığı olur).
+- **H1 eksikse eklenir (2026-09-14 kararı):** Dosyada `#` başlığı hiç yoksa
+  serializer `# TODO` satırını ekler.
+- **Checkbox normalize edilir (2026-09-14 kararı):** Parser `[x]` ve `[X]`
+  ikisini de kabul eder; serializer her zaman küçük harf `[x]` yazar.
+- **Tag key regex ASCII kalır (2026-09-14 kararı):** `@(\w+)\(([^)]+)\)` aynen
+  kullanılır; Türkçe karakterli tag key kullanılmayacak (değer tarafı serbest).
 
 ### Bu fazda UI'da OLMAYACAK ama altyapı buna hazır olmalı
 
@@ -100,8 +112,10 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
 ### Uygulama adımları (sırayla, her biri ayrı test + commit)
 
 - [ ] 1. **Parser (okuma)** — Örnek bir `.md` dosyasını yukarıdaki kurallara
-      göre `Document { categories: [{ name, tasks: [{ text, done, tags }] }] }`
-      yapısına çevir. "Genel" fallback davranışını dahil et.
+      göre `Document { categories: [{ name, tasks: [{ text, done, tags }], extras }] }`
+      yapısına çevir ("extras" = görev olmayan satırlar; aynen korunur, UI'da
+      gösterilmez). H1 satırı ham haliyle saklanır (içeriği yok sayılır ama
+      round-trip için geri yazılır). "Genel" fallback davranışını dahil et.
       /goal: H1, birden fazla H2, tag'li/tag'siz görevler ve ilk `##`'den önceki
       görevler içeren elle hazırlanmış bir test dosyası doğru parse ediliyor
       (doğrulama: saf storage kodu — run_tests.mjs unit testi yeterli).
@@ -109,11 +123,10 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
       Kategori/görev sırası ve tag sırası birebir korunmalı.
       /goal: değişiklik yapılmadan parse → serialize edilen bir dosya,
       orijinaliyle byte-byte aynı çıkıyor (round-trip testi).
-- [ ] 3. **Atomic write entegrasyonu** — Mevcut yazma mekanizmasını
-      `Gio.File.replace_contents_async()` tabanlı güvenli yazımla değiştir,
-      serializer'a bağla. (AÇIK KARAR: mevcut sync `replace_contents` da
-      temp+rename ile atomiktir — async şart mı, yoksa mevcut yöntem doğrulanıp
-      belgelenerek mi geçilecek? → Açık kararlar)
+- [ ] 3. **Atomic write doğrulaması** — Mevcut sync `Gio.File.replace_contents`
+      yolu atomiktir (temp+rename; docs.gtk.org + /tmp rename deneyi). Async'e
+      geçilmez; mevcut yazma, serializer'a bağlanır; atomiklik belgelenir
+      (docs/verified-apis.md) ve truncate-and-write olmadığı test edilir.
       /goal: yazma sırasında (simüle ederek) kesinti olsa bile orijinal dosya
       yarım/bozuk kalmıyor; normal yazımlar da çalışmaya devam ediyor.
 - [ ] 4. **"Genel" fallback davranışı** — UI'dan kategori seçmeden eklenen görev
@@ -150,21 +163,15 @@ Aşağıdaki kararlar tartışılıp kilitlendi — sorgulamadan temel alınır.
 - [ ] Bir görevi tamamla → kategorisinde kaldı mı, sadece `[x]` oldu mu?
 - [ ] Extension'ı disable/enable et → veri kayıpsız geri geldi mi?
 
-### Açık kararlar (kullanıcı cevabı bekliyor — netleşince bu bölüm güncellenir)
+### Karara bağlananlar (2026-09-14, kullanıcı onaylı)
 
-- **Uyumsuz satır politikası:** Gerçek `~/todo.md`'de `## Notes` başlığı ve görev
-  olmayan `- keep me` satırı var. Yeni modelde her `##` bir kategori olur; görev
-  olmayan satırların yeri yok. Öneri: görev olmayan satırlar kategorisine bağlı
-  saklanıp serialize'da aynen geri yazılır (UI'da gösterilmez) — sıfır veri
-  kaybı. Alternatif: uyumsuz satırlar düşürülür (önerilmez).
-- **Adım 3 async sorusu:** Mevcut sync `replace_contents` atomik (docs.gtk.org:
-  "atomic renames are used"; ayrıca /tmp rename deneyi) → async'e geçmeden
-  "doğrula + belgele" daraltması onaylı mı?
-- **Tag key regex'i Türkçe:** `@(\w+)` ASCII'dir; `@önem(2)` gibi Türkçe
-  karakterli key eşleşmez (satır yine kaybolmaz, tag'siz metin olarak kalır).
-  Unicode genişletme mi (`\p{L}`), kilitli regex + belgelenmiş sınırlılık mı?
-- **Minör:** H1 hiç yoksa serializer `# TODO` ekler mi, dokunmaz mı? `- [X]`
-  büyük harf normalize edilir mi (`[x]`), orijinal karakter korunur mu?
+- Uyumsuz satırlar korunur (kategorisine bağlı, UI'da gösterilmez,
+  serialize'da aynen geri yazılır); her `##` satırı bir kategoridir.
+- Adım 3: sync `replace_contents` kalır — atomiklik doğrulanır, belgelenir,
+  test edilir; `replace_contents_async`'e geçilmez.
+- Tag key regex: ASCII `\w` aynen korunur (Türkçe key kullanılmayacak).
+- H1 hiç yoksa serializer `# TODO` ekler.
+- `- [X]` normalize edilir: serializer `[x]` yazar, parser ikisini de kabul eder.
 
 ## Faz 3 — Bildirimler + arşivleme (ileride)
 
