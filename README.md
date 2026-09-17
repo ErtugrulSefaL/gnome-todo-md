@@ -49,10 +49,10 @@ is preserved verbatim on every rewrite — the file stays hand-editable.
 
 | Path | Purpose |
 |---|---|
-| `todo@ertugrul.local/extension.js` | UI layer: panel, menu, entry, rows |
-| `todo@ertugrul.local/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
-| `todo@ertugrul.local/metadata.json` | Extension metadata (shell-version: 46) |
-| `todo@ertugrul.local/stylesheet.css` | Menu styling |
+| `gnome-todo-md@ertugrulsefal.github.com/extension.js` | UI layer: panel, menu, entry, rows |
+| `gnome-todo-md@ertugrulsefal.github.com/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
+| `gnome-todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version: 46) |
+| `gnome-todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `tests/run_tests.mjs` | Unit/integration tests for `storage.js` (run with `gjs`) |
 | `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
 | `docs/verified-apis.md` | VERIFY-BEFORE-WRITE evidence log (API → source → verdict) |
@@ -63,14 +63,14 @@ is preserved verbatim on every rewrite — the file stays hand-editable.
 git clone https://github.com/ErtugrulSefaL/gnome-todo-md
 cd gnome-todo-md
 mkdir -p ~/.local/share/gnome-shell/extensions
-ln -s "$(pwd)/todo@ertugrul.local" \
-      ~/.local/share/gnome-shell/extensions/todo@ertugrul.local
+ln -s "$(pwd)/gnome-todo-md@ertugrulsefal.github.com" \
+      ~/.local/share/gnome-shell/extensions/gnome-todo-md@ertugrulsefal.github.com
 ```
 
 Then reload GNOME Shell:
 
 - X11: press `Alt+F2`, type `r`, Enter (or log out/in on Wayland)
-- Enable: `gnome-extensions enable todo@ertugrul.local`
+- Enable: `gnome-extensions enable gnome-todo-md@ertugrulsefal.github.com`
 
 ## Test
 

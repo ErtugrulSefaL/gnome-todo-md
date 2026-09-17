@@ -1,6 +1,6 @@
 {
-  "uuid": "todo@ertugrul.local",
-  "name": "Todo",
+  "uuid": "gnome-todo-md@ertugrulsefal.github.com",
+  "name": "Todo MD",
   "description": "TODO list from ~/todo.md in a panel menu",
   "url": "https://github.com/ErtugrulSefaL/gnome-todo-md",
   "version-name": "0.3.0",

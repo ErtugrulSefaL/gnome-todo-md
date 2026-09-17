@@ -17,7 +17,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-import * as Storage from '../todo@ertugrul.local/storage.js';
+import * as Storage from '../gnome-todo-md@ertugrulsefal.github.com/storage.js';
 
 const TODO = GLib.get_home_dir() + '/todo.md';
 
@@ -233,10 +233,10 @@ function noMatch(name, content, forbiddenPattern, incident) {
 }
 
 function testStaticChecks() {
-    const ui = readFileText('todo@ertugrul.local/extension.js');
-    const store = readFileText('todo@ertugrul.local/storage.js');
-    const meta = readFileText('todo@ertugrul.local/metadata.json');
-    const css = readFileText('todo@ertugrul.local/stylesheet.css');
+    const ui = readFileText('gnome-todo-md@ertugrulsefal.github.com/extension.js');
+    const store = readFileText('gnome-todo-md@ertugrulsefal.github.com/storage.js');
+    const meta = readFileText('gnome-todo-md@ertugrulsefal.github.com/metadata.json');
+    const css = readFileText('gnome-todo-md@ertugrulsefal.github.com/stylesheet.css');
     const all = ui + '\n' + store;
 
     // Real incident: idle_add(() => ...) threw on every menu open (Phase 1).
