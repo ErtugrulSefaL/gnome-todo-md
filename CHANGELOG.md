@@ -4,6 +4,14 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.4.0 - 2026-09-17
+
+### Changed
+- Renamed the extension: the UUID is now `gnome-todo-md@ertugrulsefal.github.com`
+  (previously the development-only `todo@ertugrul.local`) and the display
+  name is "Todo MD". The extension directory, install and enable commands
+  changed accordingly — reinstall (or re-symlink) to upgrade.
+
 ## 0.3.0 - 2026-09-15
 
 ### Added
