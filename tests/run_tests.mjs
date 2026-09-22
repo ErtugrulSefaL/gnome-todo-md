@@ -234,10 +234,11 @@ function noMatch(name, content, forbiddenPattern, incident) {
 
 function testStaticChecks() {
     const ui = readFileText('gnome-todo-md@ertugrulsefal.github.com/extension.js');
+    const prefs = readFileText('gnome-todo-md@ertugrulsefal.github.com/prefs.js');
     const store = readFileText('gnome-todo-md@ertugrulsefal.github.com/storage.js');
     const meta = readFileText('gnome-todo-md@ertugrulsefal.github.com/metadata.json');
     const css = readFileText('gnome-todo-md@ertugrulsefal.github.com/stylesheet.css');
-    const all = ui + '\n' + store;
+    const all = ui + '\n' + prefs + '\n' + store;
 
     // Real incident: idle_add(() => ...) threw on every menu open (Phase 1).
     record('static: every GLib.idle_add call passes (priority, func)',
