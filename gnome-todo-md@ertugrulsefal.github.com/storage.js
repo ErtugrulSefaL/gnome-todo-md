@@ -61,6 +61,50 @@ export function resolveTodoPath(configured) {
 }
 
 /**
+ * Inline CSS that colors a category header text (Faz 5). Returns '' when the
+ * category has no color assigned.
+ *
+ * The color value comes from user preferences, so it is validated against a
+ * strict hex pattern before ever reaching an inline style string — anything
+ * else is dropped rather than injected into CSS.
+ *
+ * @param {string} name - Category name.
+ * @param {Object<string, string>|null} colors - Category → color map.
+ * @returns {string} Inline CSS ('color: …;') or ''.
+ */
+export function categoryColorCss(name, colors) {
+    const color = colors ? colors[name] : null;
+    if (typeof color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(color)) {
+        return '';
+    }
+    return `color: ${color};`;
+}
+
+/**
+ * Remove color entries for categories that no longer exist in the file
+ * (Faz 5). Locked decision: dead keys are pruned automatically so a later
+ * category reusing the name does not silently inherit the old color.
+ *
+ * @param {Object<string, string>} colors - Category → color map.
+ * @param {Array<string>} validNames - Category names currently in the file.
+ * @returns {Object<string, string>} The pruned map, or the SAME object when
+ *   nothing was removed (identity lets the caller skip a settings write).
+ */
+export function pruneCategoryColors(colors, validNames) {
+    const keys = Object.keys(colors || {});
+    if (keys.every(key => validNames.includes(key))) {
+        return colors;
+    }
+    const pruned = {};
+    for (const key of keys) {
+        if (validNames.includes(key)) {
+            pruned[key] = colors[key];
+        }
+    }
+    return pruned;
+}
+
+/**
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *

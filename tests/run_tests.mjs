@@ -687,6 +687,36 @@ function testResolveTodoPath() {
         '');
 }
 
+// ---- category colors (Faz 5 step 2) --------------------------------------
+
+function testCategoryColors() {
+    const map = {'İş': '#e01b24', 'Notes': '#3584e4', 'Eski': '#ffa348'};
+
+    record('categoryColorCss: colored category gets color: CSS',
+        Storage.categoryColorCss('İş', map) === 'color: #e01b24;', '');
+
+    record('categoryColorCss: missing map or uncolored category gets empty CSS',
+        Storage.categoryColorCss('Notes', {}) === ''
+        && Storage.categoryColorCss('Yok', undefined) === ''
+        && Storage.categoryColorCss('Yok', null) === '', '');
+
+    record('categoryColorCss: invalid color values are rejected (CSS injection guard)',
+        Storage.categoryColorCss('İş', {'İş': 'url(evil); color: red'})
+            === ''
+        && Storage.categoryColorCss('İş', {'İş': 'red; background: url(x)'})
+            === '', '');
+
+    record('pruneCategoryColors: dead keys are removed',
+        JSON.stringify(Storage.pruneCategoryColors(map, ['İş', 'Notes']))
+            === JSON.stringify({'İş': '#e01b24', 'Notes': '#3584e4'}), '');
+
+    record('pruneCategoryColors: unchanged map returns the same object',
+        Storage.pruneCategoryColors(map, ['İş', 'Notes', 'Eski']) === map, '');
+
+    record('pruneCategoryColors: empty map stays empty',
+        JSON.stringify(Storage.pruneCategoryColors({}, ['A'])) === '{}', '');
+}
+
 // ---- runner --------------------------------------------------------------
 
 snapshotOriginal();
@@ -706,6 +736,7 @@ testSerializeDocument();
 testAtomicWritePath();
 testPathParams();
 testResolveTodoPath();
+testCategoryColors();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
