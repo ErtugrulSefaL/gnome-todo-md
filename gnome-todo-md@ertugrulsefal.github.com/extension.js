@@ -18,6 +18,15 @@ export default class TodoExtension extends Extension {
 
         // GSettings backend (schema id: metadata.json settings-schema).
         this._settings = this.getSettings();
+        // Live-rewire: when the configured path changes, watch the new file.
+        // `changed::<key>` detail syntax per gjs.guide preferences.md.
+        this._settingsSignal = this._settings.connect('changed::todo-file-path',
+            () => {
+                this._editingIndex = -1;
+                this._unwatchTodoFile();
+                this._watchTodoFile();
+                this._refreshTodoMenu();
+            });
 
         // Create a panel button.
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
@@ -56,9 +65,29 @@ export default class TodoExtension extends Extension {
 
         // Watch ~/todo.md so externally-added tasks appear live, without
         // needing a Shell reload.
-        // Watch the todo file so externally-added tasks appear live, without
-        // needing a Shell reload. Created once per enable(); live rewiring on
-        // a settings change arrives in the later step.
+        this._watchTodoFile();
+    }
+
+    disable() {
+        this._unwatchTodoFile();
+        if (this._settingsSignal) {
+            this._settings.disconnect(this._settingsSignal);
+            this._settingsSignal = null;
+        }
+        if (this._indicator) {
+            this._indicator.menu.disconnect(this._openSignal);
+            this._indicator.destroy();
+            this._indicator = null;
+        }
+        this._settings = null;
+    }
+
+    /**
+     * Watch the configured todo file for external changes. Created per
+     * enable(); re-created by the settings-changed handler when the path
+     * setting changes (single monitor at any time).
+     */
+    _watchTodoFile() {
         this._todoMonitor = Gio.File.new_for_path(this._todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
@@ -70,18 +99,15 @@ export default class TodoExtension extends Extension {
         });
     }
 
-    disable() {
+    /**
+     * Disconnect the active file monitor, if any.
+     */
+    _unwatchTodoFile() {
         if (this._todoMonitor) {
             this._todoMonitor.disconnect(this._monitorSignal);
             this._todoMonitor.cancel();
             this._todoMonitor = null;
         }
-        if (this._indicator) {
-            this._indicator.menu.disconnect(this._openSignal);
-            this._indicator.destroy();
-            this._indicator = null;
-        }
-        this._settings = null;
     }
 
     /**
