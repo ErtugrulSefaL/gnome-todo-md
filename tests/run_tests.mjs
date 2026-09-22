@@ -277,6 +277,15 @@ function testStaticChecks() {
     // aware); no direct default-path calls are allowed there.
     noMatch('static: extension.js does not call Storage.todoPath() directly',
         ui, /Storage\.todoPath\(/, 'use this._todoPath() so the configured path is honored');
+
+    // Faz 3: settings infrastructure must be complete — getSettings() falls
+    // back to metadata["settings-schema"] and loads schemas/ from the ext dir.
+    record('static: metadata declares the settings-schema id',
+        /"settings-schema"\s*:\s*"org\.gnome\.shell\.extensions\.gnome-todo-md"/.test(meta),
+        'ExtensionBase.getSettings() reads metadata["settings-schema"]');
+    record('static: compiled GSettings schema is committed (schemas/gschemas.compiled)',
+        readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/gschemas.compiled') !== '',
+        'getSettings() loads the schemas/ dir from the extension directory');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
