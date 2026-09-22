@@ -105,7 +105,10 @@ export default class TodoMDPreferences extends ExtensionPreferences {
                 .join(' ')
             + ' .todo-swatch { min-width: 20px; min-height: 20px; '
             + 'border-radius: 10px; padding: 0; }');
-        Gtk.style_context_add_provider_for_display(
+        // GJS exposes this as a CLASS-STATIC method: Gtk.StyleContext.
+        // add_provider_for_display — the bare C name
+        // Gtk.style_context_add_provider_for_display is undefined at runtime.
+        Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
 
