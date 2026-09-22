@@ -15,6 +15,7 @@ export default class TodoExtension extends Extension {
         // Single-edit invariant: at most one row is being edited at any time.
         // Reset on enable — the Extension instance survives disable/enable.
         this._editingIndex = -1;
+        this._addingCategory = null;
 
         // GSettings backend (schema id: metadata.json settings-schema).
         this._settings = this.getSettings();
@@ -23,6 +24,7 @@ export default class TodoExtension extends Extension {
         this._settingsSignal = this._settings.connect('changed::todo-file-path',
             () => {
                 this._editingIndex = -1;
+                this._addingCategory = null;
                 this._unwatchTodoFile();
                 this._watchTodoFile();
                 this._refreshTodoMenu();
@@ -53,6 +55,7 @@ export default class TodoExtension extends Extension {
                 } else {
                     // Menu closed: an uncommitted edit must not survive.
                     this._editingIndex = -1;
+                    this._addingCategory = null;
                 }
             });
 
@@ -95,6 +98,7 @@ export default class TodoExtension extends Extension {
             // an in-progress edit cannot be trusted: close it (single-edit
             // rule) and rebuild.
             this._editingIndex = -1;
+            this._addingCategory = null;
             this._refreshTodoMenu();
         });
     }
@@ -130,64 +134,55 @@ export default class TodoExtension extends Extension {
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
-        // Add-task entry pinned at the top.
-        this._addEntry = new St.Entry({
-            hint_text: 'Add a task…',
-            can_focus: true,
-        });
-        // Let the entry expand with the menu width instead of a fixed 220px.
-        this._addEntry.set_x_expand(true);
-        this._addEntry.connect('key-release-event', (entry, event) => {
-            if (event.get_key_symbol() === Clutter.KEY_Return) {
-                this._addTask(entry.get_text());
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
-        // Cancel an in-progress edit when the add entry gains focus.
-        // A mouse click moves Clutter's key focus to the INNER Clutter.Text
-        // (st-entry.c wires the press to the inner text actor), so connect on
-        // both the entry (keyboard navigation) and its clutter_text (clicks).
-        this._addEntry.connect('key-focus-in', () => {
-            if (this._editingIndex !== -1) {
-                this._cancelEditing();
-            }
-        });
-        this._addEntry.get_clutter_text().connect('key-focus-in', () => {
-            if (this._editingIndex !== -1) {
-                this._cancelEditing();
-            }
-        });
-
-        // Wrap the entry in a menu item so it lays out like other rows.
-        const entryItem = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
-        entryItem.add_child(this._addEntry);
-        menu.addMenuItem(entryItem);
-
-        // Categories with at least one task render as a non-clickable header
-        // row followed by their task rows. Task-less categories are skipped
-        // (nothing interactive to show); their extras stay in the file.
-        const sections = [];
-        for (const category of doc.categories) {
-            const tasks = Storage.categoryTasks(category);
-            if (tasks.length > 0) {
-                sections.push({name: category.name, tasks});
-            }
-        }
-
+        // Every category renders as a non-clickable header row (with a '+'
+        // button) followed by its task rows — task-less categories are
+        // actionable now that adding is per-category. An empty document (no
+        // categories at all) gets a synthetic implicit 'Genel' header so the
+        // first task can be added from an empty file.
+        const sections = doc.categories.map(category => ({
+            name: category.name,
+            tasks: Storage.categoryTasks(category),
+        }));
         if (sections.length === 0) {
-            // Non-reactive: the row must not look clickable.
-            menu.addMenuItem(new PopupMenu.PopupMenuItem('No tasks', {reactive: false}));
-            return;
+            sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
         for (const section of sections) {
-            const header = new PopupMenu.PopupMenuItem(section.name,
-                {reactive: false, can_focus: false});
-            // PopupMenuItem exposes its St.Label (popupMenu.js 46.0 :285-298);
-            // there is no first-class section-header widget in the shell.
-            header.label.style_class = 'todo-category-header';
+            // Non-reactive header + interactive child: the proven entryItem
+            // pattern (an interactive child inside a non-reactive row).
+            const header = new PopupMenu.PopupBaseMenuItem(
+                {activate: false, can_focus: false});
+            const label = new St.Label({
+                text: section.name,
+                style_class: 'todo-category-header',
+            });
+            label.set_x_expand(true);
+            header.add_child(label);
+
+            const addBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'list-add-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            addBtn.set_x_align(Clutter.ActorAlign.END);
+            const categoryName = section.name;
+            addBtn.connect('clicked', () => {
+                this._toggleAdd(categoryName);
+            });
+            header.add_child(addBtn);
             menu.addMenuItem(header);
+
+            // The active add entry renders directly under its category
+            // header; render derives solely from _addingCategory, so two
+            // open adders can never coexist (single-add invariant).
+            if (this._addingCategory === categoryName) {
+                const addRow = this._makeAddRow(categoryName);
+                menu.addMenuItem(addRow.row);
+                // Grab focus only after the row is on stage.
+                addRow.entry.grab_key_focus();
+            }
 
             const tasks = section.tasks;
             for (let ti = 0; ti < tasks.length; ti++) {
@@ -332,10 +327,12 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Close the current edit without writing anything.
+     * Close any open inline interaction (the edit row or a category add
+     * entry) without writing anything.
      */
     _cancelEditing() {
         this._editingIndex = -1;
+        this._addingCategory = null;
         this._refreshTodoMenu();
     }
 
@@ -355,6 +352,7 @@ export default class TodoExtension extends Extension {
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
         Storage.writeTodo(this._todoPath(), updated);
         this._editingIndex = -1;
+        this._addingCategory = null;
         this._refreshTodoMenu();
     }
 
@@ -393,17 +391,69 @@ export default class TodoExtension extends Extension {
      *
      * @param {string} text - Task text to add.
      */
-    _addTask(text) {
-        if (!text || !text.trim()) {
+    /**
+     * Add a task to the given category, persist and refresh.
+     *
+     * @param {string} text - Task text (may contain @tag(value) pairs).
+     * @param {string} category - Target category name.
+     */
+    _addTask(text, category) {
+        const trimmed = text ? text.trim() : '';
+        if (!trimmed) {
+            // Empty input closes the inline add instead of failing.
+            this._cancelEditing();
             return;
         }
 
         this._editingIndex = -1;
+        this._addingCategory = null;
         const parsed = Storage.readTodo(this._todoPath());
-        const updated = Storage.addTask(parsed.raw, text.trim());
+        const updated = Storage.addTask(parsed.raw, trimmed, category);
         Storage.writeTodo(this._todoPath(), updated);
-        this._addEntry.set_text('');
         this._refreshTodoMenu();
+    }
+
+    /**
+     * Open (or toggle closed) the inline add entry of a category. Opening
+     * replaces any open inline interaction (single-interaction rule).
+     *
+     * @param {string} categoryName - Category whose add entry to toggle.
+     */
+    _toggleAdd(categoryName) {
+        if (this._addingCategory === categoryName) {
+            this._cancelEditing();
+            return;
+        }
+        this._editingIndex = -1;
+        this._addingCategory = categoryName;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Build the inline add row for a category: an empty entry with a
+     * per-category hint. Enter commits via Storage.addTask(text, category).
+     *
+     * @param {string} categoryName - Target category for the new task.
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
+     */
+    _makeAddRow(categoryName) {
+        const row = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        const entry = new St.Entry({
+            hint_text: `Add to "${categoryName}"…`,
+            style_class: 'todo-edit-entry',
+        });
+        entry.set_x_expand(true);
+        entry.connect('key-release-event', (e, event) => {
+            if (event.get_key_symbol() === Clutter.KEY_Return) {
+                this._addTask(e.get_text(), categoryName);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.add_child(entry);
+        return {row, entry};
     }
 
     /**
@@ -413,6 +463,7 @@ export default class TodoExtension extends Extension {
      */
     _toggleTask(index) {
         this._editingIndex = -1;
+        this._addingCategory = null;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.toggleTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -426,6 +477,7 @@ export default class TodoExtension extends Extension {
      */
     _deleteTask(index) {
         this._editingIndex = -1;
+        this._addingCategory = null;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.deleteTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -441,6 +493,7 @@ export default class TodoExtension extends Extension {
      */
     _moveTask(index, direction) {
         this._editingIndex = -1;
+        this._addingCategory = null;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.moveTask(parsed.raw, index, direction);
         Storage.writeTodo(this._todoPath(), updated);

@@ -99,7 +99,7 @@ export function splitLines(content) {
  * Name of the implicit category for tasks/lines that appear before the first
  * '##' heading. Always serialized as a real '## Genel' heading.
  */
-const FALLBACK_CATEGORY = 'Genel';
+export const FALLBACK_CATEGORY = 'Genel';
 
 /**
  * Extract free-form `@key(value)` tags from raw task text as an ordered
