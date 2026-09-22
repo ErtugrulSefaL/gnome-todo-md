@@ -17,5 +17,12 @@
         An empty value means the default ~/todo.md.
       </description>
     </key>
+    <key name="category-colors" type="a{ss}">
+      <default>@a{ss} {}</default>
+      <summary>Category colors</summary>
+      <description>
+        Maps a category name to a CSS color string (for example '#e01b24').
+      </description>
+    </key>
   </schema>
 </schemalist>
