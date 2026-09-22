@@ -4,6 +4,27 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.7.0 - 2026-09-23
+
+### Added
+- Category colors: assign a color to any category header from the new
+  "Colors" preferences page — a GNOME-palette quick picker plus a free
+  color dialog (`Gtk.ColorDialogButton`). Changes reach the panel menu
+  instantly through GSettings.
+- Dead color entries (categories that no longer exist in the file) are
+  pruned automatically, so a later category reusing the name does not
+  silently inherit the old color.
+
+### Changed
+- GSettings schema gained a `category-colors` map (`a{ss}`: category name
+  → CSS hex color); colors are validated against a strict hex pattern
+  before being applied as inline styles.
+
+### Fixed
+- Palette selection now keeps the color dialog button in sync.
+- Prefs process no longer crashes on a missing static GTK helper
+  (`Gtk.StyleContext.add_provider_for_display` is the GJS-exposed form).
+
 ## 0.6.0 - 2026-09-23
 
 ### Added
