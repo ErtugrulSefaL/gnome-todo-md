@@ -527,9 +527,13 @@ export function addTaskTag(content, index, key, value) {
  */
 export function writeTodo(path, content) {
     // Loud failure instead of silently encoding `undefined` into an empty
-    // file (data-loss guard for a wrong call site).
-    if (content === undefined) {
-        throw new Error('todo: writeTodo requires (path, content)');
+    // file (data-loss guard for a wrong call site). Empty content is also
+    // rejected: GJS marshals an empty Uint8Array to NULL, and
+    // g_file_replace_contents then aborts on 'contents != NULL' — a silent
+    // no-op (found by CI on a clean runner). An empty todo file is not a
+    // valid state: delete the file instead.
+    if (content === undefined || content === '') {
+        throw new Error('todo: writeTodo requires a non-empty content string');
     }
 
     const file = Gio.File.new_for_path(path);

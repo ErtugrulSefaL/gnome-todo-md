@@ -34,7 +34,20 @@ function snapshotOriginal() {
 }
 
 // Restore the original file using the (tested) write API.
+// NOTE: when the file was absent (or empty) pre-test, delete it instead of
+// writing '': GJS marshals an empty Uint8Array to NULL and
+// g_file_replace_contents aborts on 'contents != NULL' — the write would be
+// silently skipped. Absent and empty are equivalent inputs (readTodo yields
+// '' for both), so restoring them by absence is byte-equivalent.
 function restoreOriginal() {
+    if (ORIGINAL_RAW === '') {
+        try {
+            Gio.File.new_for_path(TODO).delete(null);
+        } catch (e) {
+            // Nothing to delete; the file was already absent.
+        }
+        return;
+    }
     Storage.writeTodo(TODO, ORIGINAL_RAW);
 }
 
@@ -611,6 +624,18 @@ function testPathParams() {
     }
     record('pathParams: writeTodo without content throws loudly (no data loss)',
         threw, '');
+
+    // GJS quirk found by CI: an empty Uint8Array marshals to NULL and
+    // replace_contents aborts, silently skipping the write — so empty
+    // content must be rejected loudly instead.
+    let emptyThrew = false;
+    try {
+        Storage.writeTodo(tmpPath, '');
+    } catch (e) {
+        emptyThrew = true;
+    }
+    record('pathParams: empty content write is rejected loudly (GJS NULL-Array quirk)',
+        emptyThrew, '');
 
     // Cleanup.
     Gio.File.new_for_path(tmpPath).delete(null);

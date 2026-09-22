@@ -29,4 +29,4 @@ jobs:
       # The test runner prints RESULT_OK=true/false without a nonzero exit
       # code, so CI greps the verdict explicitly.
       - name: Unit + integration tests
-        run: gjs -m tests/run_tests.mjs 2>&1 | tee /tmp/tests.log; grep -q 'RESULT_OK=true' /tmp/tests.log && grep -qv 'FAIL' /tmp/tests.log
+        run: gjs -m tests/run_tests.mjs 2>&1 | tee /tmp/tests.log; grep -q 'RESULT_OK=true' /tmp/tests.log
