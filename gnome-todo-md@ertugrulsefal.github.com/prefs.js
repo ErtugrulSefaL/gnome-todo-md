@@ -131,7 +131,14 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             rgba.parse(initial);
             dialogButton.set_rgba(rgba);
         }
+        let syncingRgba = false;
         dialogButton.connect('notify::rgba', () => {
+            // Programmatic set_rgba below also fires this handler; guard so
+            // the palette write does not round-trip through the dialog's
+            // handler and clobber itself.
+            if (syncingRgba) {
+                return;
+            }
             const picked = dialogButton.get_rgba();
             this._writeColors(settings, {
                 ...this._readColors(settings),
@@ -144,6 +151,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         row.add_suffix(dialogButton);
 
         // Quick palette behind a menu button (Q2: dialog + palette together).
+        // Both pickers drive the same settings key, so a palette click ALSO
+        // updates the dialog button's rgba (keeps the two widgets in sync).
         const swatches = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
             spacing: 4,
@@ -156,6 +165,11 @@ export default class TodoMDPreferences extends ExtensionPreferences {
                 tooltip_text: hex,
             });
             swatch.connect('clicked', () => {
+                const rgba = new Gdk.RGBA();
+                rgba.parse(hex);
+                syncingRgba = true;
+                dialogButton.set_rgba(rgba);
+                syncingRgba = false;
                 this._writeColors(settings, {
                     ...this._readColors(settings),
                     [name]: hex,
@@ -168,6 +182,10 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         clearButton.connect('clicked', () => {
             const colors = this._readColors(settings);
             delete colors[name];
+            syncingRgba = true;
+            // No transparent-rgba setter needed: the dialog button keeps its
+            // last color, which is harmless (None means "no map entry").
+            syncingRgba = false;
             this._writeColors(settings, colors);
             popover.popdown();
         });
