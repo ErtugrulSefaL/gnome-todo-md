@@ -21,6 +21,10 @@ it simple: one markdown file, live panel menu, nothing else.
   ones) has a **`+` button** that opens an inline entry to add a task right
   there; an empty file starts with an implicit `Genel` section
 - **Reordering**: move tasks up/down within their category
+- **Category colors**: assign a color to any category header from the
+  preferences window (GNOME palette quick-picks or a free color dialog);
+  changes apply to the panel menu instantly and dead entries are pruned
+  automatically
 - **Tags**: free-form `@tag(value)` pairs on any task (ordered, unknown tags
   are preserved — no whitelist)
 - Inline editing (Enter saves), delete, check/uncheck (click the row)
