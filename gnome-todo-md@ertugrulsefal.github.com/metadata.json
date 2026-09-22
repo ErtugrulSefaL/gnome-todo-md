@@ -3,6 +3,7 @@
   "name": "Todo MD",
   "description": "TODO list from ~/todo.md in a panel menu",
   "url": "https://github.com/ErtugrulSefaL/gnome-todo-md",
+  "settings-schema": "org.gnome.shell.extensions.gnome-todo-md",
   "version-name": "0.4.0",
   "shell-version": ["46"]
 }

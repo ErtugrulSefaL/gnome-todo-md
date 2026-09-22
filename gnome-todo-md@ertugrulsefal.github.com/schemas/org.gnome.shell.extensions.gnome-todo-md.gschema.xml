@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  GSettings schema for gnome-todo-md (GNOME Shell 46).
+
+  The default for todo-file-path is the empty string, which the extension
+  resolves to ~/todo.md at runtime: schema defaults must be static literals,
+  so $HOME cannot be expanded here.
+-->
+<schemalist>
+  <schema id="org.gnome.shell.extensions.gnome-todo-md"
+          path="/org/gnome/shell/extensions/gnome-todo-md/">
+    <key name="todo-file-path" type="s">
+      <default>''</default>
+      <summary>Custom todo file path</summary>
+      <description>
+        Absolute path of the markdown todo file used by the extension.
+        An empty value means the default ~/todo.md.
+      </description>
+    </key>
+  </schema>
+</schemalist>

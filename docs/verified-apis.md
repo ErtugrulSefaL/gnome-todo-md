@@ -65,6 +65,7 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | `PopupBaseMenuItem` params `{reactive, activate, hover, style_class, can_focus}` | menu row construction (entry wrapper, edit row) | gnome-shell `46.0` `js/ui/popupMenu.js` `PopupBaseMenuItem._init` (:82-89, Params.parse) | OK (2026-09-14) |
 | `PopupMenuItem(text, params)` exposes `.label` (St.Label); no first-class section-header widget exists in the shell | category header rows | gnome-shell `46.0` `js/ui/popupMenu.js` (:285-298); headers built as non-reactive PopupMenuItem + styled label (same pattern as the proven 'No tasks' row) | OK (2026-09-14) |
 | `go-up-symbolic` / `go-down-symbolic` icons | task move buttons | present in local Adwaita icon theme (`/usr/share/icons/Adwaita/symbolic/actions/go-up-symbolic.svg`, `go-down-symbolic.svg`) | OK (2026-09-15) |
+| `ExtensionBase.getSettings(schema)` — instance method; schema omitted → `metadata['settings-schema']`; loads the extension's `schemas/` subdir via `Gio.SettingsSchemaSource.new_from_directory(schemaDir, defaultSource, false)`, `lookup(schema, true)` throws when missing | Faz 3 settings infrastructure | gnome-shell `46.0` `js/extensions/sharedInternals.js:91-111` (runtime-verified with the compiled schema: default/set/reset); gjs.guide `topics/extension.md` (GNOME 45+ ESModule era — note: `topics/extension-utils.md` documents the pre-44 API and is outdated for this) | OK (2026-09-23) |
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
