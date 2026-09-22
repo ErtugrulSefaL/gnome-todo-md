@@ -4,6 +4,27 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.5.0 - 2026-09-23
+
+### Added
+- Preferences window (GTK4 + Adwaita): set a custom path for your markdown
+  todo file (empty = the default `~/todo.md`; `~`/`~/` expansion supported),
+  with a reset-to-default button.
+- GSettings schema (`todo-file-path`) with compiled schemas shipped in the
+  extension directory.
+- The file monitor live-reconnects when the path setting changes.
+- GitHub Actions CI: unit/integration tests, strict schema compile and JS
+  syntax checks on every push/PR.
+
+### Changed
+- File access is path-explicit: `readTodo(path)` / `writeTodo(path, content)`;
+  pure path resolution (`~` expansion, default fallback) lives in storage.js.
+- `writeTodo()` now requires `(path, content)` and throws loudly on a wrong
+  call signature instead of silently writing an empty file.
+
+### Fixed
+- Write error log reported the default path instead of the actual path.
+
 ## 0.4.0 - 2026-09-17
 
 ### Changed
