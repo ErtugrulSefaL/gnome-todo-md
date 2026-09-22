@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install GJS and GLib tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends gjs libglib2.0-dev-bin
+
+      - name: Compile the GSettings schema (strict)
+        run: glib-compile-schemas --strict 'gnome-todo-md@ertugrulsefal.github.com/schemas/'
+
+      - name: JS syntax checks
+        run: |
+          for f in extension.js prefs.js storage.js; do
+            cp "gnome-todo-md@ertugrulsefal.github.com/$f" "/tmp/$f.mjs"
+            node --check "/tmp/$f.mjs"
+          done
+
+      # The test runner prints RESULT_OK=true/false without a nonzero exit
+      # code, so CI greps the verdict explicitly.
+      - name: Unit + integration tests
+        run: gjs -m tests/run_tests.mjs 2>&1 | tee /tmp/tests.log; grep -q 'RESULT_OK=true' /tmp/tests.log && grep -qv 'FAIL' /tmp/tests.log
