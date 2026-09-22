@@ -245,7 +245,9 @@ function testStaticChecks() {
         ui.match(/idle_add\(/g)?.length === ui.match(/idle_add\(GLib\.PRIORITY/g)?.length,
         'GLib.idle_add takes (priority, func); single-arg calls throw at runtime');
 
-    // Real incidents from the historical edit-feature revert.
+    // Real incidents from the historical edit-feature revert. NOTE: the
+    // `.add(` guard applies to the SHELL-side UI layer only — prefs.js is
+    // GTK4/Adwaita code where Gtk container .add() is the correct API.
     noMatch('static: no GTK hexpand/vexpand (Clutter uses set_x_expand)',
         all, /set_hexpand\(|hexpand:|vexpand/, 'GTK layout API on St actors silently misbehaves');
     noMatch('static: no GLib.Bytes for replace_contents',
@@ -254,8 +256,8 @@ function testStaticChecks() {
         all, /key::(release|press)/, 'GObject signals use dashes: key-release-event');
     noMatch('static: no legacy imports.* API',
         all, /\bimports\./, 'GNOME 45+ is ESM; imports.* is removed in Shell');
-    noMatch('static: no legacy .add( child call',
-        all, /\.add\(/, 'use add_child() on Clutter/St actors');
+    noMatch('static: no legacy .add( child call in the Shell-side UI',
+        ui, /\.add\(/, 'use add_child() on Clutter/St actors; GTK4 prefs may use add()');
 
     // Faz 2 step 3: the write path must stay atomic (temp + rename) — the
     // ONLY permitted write mechanism is Gio.File.replace_contents.
