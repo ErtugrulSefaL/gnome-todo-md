@@ -214,6 +214,19 @@ function testAddTaskCategorized() {
     ];
     record('addTaskCategorized: outputs are canonical (round-trip stable)',
         outputs.every(o => Storage.serializeDocument(Storage.parseDocument(o)) === o), '');
+
+    // Faz 4: explicit category targeting.
+    record('addTaskCategorized: named category receives the task after its last task',
+        Storage.addTask('# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b\n', 'a3', 'A')
+            === '# T\n## A\n- [ ] a1\n- [ ] a2\n- [ ] a3\n## B\n- [ ] b\n', '');
+
+    record('addTaskCategorized: missing named category is created explicitly at the end',
+        Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'Yeni')
+            === '# T\n## A\n- [ ] a\n## Yeni\n- [ ] x\n', '');
+
+    record('addTaskCategorized: missing Genel stays implicit (fallback rule)',
+        Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'Genel')
+            === '# T\n## A\n- [ ] a\n## Genel\n- [ ] x\n', '');
 }
 
 // ---- writeTodo / round-trip ---------------------------------------------

@@ -386,34 +386,39 @@ export function deleteTask(content, index) {
 }
 
 /**
- * Append a new incomplete task to the "Genel" category. Locked rule: tasks
- * added without a category UI always land there, under a real '## Genel'
- * heading in the file. Inserted after the last existing task of the category
- * so trailing blank/note lines stay at the end of the block. Since Faz 2 this
- * is Document-based (parse → mutate → serialize); string-in/string-out.
+ * Append a new incomplete task to the category named `categoryName` (default
+ * "Genel" — locked rule: tasks added without a category UI always land
+ * there). Inserted after the last existing task of the category so trailing
+ * blank/note lines stay at the end of the block. A missing category is
+ * created at the end of the document: 'Genel' as implicit (heading appears
+ * once it holds tasks), others as explicit categories. Since Faz 2 this is
+ * Document-based (parse → mutate → serialize); string-in/string-out.
  *
  * @param {string} content - Raw file content.
  * @param {string} text - Task text (may contain @tag(value) pairs).
+ * @param {string} [categoryName] - Target category; defaults to "Genel".
  * @returns {string} Updated content.
  */
-export function addTask(content, text) {
+export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     const doc = parseDocument(content);
-    let genel = doc.categories.find(category => category.name === FALLBACK_CATEGORY);
-    if (!genel) {
-        genel = {name: FALLBACK_CATEGORY, items: [], implicit: true};
-        doc.categories.push(genel);
+    let target = doc.categories.find(category => category.name === categoryName);
+    if (!target) {
+        target = categoryName === FALLBACK_CATEGORY
+            ? {name: FALLBACK_CATEGORY, items: [], implicit: true}
+            : {name: categoryName, items: [], implicit: false};
+        doc.categories.push(target);
     }
 
     // Insert after the last task item (or at the very end when the category
     // holds only extras so far).
-    let insertAt = genel.items.length;
-    for (let i = genel.items.length - 1; i >= 0; i--) {
-        if (genel.items[i].type === 'task') {
+    let insertAt = target.items.length;
+    for (let i = target.items.length - 1; i >= 0; i--) {
+        if (target.items[i].type === 'task') {
             insertAt = i + 1;
             break;
         }
     }
-    genel.items.splice(insertAt, 0, makeTaskItem(text, false));
+    target.items.splice(insertAt, 0, makeTaskItem(text, false));
 
     return serializeDocument(doc);
 }
