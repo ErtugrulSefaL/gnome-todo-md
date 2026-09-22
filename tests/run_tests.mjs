@@ -35,7 +35,7 @@ function snapshotOriginal() {
 
 // Restore the original file using the (tested) write API.
 function restoreOriginal() {
-    Storage.writeTodo(ORIGINAL_RAW);
+    Storage.writeTodo(TODO, ORIGINAL_RAW);
 }
 
 // ---- splitLines ----------------------------------------------------------
@@ -206,7 +206,7 @@ function testAddTaskCategorized() {
 // ---- writeTodo / round-trip ---------------------------------------------
 
 function testWriteRead() {
-    Storage.writeTodo('- [ ] persisted\n');
+    Storage.writeTodo(TODO, '- [ ] persisted\n');
     const p = Storage.readTodo();
     record('writeTodo -> readTodo: round-trip persists',
         p.raw === '- [ ] persisted\n' && p.tasks.length === 1
@@ -537,7 +537,7 @@ function testAtomicWritePath() {
     // Normal writes keep working: fixed content survives a real disk write
     // and comes back complete (no partial/truncated state).
     const CONTENT = '# My TODOs\n\n## Genel\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
-    Storage.writeTodo(CONTENT);
+    Storage.writeTodo(TODO, CONTENT);
     record('atomicWrite: write → read back is byte-identical (complete file)',
         Storage.readTodo().raw === CONTENT, JSON.stringify(Storage.readTodo().raw));
 
@@ -547,13 +547,46 @@ function testAtomicWritePath() {
     const doc = Storage.parseDocument(CONTENT);
     doc.categories[0].items.push({type: 'task', raw: 'gamma', done: false, tags: [], text: 'gamma'});
     const rewritten = Storage.serializeDocument(doc);
-    Storage.writeTodo(rewritten);
+    Storage.writeTodo(TODO, rewritten);
     record('atomicWrite: Document mutation → serialize → write → read is consistent',
         Storage.readTodo().raw === rewritten, '');
 
     restoreOriginal();
     record('atomicWrite: file restored to the original content after write tests',
         Storage.readTodo().raw === ORIGINAL_RAW, '');
+}
+
+// ---- explicit path support (Faz 3 step 2) --------------------------------
+
+function testPathParams() {
+    // Temp-dir round-trip: read/write honor the explicit path.
+    // GLib.dir_make_tmp takes ONE argument in GJS (2-arg call warns).
+    const tmpDir = GLib.dir_make_tmp('todo-test-XXXXXX');
+    const tmpPath = `${tmpDir}/todo.md`;
+
+    const CONTENT = '# T\n\n## Genel\n- [ ] path test\n';
+    Storage.writeTodo(tmpPath, CONTENT);
+    record('pathParams: write → read round-trip honors the explicit path',
+        Storage.readTodo(tmpPath).raw === CONTENT, '');
+
+    record('pathParams: todoPath() still returns the default ~/todo.md',
+        Storage.todoPath() === GLib.get_home_dir() + '/todo.md', '');
+
+    // Missing file → empty model, no throw (same contract as the default path).
+    const missing = Storage.readTodo(`${tmpDir}/missing.md`);
+    record('pathParams: missing file yields an empty model without throwing',
+        missing.raw === '' && missing.tasks.length === 0, '');
+
+    // Missing parent directory: write fails gracefully (caught, no crash).
+    const orphan = `${tmpDir}/no/such/dir/todo.md`;
+    Storage.writeTodo(orphan, '# x\n');
+    const orphanRead = Storage.readTodo(orphan);
+    record('pathParams: write to a missing parent dir fails gracefully',
+        orphanRead.raw === '', '');
+
+    // Cleanup.
+    Gio.File.new_for_path(tmpPath).delete(null);
+    Gio.File.new_for_path(tmpDir).delete(null);
 }
 
 // ---- runner --------------------------------------------------------------
@@ -573,6 +606,7 @@ restoreOriginal();
 testParseDocument();
 testSerializeDocument();
 testAtomicWritePath();
+testPathParams();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.

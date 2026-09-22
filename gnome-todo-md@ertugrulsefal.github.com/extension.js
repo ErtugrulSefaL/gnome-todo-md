@@ -309,7 +309,7 @@ export default class TodoExtension extends Extension {
         }
         const parsed = Storage.readTodo();
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
-        Storage.writeTodo(updated);
+        Storage.writeTodo(Storage.todoPath(), updated);
         this._editingIndex = -1;
         this._refreshTodoMenu();
     }
@@ -357,7 +357,7 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.addTask(parsed.raw, text.trim());
-        Storage.writeTodo(updated);
+        Storage.writeTodo(Storage.todoPath(), updated);
         this._addEntry.set_text('');
         this._refreshTodoMenu();
     }
@@ -371,7 +371,7 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.toggleTask(parsed.raw, index);
-        Storage.writeTodo(updated);
+        Storage.writeTodo(Storage.todoPath(), updated);
         this._refreshTodoMenu();
     }
 
@@ -384,7 +384,7 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.deleteTask(parsed.raw, index);
-        Storage.writeTodo(updated);
+        Storage.writeTodo(Storage.todoPath(), updated);
         this._refreshTodoMenu();
     }
 
@@ -399,7 +399,7 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         const parsed = Storage.readTodo();
         const updated = Storage.moveTask(parsed.raw, index, direction);
-        Storage.writeTodo(updated);
+        Storage.writeTodo(Storage.todoPath(), updated);
         this._refreshTodoMenu();
     }
 }

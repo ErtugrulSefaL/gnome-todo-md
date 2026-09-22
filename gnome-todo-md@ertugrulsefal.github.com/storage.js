@@ -263,14 +263,16 @@ export function serializeDocument(doc) {
 }
 
 /**
- * Read and parse ~/todo.md.
+ * Read and parse the todo file at `path`.
  *
+ * @param {string} [path] - Absolute file path; defaults to todoPath()
+ *                          (~/todo.md).
  * @returns {{tasks: Array<Object>, other: Array<{index, line}>, raw: string}}
  *          Parsed content plus the raw file text. Returns an empty file model
  *          if the file is missing or unreadable.
  */
-export function readTodo() {
-    const file = Gio.File.new_for_path(TODO_PATH);
+export function readTodo(path = TODO_PATH) {
+    const file = Gio.File.new_for_path(path);
 
     let content;
     try {
@@ -494,12 +496,13 @@ export function addTaskTag(content, index, key, value) {
 }
 
 /**
- * Write content back to ~/todo.md.
+ * Write content back to the todo file at `path`.
  *
+ * @param {string} path - Absolute file path to write to.
  * @param {string} content - Full file content to write.
  */
-export function writeTodo(content) {
-    const file = Gio.File.new_for_path(TODO_PATH);
+export function writeTodo(path, content) {
+    const file = Gio.File.new_for_path(path);
     // replace_contents expects a Uint8Array (guint8[]), which TextEncoder yields.
     const bytes = new TextEncoder().encode(content);
     try {
