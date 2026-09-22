@@ -27,6 +27,21 @@ it simple: one markdown file, live panel menu, nothing else.
 - Live reload: external edits to `~/todo.md` (vim, atomic writes, whatever)
   are picked up instantly via `Gio.FileMonitor`
 
+## Settings
+
+Point the extension at any markdown file via the preferences window:
+
+```bash
+gnome-extensions prefs gnome-todo-md@ertugrulsefal.github.com
+```
+
+(Or: Extensions app → Todo MD → the gear icon.)
+
+- The **Todo file path** entry defaults to `~/todo.md` (an empty value
+  means the default); `~` and `~/` paths are expanded to your home directory.
+- The todo file is watched live; changing the path re-wires the watcher
+  immediately — no Shell reload needed.
+
 ## The file format
 
 ```markdown
