@@ -316,13 +316,15 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Switch a row into inline edit mode. Replaces any existing edit
-     * (single-edit rule: render derives solely from _editingIndex).
+     * Switch a row into inline edit mode. Replaces any existing inline
+     * interaction (single-edit rule: render derives solely from
+     * _editingIndex; the add entry is closed together with the edit).
      *
      * @param {number} index - 0-based line index of the task to edit.
      */
     _startEditing(index) {
         this._editingIndex = index;
+        this._addingCategory = null;
         this._refreshTodoMenu();
     }
 
