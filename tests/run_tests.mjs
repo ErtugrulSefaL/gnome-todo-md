@@ -312,6 +312,16 @@ function testStaticChecks() {
     record('static: compiled GSettings schema is committed (schemas/gschemas.compiled)',
         readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/gschemas.compiled') !== '',
         'getSettings() loads the schemas/ dir from the extension directory');
+
+    // Faz 4: single-interaction invariant — every edit-state reset pairs the
+    // two fields, and opening an edit closes the add entry (the exact bug
+    // fixed in 0ab4e16: _startEditing missed the _addingCategory reset).
+    record('static: every _editingIndex = -1 reset pairs _addingCategory',
+        !/this\._editingIndex = -1;\n(?![ ]*this\._addingCategory)/.test(ui),
+        'reset both fields together (single-interaction rule)');
+    record('static: opening an edit closes the add entry (_startEditing)',
+        /_editingIndex = index;\n\s*this\._addingCategory = null;/.test(ui),
+        'an edit replaces any open category add entry');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
