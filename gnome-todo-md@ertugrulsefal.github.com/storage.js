@@ -81,6 +81,20 @@ export function categoryColorCss(name, colors) {
 }
 
 /**
+ * Convert 8-bit RGB values to a '#rrggbb' string (Faz 5; used by prefs when
+ * a Gdk.RGBA changes).
+ *
+ * @param {number} r - Red 0-255.
+ * @param {number} g - Green 0-255.
+ * @param {number} b - Blue 0-255.
+ * @returns {string} Hex color string.
+ */
+export function rgbToHex(r, g, b) {
+    const hex = value => value.toString(16).padStart(2, '0');
+    return `#${hex(r)}${hex(g)}${hex(b)}`;
+}
+
+/**
  * Remove color entries for categories that no longer exist in the file
  * (Faz 5). Locked decision: dead keys are pruned automatically so a later
  * category reusing the name does not silently inherit the old color.

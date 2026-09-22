@@ -715,6 +715,11 @@ function testCategoryColors() {
 
     record('pruneCategoryColors: empty map stays empty',
         JSON.stringify(Storage.pruneCategoryColors({}, ['A'])) === '{}', '');
+
+    record('rgbToHex: 8-bit RGB values become #rrggbb',
+        Storage.rgbToHex(224, 27, 36) === '#e01b24'
+        && Storage.rgbToHex(0, 0, 0) === '#000000'
+        && Storage.rgbToHex(255, 255, 255) === '#ffffff', '');
 }
 
 // ---- runner --------------------------------------------------------------
