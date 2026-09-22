@@ -37,6 +37,30 @@ export function todoPath() {
 }
 
 /**
+ * Resolve a user-configured todo file path (Faz 3).
+ *
+ * Pure path resolution: an empty/whitespace value falls back to the default
+ * ~/todo.md, a leading '~' is expanded to the home directory, and anything
+ * else is used verbatim (expected to be an absolute path).
+ *
+ * @param {string|null} configured - Raw value of the todo-file-path setting.
+ * @returns {string} Absolute file path to use.
+ */
+export function resolveTodoPath(configured) {
+    const trimmed = configured ? configured.trim() : '';
+    if (!trimmed) {
+        return TODO_PATH;
+    }
+    if (trimmed === '~') {
+        return GLib.get_home_dir();
+    }
+    if (trimmed.startsWith('~/')) {
+        return GLib.get_home_dir() + trimmed.slice(1);
+    }
+    return trimmed;
+}
+
+/**
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *
@@ -502,6 +526,12 @@ export function addTaskTag(content, index, key, value) {
  * @param {string} content - Full file content to write.
  */
 export function writeTodo(path, content) {
+    // Loud failure instead of silently encoding `undefined` into an empty
+    // file (data-loss guard for a wrong call site).
+    if (content === undefined) {
+        throw new Error('todo: writeTodo requires (path, content)');
+    }
+
     const file = Gio.File.new_for_path(path);
     // replace_contents expects a Uint8Array (guint8[]), which TextEncoder yields.
     const bytes = new TextEncoder().encode(content);
@@ -511,6 +541,6 @@ export function writeTodo(path, content) {
         // Surface failures (disk full, permissions) without crashing the
         // extension; the next refresh keeps showing the on-disk content, so
         // the UI stays consistent with the file.
-        console.error(`todo: failed to write ${TODO_PATH}: ${e}`);
+        console.error(`todo: failed to write ${path}: ${e}`);
     }
 }

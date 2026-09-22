@@ -269,6 +269,11 @@ function testStaticChecks() {
         /"shell-version"\s*:\s*\[\s*"46"\s*\]/.test(meta), 'do not claim untested versions');
     noMatch('static: no opacity in CSS (actor label.opacity is used instead)',
         css, /opacity\s*:/, 'CSS opacity is unreliable on St.Label; use actor opacity');
+
+    // Faz 3: the UI layer resolves the file path via _todoPath() (GSettings
+    // aware); no direct default-path calls are allowed there.
+    noMatch('static: extension.js does not call Storage.todoPath() directly',
+        ui, /Storage\.todoPath\(/, 'use this._todoPath() so the configured path is honored');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
@@ -584,9 +589,42 @@ function testPathParams() {
     record('pathParams: write to a missing parent dir fails gracefully',
         orphanRead.raw === '', '');
 
+    // Loud failure guard: writeTodo without content must throw, not silently
+    // encode `undefined` into an empty file (data-loss guard).
+    let threw = false;
+    try {
+        Storage.writeTodo(tmpPath);
+    } catch (e) {
+        threw = true;
+    }
+    record('pathParams: writeTodo without content throws loudly (no data loss)',
+        threw, '');
+
     // Cleanup.
     Gio.File.new_for_path(tmpPath).delete(null);
     Gio.File.new_for_path(tmpDir).delete(null);
+}
+
+// ---- resolveTodoPath (Faz 3 step 3) ---------------------------------------
+
+function testResolveTodoPath() {
+    record('resolveTodoPath: empty and whitespace values fall back to the default',
+        Storage.resolveTodoPath('') === Storage.todoPath()
+        && Storage.resolveTodoPath('   ') === Storage.todoPath(), '');
+
+    record('resolveTodoPath: null input falls back to the default',
+        Storage.resolveTodoPath(null) === Storage.todoPath(), '');
+
+    record('resolveTodoPath: bare tilde expands to the home dir',
+        Storage.resolveTodoPath('~') === GLib.get_home_dir(), '');
+
+    record('resolveTodoPath: ~/ prefix expands to the home dir',
+        Storage.resolveTodoPath('~/my-todo.md') === GLib.get_home_dir() + '/my-todo.md',
+        '');
+
+    record('resolveTodoPath: absolute paths pass through verbatim',
+        Storage.resolveTodoPath('/home/x/notes/todo.md') === '/home/x/notes/todo.md',
+        '');
 }
 
 // ---- runner --------------------------------------------------------------
@@ -607,6 +645,7 @@ testParseDocument();
 testSerializeDocument();
 testAtomicWritePath();
 testPathParams();
+testResolveTodoPath();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.

@@ -16,6 +16,9 @@ export default class TodoExtension extends Extension {
         // Reset on enable — the Extension instance survives disable/enable.
         this._editingIndex = -1;
 
+        // GSettings backend (schema id: metadata.json settings-schema).
+        this._settings = this.getSettings();
+
         // Create a panel button.
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
 
@@ -53,7 +56,10 @@ export default class TodoExtension extends Extension {
 
         // Watch ~/todo.md so externally-added tasks appear live, without
         // needing a Shell reload.
-        this._todoMonitor = Gio.File.new_for_path(Storage.todoPath())
+        // Watch the todo file so externally-added tasks appear live, without
+        // needing a Shell reload. Created once per enable(); live rewiring on
+        // a settings change arrives in the later step.
+        this._todoMonitor = Gio.File.new_for_path(this._todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
             // Any file write (external or our own) may shift line indexes, so
@@ -75,6 +81,18 @@ export default class TodoExtension extends Extension {
             this._indicator.destroy();
             this._indicator = null;
         }
+        this._settings = null;
+    }
+
+    /**
+     * Resolve the todo file path from the GSettings value (empty value and
+     * '~' forms fall back / expand — see Storage.resolveTodoPath).
+     *
+     * @returns {string} Absolute path of the todo file to use.
+     */
+    _todoPath() {
+        return Storage.resolveTodoPath(
+            this._settings.get_string('todo-file-path'));
     }
 
     /**
@@ -84,7 +102,7 @@ export default class TodoExtension extends Extension {
         const menu = this._indicator.menu;
         menu.removeAll();
 
-        const doc = Storage.parseDocument(Storage.readTodo().raw);
+        const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
         // Add-task entry pinned at the top.
         this._addEntry = new St.Entry({
@@ -307,9 +325,9 @@ export default class TodoExtension extends Extension {
             this._cancelEditing();
             return;
         }
-        const parsed = Storage.readTodo();
+        const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
-        Storage.writeTodo(Storage.todoPath(), updated);
+        Storage.writeTodo(this._todoPath(), updated);
         this._editingIndex = -1;
         this._refreshTodoMenu();
     }
@@ -355,9 +373,9 @@ export default class TodoExtension extends Extension {
         }
 
         this._editingIndex = -1;
-        const parsed = Storage.readTodo();
+        const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.addTask(parsed.raw, text.trim());
-        Storage.writeTodo(Storage.todoPath(), updated);
+        Storage.writeTodo(this._todoPath(), updated);
         this._addEntry.set_text('');
         this._refreshTodoMenu();
     }
@@ -369,9 +387,9 @@ export default class TodoExtension extends Extension {
      */
     _toggleTask(index) {
         this._editingIndex = -1;
-        const parsed = Storage.readTodo();
+        const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.toggleTask(parsed.raw, index);
-        Storage.writeTodo(Storage.todoPath(), updated);
+        Storage.writeTodo(this._todoPath(), updated);
         this._refreshTodoMenu();
     }
 
@@ -382,9 +400,9 @@ export default class TodoExtension extends Extension {
      */
     _deleteTask(index) {
         this._editingIndex = -1;
-        const parsed = Storage.readTodo();
+        const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.deleteTask(parsed.raw, index);
-        Storage.writeTodo(Storage.todoPath(), updated);
+        Storage.writeTodo(this._todoPath(), updated);
         this._refreshTodoMenu();
     }
 
@@ -397,9 +415,9 @@ export default class TodoExtension extends Extension {
      */
     _moveTask(index, direction) {
         this._editingIndex = -1;
-        const parsed = Storage.readTodo();
+        const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.moveTask(parsed.raw, index, direction);
-        Storage.writeTodo(Storage.todoPath(), updated);
+        Storage.writeTodo(this._todoPath(), updated);
         this._refreshTodoMenu();
     }
 }
