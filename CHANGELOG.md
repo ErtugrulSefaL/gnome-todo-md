@@ -4,6 +4,24 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.6.0 - 2026-09-23
+
+### Added
+- Add tasks to any category: every category header (including empty ones)
+  has a '+' button that opens an inline add entry for that exact category.
+- An empty file starts with an implicit `Genel` header, so the first task
+  can be added without hand-editing.
+
+### Changed
+- The top "Add a task…" entry and the 'No tasks' placeholder row were
+  removed — adding is now exclusively per-category.
+- `addTask(content, text, categoryName)` targets a named category (default
+  `Genel`); a missing category is created at the end of the document.
+
+### Fixed
+- Opening a task edit no longer leaves a category add entry open (missed
+  single-interaction reset); the invariant is now pinned by static checks.
+
 ## 0.5.0 - 2026-09-23
 
 ### Added
