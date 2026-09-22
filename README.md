@@ -17,11 +17,12 @@ it simple: one markdown file, live panel menu, nothing else.
 
 - Panel indicator with a popup menu listing your tasks from `~/todo.md`
 - **Categories**: `## Category` sections render as non-clickable headers;
-  tasks are grouped under them
+  tasks are grouped under them — every category header (including empty
+  ones) has a **`+` button** that opens an inline entry to add a task right
+  there; an empty file starts with an implicit `Genel` section
 - **Reordering**: move tasks up/down within their category
 - **Tags**: free-form `@tag(value)` pairs on any task (ordered, unknown tags
   are preserved — no whitelist)
-- Tasks added from the menu land under a real `## Genel` (general) section
 - Inline editing (Enter saves), delete, check/uncheck (click the row)
 - Completed tasks get strikethrough + faded text
 - Live reload: external edits to `~/todo.md` (vim, atomic writes, whatever)
