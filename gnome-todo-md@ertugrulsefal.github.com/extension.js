@@ -29,6 +29,11 @@ export default class TodoExtension extends Extension {
                 this._watchTodoFile();
                 this._refreshTodoMenu();
             });
+        // Re-render when the color map changes (prefs writes it live).
+        this._colorSignal = this._settings.connect('changed::category-colors',
+            () => {
+                this._refreshTodoMenu();
+            });
 
         // Create a panel button.
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
@@ -76,6 +81,10 @@ export default class TodoExtension extends Extension {
         if (this._settingsSignal) {
             this._settings.disconnect(this._settingsSignal);
             this._settingsSignal = null;
+        }
+        if (this._colorSignal) {
+            this._settings.disconnect(this._colorSignal);
+            this._colorSignal = null;
         }
         if (this._indicator) {
             this._indicator.menu.disconnect(this._openSignal);
@@ -134,6 +143,19 @@ export default class TodoExtension extends Extension {
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
+        // Faz 5: category colors from the settings map. Dead keys (categories
+        // that no longer exist) are pruned automatically; the write happens
+        // only when the prune actually removed something, so the
+        // changed:: signal does not cause a refresh loop.
+        const colors = this._settings.get_value('category-colors')
+            .recursiveUnpack();
+        const prunedColors = Storage.pruneCategoryColors(colors,
+            doc.categories.map(category => category.name));
+        if (prunedColors !== colors) {
+            this._settings.set_value('category-colors',
+                GLib.Variant.new('a{ss}', prunedColors));
+        }
+
         // Every category renders as a non-clickable header row (with a '+'
         // button) followed by its task rows — task-less categories are
         // actionable now that adding is per-category. An empty document (no
@@ -156,6 +178,12 @@ export default class TodoExtension extends Extension {
                 text: section.name,
                 style_class: 'todo-category-header',
             });
+            // Q1=A: the color applies to the header TEXT via inline style
+            // (set_style verified in the offline mirror, st14 st.widget).
+            const colorCss = Storage.categoryColorCss(section.name, prunedColors);
+            if (colorCss) {
+                label.set_style(colorCss);
+            }
             label.set_x_expand(true);
             header.add_child(label);
 
