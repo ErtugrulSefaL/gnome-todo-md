@@ -157,6 +157,13 @@ export default class TodoExtension extends Extension {
                     const parsed = Storage.readTodo(this._todoPath());
                     const updated = Storage.addCategory(parsed.raw, name);
                     if (updated !== parsed.raw) {
+                        // Write the file FIRST: setting the color below fires
+                        // changed::category-colors synchronously, and the
+                        // refresh's dead-key pruning would remove the just
+                        // written color because the file does not contain
+                        // the new category yet (found by user testing).
+                        Storage.writeTodo(this._todoPath(), updated);
+
                         // Auto-color: the next palette entry in order,
                         // wrapping around after the last (Faz 6 request).
                         const existingCount =
@@ -168,7 +175,6 @@ export default class TodoExtension extends Extension {
                         this._settings.set_value('category-colors',
                             GLib.Variant.new('a{ss}', colors));
 
-                        Storage.writeTodo(this._todoPath(), updated);
                         this._activeCategory = name;
                     }
                 }
