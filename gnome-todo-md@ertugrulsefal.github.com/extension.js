@@ -39,7 +39,10 @@ export default class TodoExtension extends Extension {
         // Re-render when the height limit changes (inline max-height).
         this._heightSignal = this._settings.connect('changed::max-menu-height',
             () => {
-                this._refreshTodoMenu();
+                if (this._scrollWrapper) {
+                    this._scrollWrapper.set_style(
+                        `max-height: ${this._settings.get_int('max-menu-height')}px;`);
+                }
             });
 
         // Create a panel button.
@@ -97,6 +100,11 @@ export default class TodoExtension extends Extension {
         if (this._heightSignal) {
             this._settings.disconnect(this._heightSignal);
             this._heightSignal = null;
+        }
+        if (this._scrollWrapper) {
+            this._scrollWrapper.destroy();
+            this._scrollWrapper = null;
+            this._contentSection = null;
         }
         if (this._indicator) {
             this._indicator.menu.disconnect(this._openSignal);
@@ -237,20 +245,25 @@ export default class TodoExtension extends Extension {
     _refreshTodoMenu() {
         const menu = this._indicator.menu;
         menu.removeAll();
-        // The scroll wrapper is added via menu.box (not addMenuItem), so
-        // removeAll() does not track it — destroy it explicitly.
-        let previousScroll = 0;
-        if (this._scrollWrapper) {
-            previousScroll = this._scrollWrapper.vadjustment.value;
-            this._scrollWrapper.destroy();
-            this._scrollWrapper = null;
+        // Persistent scroll wrapper (created once, lives as long as the
+        // extension is enabled): content is cleared and refilled per
+        // refresh, so the vadjustment — and the scroll position — survive
+        // every rebuild WITHOUT visible jumps. menu.removeAll() does not
+        // track it (added via menu.box), which is exactly what we want.
+        if (!this._scrollWrapper) {
+            const maxMenuHeight = this._settings.get_int('max-menu-height');
+            this._contentSection = new PopupMenu.PopupMenuSection();
+            this._scrollWrapper = new St.ScrollView({
+                style_class: 'todo-scroll',
+                vscrollbar_policy: St.PolicyType.AUTOMATIC,
+                x_expand: true,
+            });
+            this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
+            this._scrollWrapper.clip_to_allocation = true;
+            this._scrollWrapper.add_child(this._contentSection.actor);
+            menu.box.add_child(this._scrollWrapper);
         }
-        if (this._scrollToTopNext) {
-            // A tab switch re-renders different content: start at the top
-            // instead of restoring the old offset.
-            previousScroll = 0;
-            this._scrollToTopNext = false;
-        }
+        this._contentSection.removeAll();
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
@@ -371,36 +384,9 @@ export default class TodoExtension extends Extension {
         // Faz 6.5: scrollable content area (the shell's own PopupSubMenu
         // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
         // clip_to_allocation + CSS max-height — the scrollbar only engages
-        // once a max-height is set). The tab bar stays fixed above it.
-        const maxMenuHeight = this._settings.get_int('max-menu-height');
-        const contentSection = new PopupMenu.PopupMenuSection();
-        this._scrollWrapper = new St.ScrollView({
-            style_class: 'todo-scroll',
-            vscrollbar_policy: St.PolicyType.AUTOMATIC,
-            x_expand: true,
-        });
-        // The user-configured limit: inline style beats any stylesheet
-        // default. Without a limit the menu grows unbounded.
-        this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
-        this._scrollWrapper.clip_to_allocation = true;
-        // PopupMenuSection is a PopupMenuBase (not an actor); its box IS the
-        // actor (section.actor === section.box, popupMenu.js 46.0 :1193).
-        this._scrollWrapper.add_child(contentSection.actor);
-        menu.box.add_child(this._scrollWrapper);
-
-        // Restore the scroll position across rebuilds: edits, moves and adds
-        // must not jump the view back to the top (user-reported). The idle
-        // runs after layout so the adjustment has a real range; the guard
-        // tolerates a further rebuild having replaced the wrapper.
-        const pendingScroll = previousScroll;
-        if (pendingScroll > 0) {
-            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
-                if (this._scrollWrapper) {
-                    this._scrollWrapper.vadjustment.value = pendingScroll;
-                }
-                return GLib.SOURCE_REMOVE;
-            });
-        }
+        // once a max-height is set). The tab bar stays fixed above it and
+        // the wrapper persists, keeping the scroll offset stable.
+        const contentSection = this._contentSection;
 
         const visibleSections = this._activeCategory === ALL_TAB
             ? sections
@@ -467,6 +453,14 @@ export default class TodoExtension extends Extension {
                 contentSection.addMenuItem(this._makeTaskRow(task,
                     ti === 0, ti === tasks.length - 1));
             }
+        }
+
+        // A tab switch re-renders different content: start at the top. The
+        // adjustment is live here (wrapper persists), so a direct set works
+        // without any idle hack.
+        if (this._scrollToTopNext) {
+            this._scrollWrapper.vadjustment.value = 0;
+            this._scrollToTopNext = false;
         }
     }
 
