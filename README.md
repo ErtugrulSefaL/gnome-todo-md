@@ -21,6 +21,8 @@ it simple: one markdown file, live panel menu, nothing else.
   A **`+` at the far right** creates a new category (auto-colored from the
   palette, in order, wrapping around); tabs and headers carry the category
   color
+- **Scrollable menu**: content taller than the configured limit scrolls;
+  the tab bar stays fixed and the scroll position survives every action
 - **Categories**: `## Category` sections render as non-clickable headers;
   tasks are grouped under them — every category header (including empty
   ones) has a **`+` button** that opens an inline entry to add a task right
@@ -51,6 +53,8 @@ gnome-extensions prefs gnome-todo-md@ertugrulsefal.github.com
   means the default); `~` and `~/` paths are expanded to your home directory.
 - The todo file is watched live; changing the path re-wires the watcher
   immediately — no Shell reload needed.
+- **Max menu height** (200–2000 px, default 400) limits the scrollable
+  content area.
 
 ## The file format
 
