@@ -238,12 +238,12 @@ export default class TodoExtension extends Extension {
             sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
-                // Faz 6: tab bar. 'Tümü' shows every category (default); the other
-        // tabs filter the content to one category. The content model is
-        // unchanged — a tab only picks what gets rendered. With a single
-        // category there are no category tabs — the bar then only shows
-        // the tab row when a filter exists; see the new-category row below
-        // for category creation from any state.
+                // Faz 6: tab bar, ALWAYS rendered ('Tümü' shows every category — default;
+        // other tabs filter the content to one category). The content model
+        // is unchanged — a tab only picks what gets rendered. A '+' button at
+        // the far right opens the new-category inline entry (design change:
+        // the separate 'New category' row was ugly; the bar is permanent so
+        // categories can be created from any file state).
         const ALL_TAB = null;
         if (this._activeCategory === undefined) {
             this._activeCategory = ALL_TAB;
@@ -254,11 +254,11 @@ export default class TodoExtension extends Extension {
             this._activeCategory = ALL_TAB;
         }
 
+        const tabBar = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        const box = new St.BoxLayout({style_class: 'todo-tab-bar'});
+        box.set_x_expand(true);
         if (sections.length > 1) {
-            const tabBar = new PopupMenu.PopupBaseMenuItem(
-                {activate: false, can_focus: false});
-            const box = new St.BoxLayout({style_class: 'todo-tab-bar'});
-            box.set_x_expand(true);
             const tabs = [{name: null, label: 'Tümü'}]
                 .concat(sections.map(section => ({
                     name: section.name, label: section.name})));
@@ -283,42 +283,47 @@ export default class TodoExtension extends Extension {
                 });
                 box.add_child(button);
             }
-            const tabItem = new PopupMenu.PopupBaseMenuItem(
-                {activate: false, can_focus: false});
-            tabItem.add_child(box);
-            menu.addMenuItem(tabItem);
+        } else {
+            // Single category: show it as a (checked) tab for visual balance.
+            const button = new St.Button({
+                label: sections[0].name,
+                style_class: 'todo-tab button',
+                toggle_mode: true,
+            });
+            if (prunedColors[sections[0].name]) {
+                button.set_style(
+                    Storage.categoryColorCss(sections[0].name, prunedColors));
+            }
+            button.set_checked(true);
+            box.add_child(button);
         }
 
-        // 'New category' row: the '+' opens an inline name entry under the
-        // tab bar (locked decision A). Always available — even with a single
-        // category — so categories can be created from any file state.
+        // Far-right '+' — the new-category entry point.
+        const addCatBtn = new St.Button({
+            style_class: 'todo-icon-button button',
+            child: new St.Icon({
+                icon_name: 'list-add-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        addCatBtn.set_x_align(Clutter.ActorAlign.END);
+        addCatBtn.connect('clicked', () => {
+            this._cancelEditing();
+            this._addingNewCategory = !this._addingNewCategory;
+            this._refreshTodoMenu();
+        });
+        box.add_child(addCatBtn);
+
+        const tabItem = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        tabItem.add_child(box);
+        menu.addMenuItem(tabItem);
+
+        // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {
             const newCategoryRow = this._makeNewCategoryRow();
             menu.addMenuItem(newCategoryRow.row);
             newCategoryRow.entry.grab_key_focus();
-        } else {
-            const newCatItem = new PopupMenu.PopupBaseMenuItem(
-                {activate: false, can_focus: false});
-            const newCatBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                child: new St.Icon({
-                    icon_name: 'list-add-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            newCatBtn.set_x_align(Clutter.ActorAlign.START);
-            newCatBtn.connect('clicked', () => {
-                this._addingNewCategory = true;
-                this._refreshTodoMenu();
-            });
-            const hint = new St.Label({
-                text: 'New category',
-                style_class: 'todo-category-header',
-            });
-            hint.set_x_expand(true);
-            newCatItem.add_child(newCatBtn);
-            newCatItem.add_child(hint);
-            menu.addMenuItem(newCatItem);
         }
 
         const visibleSections = this._activeCategory === ALL_TAB
