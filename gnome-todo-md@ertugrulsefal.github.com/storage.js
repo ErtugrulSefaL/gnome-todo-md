@@ -95,6 +95,35 @@ export function rgbToHex(r, g, b) {
 }
 
 /**
+ * GNOME HIG palette shared by the prefs quick palette and the automatic
+ * color assignment for newly created categories (Faz 6).
+ */
+export const CATEGORY_PALETTE = [
+    '#3584e4', // blue
+    '#33d17a', // green
+    '#e01b24', // red
+    '#f6d32d', // yellow
+    '#c061cb', // purple
+    '#ff7800', // orange
+    '#986a44', // brown
+    '#9a9996', // gray
+];
+
+/**
+ * Pick the palette color for a newly created category: palette entries are
+ * assigned in order and wrap around after the last one (Faz 6).
+ *
+ * @param {number} existingCategoryCount - How many categories existed before
+ *   the new one.
+ * @returns {string} A hex color from CATEGORY_PALETTE.
+ */
+export function nextCategoryColor(existingCategoryCount) {
+    return CATEGORY_PALETTE[
+        ((existingCategoryCount % CATEGORY_PALETTE.length) + CATEGORY_PALETTE.length)
+            % CATEGORY_PALETTE.length];
+}
+
+/**
  * Remove color entries for categories that no longer exist in the file
  * (Faz 5). Locked decision: dead keys are pruned automatically so a later
  * category reusing the name does not silently inherit the old color.

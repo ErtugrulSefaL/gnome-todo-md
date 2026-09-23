@@ -157,6 +157,17 @@ export default class TodoExtension extends Extension {
                     const parsed = Storage.readTodo(this._todoPath());
                     const updated = Storage.addCategory(parsed.raw, name);
                     if (updated !== parsed.raw) {
+                        // Auto-color: the next palette entry in order,
+                        // wrapping around after the last (Faz 6 request).
+                        const existingCount =
+                            Storage.parseDocument(parsed.raw).categories.length;
+                        const colors =
+                            this._settings.get_value('category-colors')
+                                .recursiveUnpack();
+                        colors[name] = Storage.nextCategoryColor(existingCount);
+                        this._settings.set_value('category-colors',
+                            GLib.Variant.new('a{ss}', colors));
+
                         Storage.writeTodo(this._todoPath(), updated);
                         this._activeCategory = name;
                     }

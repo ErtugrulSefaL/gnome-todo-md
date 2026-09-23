@@ -720,6 +720,13 @@ function testCategoryColors() {
         Storage.rgbToHex(224, 27, 36) === '#e01b24'
         && Storage.rgbToHex(0, 0, 0) === '#000000'
         && Storage.rgbToHex(255, 255, 255) === '#ffffff', '');
+
+    record('nextCategoryColor: palette order cycles after the last entry',
+        Storage.nextCategoryColor(0) === Storage.CATEGORY_PALETTE[0]
+        && Storage.nextCategoryColor(7) === Storage.CATEGORY_PALETTE[7]
+        && Storage.nextCategoryColor(8) === Storage.CATEGORY_PALETTE[0]
+        && Storage.nextCategoryColor(9) === Storage.CATEGORY_PALETTE[1]
+        && Storage.nextCategoryColor(10) === Storage.CATEGORY_PALETTE[2], '');
 }
 
 // ---- runner --------------------------------------------------------------
