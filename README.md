@@ -16,6 +16,11 @@ it simple: one markdown file, live panel menu, nothing else.
 ## Features
 
 - Panel indicator with a popup menu listing your tasks from `~/todo.md`
+- **Tabs**: a permanent tab bar (`Tümü` + one tab per category) filters the
+  menu to a single category; the active tab is remembered for the session.
+  A **`+` at the far right** creates a new category (auto-colored from the
+  palette, in order, wrapping around); tabs and headers carry the category
+  color
 - **Categories**: `## Category` sections render as non-clickable headers;
   tasks are grouped under them — every category header (including empty
   ones) has a **`+` button** that opens an inline entry to add a task right
