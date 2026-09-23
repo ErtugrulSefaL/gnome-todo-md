@@ -16,6 +16,7 @@ export default class TodoExtension extends Extension {
         // Reset on enable — the Extension instance survives disable/enable.
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
 
         // GSettings backend (schema id: metadata.json settings-schema).
         this._settings = this.getSettings();
@@ -25,6 +26,7 @@ export default class TodoExtension extends Extension {
             () => {
                 this._editingIndex = -1;
                 this._addingCategory = null;
+                this._addingNewCategory = false;
                 this._unwatchTodoFile();
                 this._watchTodoFile();
                 this._refreshTodoMenu();
@@ -61,6 +63,7 @@ export default class TodoExtension extends Extension {
                     // Menu closed: an uncommitted edit must not survive.
                     this._editingIndex = -1;
                     this._addingCategory = null;
+                    this._addingNewCategory = false;
                 }
             });
 
@@ -108,6 +111,7 @@ export default class TodoExtension extends Extension {
             // rule) and rebuild.
             this._editingIndex = -1;
             this._addingCategory = null;
+            this._addingNewCategory = false;
             this._refreshTodoMenu();
         });
     }
@@ -124,6 +128,49 @@ export default class TodoExtension extends Extension {
     }
 
     /**
+     * Build the inline "new category" row: an empty entry. Enter commits via
+     * Storage.addCategory; the new category becomes the active tab.
+     *
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
+     */
+    /**
+     * Build the inline "new category" row: an empty entry. Enter commits via
+     * Storage.addCategory; the new category becomes the active tab.
+     *
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
+     */
+    _makeNewCategoryRow() {
+        const row = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        const entry = new St.Entry({
+            hint_text: 'New category name…',
+            style_class: 'todo-edit-entry',
+        });
+        entry.set_x_expand(true);
+        entry.connect('key-release-event', (e, event) => {
+            if (event.get_key_symbol() === Clutter.KEY_Return) {
+                const name = e.get_text().trim();
+                this._addingNewCategory = false;
+                if (name) {
+                    const parsed = Storage.readTodo(this._todoPath());
+                    const updated = Storage.addCategory(parsed.raw, name);
+                    if (updated !== parsed.raw) {
+                        Storage.writeTodo(this._todoPath(), updated);
+                        this._activeCategory = name;
+                    }
+                }
+                this._refreshTodoMenu();
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.add_child(entry);
+        return {row, entry};
+    }
+
+    /**
      * Switch the active category tab. Closes any open inline interaction
      * (locked Faz 6 decision: a tab switch must not leave an edit or add
      * entry open). Remembered for the session (Q2=EVET); an unknown
@@ -132,6 +179,14 @@ export default class TodoExtension extends Extension {
      * @param {string|null} categoryName - Category to show, or null for 'Tümü'.
      */
     _switchTo(categoryName) {
+        this._cancelEditing();
+        this._activeCategory = categoryName;
+        this._refreshTodoMenu();
+    }
+
+
+    /**
+     * Switch the active category tab. Closes any open inline interaction
         this._cancelEditing();
         this._activeCategory = categoryName;
         this._refreshTodoMenu();
@@ -183,9 +238,12 @@ export default class TodoExtension extends Extension {
             sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
-        // Faz 6: tab bar. 'Tümü' shows every category (default); the other
+                // Faz 6: tab bar. 'Tümü' shows every category (default); the other
         // tabs filter the content to one category. The content model is
-        // unchanged — a tab only picks what gets rendered.
+        // unchanged — a tab only picks what gets rendered. With a single
+        // category there are no category tabs — the bar then only shows
+        // the tab row when a filter exists; see the new-category row below
+        // for category creation from any state.
         const ALL_TAB = null;
         if (this._activeCategory === undefined) {
             this._activeCategory = ALL_TAB;
@@ -229,6 +287,38 @@ export default class TodoExtension extends Extension {
                 {activate: false, can_focus: false});
             tabItem.add_child(box);
             menu.addMenuItem(tabItem);
+        }
+
+        // 'New category' row: the '+' opens an inline name entry under the
+        // tab bar (locked decision A). Always available — even with a single
+        // category — so categories can be created from any file state.
+        if (this._addingNewCategory) {
+            const newCategoryRow = this._makeNewCategoryRow();
+            menu.addMenuItem(newCategoryRow.row);
+            newCategoryRow.entry.grab_key_focus();
+        } else {
+            const newCatItem = new PopupMenu.PopupBaseMenuItem(
+                {activate: false, can_focus: false});
+            const newCatBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'list-add-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            newCatBtn.set_x_align(Clutter.ActorAlign.START);
+            newCatBtn.connect('clicked', () => {
+                this._addingNewCategory = true;
+                this._refreshTodoMenu();
+            });
+            const hint = new St.Label({
+                text: 'New category',
+                style_class: 'todo-category-header',
+            });
+            hint.set_x_expand(true);
+            newCatItem.add_child(newCatBtn);
+            newCatItem.add_child(hint);
+            menu.addMenuItem(newCatItem);
         }
 
         const visibleSections = this._activeCategory === ALL_TAB
@@ -429,6 +519,7 @@ export default class TodoExtension extends Extension {
     _cancelEditing() {
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 
@@ -449,6 +540,7 @@ export default class TodoExtension extends Extension {
         Storage.writeTodo(this._todoPath(), updated);
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 
@@ -503,6 +595,7 @@ export default class TodoExtension extends Extension {
 
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.addTask(parsed.raw, trimmed, category);
         Storage.writeTodo(this._todoPath(), updated);
@@ -560,6 +653,7 @@ export default class TodoExtension extends Extension {
     _toggleTask(index) {
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.toggleTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -574,6 +668,7 @@ export default class TodoExtension extends Extension {
     _deleteTask(index) {
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.deleteTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -590,6 +685,7 @@ export default class TodoExtension extends Extension {
     _moveTask(index, direction) {
         this._editingIndex = -1;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.moveTask(parsed.raw, index, direction);
         Storage.writeTodo(this._todoPath(), updated);
