@@ -208,9 +208,9 @@ export default class TodoExtension extends Extension {
      * Switch the active category tab. Closes any open inline interaction
      * (locked Faz 6 decision: a tab switch must not leave an edit or add
      * entry open). Remembered for the session (Q2=EVET); an unknown
-     * category falls back to 'Tümü' at render time.
+     * category falls back to 'All' at render time.
      *
-     * @param {string|null} categoryName - Category to show, or null for 'Tümü'.
+     * @param {string|null} categoryName - Category to show, or null for 'All'.
      */
     _switchTo(categoryName) {
         this._cancelEditing();
@@ -288,7 +288,7 @@ export default class TodoExtension extends Extension {
         // Every category renders as a non-clickable header row (with a '+'
         // button) followed by its task rows — task-less categories are
         // actionable now that adding is per-category. An empty document (no
-        // categories at all) gets a synthetic implicit 'Genel' header so the
+        // categories at all) gets a synthetic implicit 'General' header so the
         // first task can be added from an empty file.
         const sections = doc.categories.map(category => ({
             name: category.name,
@@ -298,7 +298,7 @@ export default class TodoExtension extends Extension {
             sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
-                // Faz 6: tab bar, ALWAYS rendered ('Tümü' shows every category — default;
+                // Faz 6: tab bar, ALWAYS rendered ('All' shows every category — default;
         // other tabs filter the content to one category). The content model
         // is unchanged — a tab only picks what gets rendered. A '+' button at
         // the far right opens the new-category inline entry (design change:
@@ -319,7 +319,7 @@ export default class TodoExtension extends Extension {
         const box = new St.BoxLayout({style_class: 'todo-tab-bar'});
         box.set_x_expand(true);
         if (sections.length > 1) {
-            const tabs = [{name: null, label: 'Tümü'}]
+            const tabs = [{name: null, label: 'All'}]
                 .concat(sections.map(section => ({
                     name: section.name, label: section.name})));
             for (const tab of tabs) {

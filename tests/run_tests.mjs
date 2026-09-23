@@ -160,42 +160,42 @@ function testEditTask() {
 // ---- addTask -------------------------------------------------------------
 
 function testAddTask() {
-    // Faz 2 semantics: every UI-added task lands in 'Genel' (real heading).
+    // Faz 2 semantics: every UI-added task lands in 'General' (real heading).
     const base = '- [ ] a\n- [x] b\n';
-    record('addTask: tasks before any ## form implicit Genel and gain the heading',
-        Storage.addTask(base, 'c') === '# TODO\n## Genel\n- [ ] a\n- [x] b\n- [ ] c\n',
+    record('addTask: tasks before any ## form implicit General and gain the heading',
+        Storage.addTask(base, 'c') === '# TODO\n## General\n- [ ] a\n- [x] b\n- [ ] c\n',
         JSON.stringify(Storage.addTask(base, 'c')));
 
-    record('addTask: empty file starts clean under # TODO + ## Genel',
-        Storage.addTask('', 'first') === '# TODO\n## Genel\n- [ ] first\n',
+    record('addTask: empty file starts clean under # TODO + ## General',
+        Storage.addTask('', 'first') === '# TODO\n## General\n- [ ] first\n',
         JSON.stringify(Storage.addTask('', 'first')));
 
     record('addTask: missing trailing newline is normalized',
-        Storage.addTask('- [ ] a', 'b') === '# TODO\n## Genel\n- [ ] a\n- [ ] b\n',
+        Storage.addTask('- [ ] a', 'b') === '# TODO\n## General\n- [ ] a\n- [ ] b\n',
         JSON.stringify(Storage.addTask('- [ ] a', 'b')));
 }
 
-// ---- addTask: Genel fallback (Faz 2 step 4) -------------------------------
+// ---- addTask: General fallback (Faz 2 step 4) -------------------------------
 
 function testAddTaskCategorized() {
-    // File with categories but no Genel: 'Genel' appended at the end.
-    record('addTaskCategorized: no Genel in file → ## Genel appended at the end',
+    // File with categories but no General: 'General' appended at the end.
+    record('addTaskCategorized: no General in file → ## General appended at the end',
         Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan')
-            === '# T\n## İş\n- [ ] a\n## Genel\n- [ ] orphan\n',
+            === '# T\n## İş\n- [ ] a\n## General\n- [ ] orphan\n',
         JSON.stringify(Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan')));
 
-    // Implicit Genel with trailing blank/notes: inserted after the LAST task,
+    // Implicit General with trailing blank/notes: inserted after the LAST task,
     // keeping trailing extras at the end of the block.
     record('addTaskCategorized: inserted after last task, trailing extras stay at end',
         Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new')
-            === '# T\n## Genel\n- [ ] a\n\n- [ ] b\n- [ ] new\n\n## Notes\n- [ ] x\n',
+            === '# T\n## General\n- [ ] a\n\n- [ ] b\n- [ ] new\n\n## Notes\n- [ ] x\n',
         JSON.stringify(Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new')));
 
-    // Existing explicit Genel: appended to its task list.
-    record('addTaskCategorized: appended to existing explicit ## Genel',
-        Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new')
-            === '# T\n## Genel\n- [ ] a\n- [ ] new\n\n## B\n- [ ] b\n',
-        JSON.stringify(Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new')));
+    // Existing explicit General: appended to its task list.
+    record('addTaskCategorized: appended to existing explicit ## General',
+        Storage.addTask('# T\n## General\n- [ ] a\n\n## B\n- [ ] b\n', 'new')
+            === '# T\n## General\n- [ ] a\n- [ ] new\n\n## B\n- [ ] b\n',
+        JSON.stringify(Storage.addTask('# T\n## General\n- [ ] a\n\n## B\n- [ ] b\n', 'new')));
 
     // Tags typed in the entry text are preserved and parse consistently.
     const tagged = Storage.parseDocument(Storage.addTask('', 'buy milk @due(mon) @p(1)'));
@@ -210,7 +210,7 @@ function testAddTaskCategorized() {
     const outputs = [
         Storage.addTask('# T\n## İş\n- [ ] a\n', 'orphan'),
         Storage.addTask('# T\n- [ ] a\n\n- [ ] b\n\n## Notes\n- [ ] x\n', 'new'),
-        Storage.addTask('# T\n## Genel\n- [ ] a\n\n## B\n- [ ] b\n', 'new'),
+        Storage.addTask('# T\n## General\n- [ ] a\n\n## B\n- [ ] b\n', 'new'),
     ];
     record('addTaskCategorized: outputs are canonical (round-trip stable)',
         outputs.every(o => Storage.serializeDocument(Storage.parseDocument(o)) === o), '');
@@ -224,9 +224,9 @@ function testAddTaskCategorized() {
         Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'Yeni')
             === '# T\n## A\n- [ ] a\n## Yeni\n- [ ] x\n', '');
 
-    record('addTaskCategorized: missing Genel stays implicit (fallback rule)',
-        Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'Genel')
-            === '# T\n## A\n- [ ] a\n## Genel\n- [ ] x\n', '');
+    record('addTaskCategorized: missing General stays implicit (fallback rule)',
+        Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'General')
+            === '# T\n## A\n- [ ] a\n## General\n- [ ] x\n', '');
 }
 
 // ---- writeTodo / round-trip ---------------------------------------------
@@ -345,15 +345,15 @@ function testParseDocument() {
     record('parseDocument: H1 stored raw as title',
         doc.title === '# My TODOs', JSON.stringify(doc.title));
 
-    record('parseDocument: categories in file order (Genel first)',
+    record('parseDocument: categories in file order (General first)',
         doc.categories.length === 3
-        && doc.categories[0].name === 'Genel'
+        && doc.categories[0].name === 'General'
         && doc.categories[1].name === 'Notes'
         && doc.categories[2].name === 'İş',
         JSON.stringify(doc.categories.map(c => c.name)));
 
     const genel = doc.categories[0];
-    record('parseDocument: task before first ## falls into Genel (fallback)',
+    record('parseDocument: task before first ## falls into General (fallback)',
         genel.items.length === 2
         && genel.items[0].type === 'task'
         && genel.items[0].text === 'orphan task'
@@ -396,9 +396,9 @@ function testParseDocument() {
         '');
 
     const noTitle = Storage.parseDocument('- [ ] only task\n## A\n- [ ] x\n');
-    record('parseDocument: file without H1 → title null, Genel fallback works',
+    record('parseDocument: file without H1 → title null, General fallback works',
         noTitle.title === null && noTitle.categories.length === 2
-        && noTitle.categories[0].name === 'Genel',
+        && noTitle.categories[0].name === 'General',
         JSON.stringify(noTitle.categories.map(c => c.name)));
 
     record('parseDocument: ### subheading is an extra, not a category',
@@ -431,7 +431,7 @@ function testSerializeDocument() {
     const CANONICAL = [
         '# My TODOs',
         '',
-        '## Genel',
+        '## General',
         '- [ ] orphan task @tag(v)',
         '',
         '## Notes',
@@ -448,34 +448,34 @@ function testSerializeDocument() {
         JSON.stringify(Storage.serializeDocument(Storage.parseDocument(CANONICAL))));
 
     // Real-world shape: blanks between the title and the first '##' (implicit
-    // Genel holding only extras) must not gain a '## Genel' heading.
+    // General holding only extras) must not gain a '## General' heading.
     const REAL_LIKE = '# My TODOs\n\n\n## Notes\n- keep me\n\n- [x] done\n';
-    record('serializeDocument: extras-only implicit Genel stays headingless',
+    record('serializeDocument: extras-only implicit General stays headingless',
         Storage.serializeDocument(Storage.parseDocument(REAL_LIKE)) === REAL_LIKE, '');
 
-    // Locked rule: tasks in an implicit Genel gain a real '## Genel' heading.
-    record('serializeDocument: implicit Genel with tasks gains ## Genel heading',
+    // Locked rule: tasks in an implicit General gain a real '## General' heading.
+    record('serializeDocument: implicit General with tasks gains ## General heading',
         Storage.serializeDocument(Storage.parseDocument('# T\n- [ ] a\n## B\n- [ ] b\n'))
-            === '# T\n## Genel\n- [ ] a\n## B\n- [ ] b\n', '');
+            === '# T\n## General\n- [ ] a\n## B\n- [ ] b\n', '');
 
-    // An explicit '## Genel' takes over the implicit fallback bucket, keeping
+    // An explicit '## General' takes over the implicit fallback bucket, keeping
     // byte order: pre-heading items stay before the heading.
-    const merged = Storage.parseDocument('# T\n- [ ] a\n## Genel\n- [ ] b\n');
-    record('serializeDocument: implicit+explicit Genel merge keeps line order',
+    const merged = Storage.parseDocument('# T\n- [ ] a\n## General\n- [ ] b\n');
+    record('serializeDocument: implicit+explicit General merge keeps line order',
         merged.categories.length === 1
-        && Storage.serializeDocument(merged) === '# T\n- [ ] a\n## Genel\n- [ ] b\n',
+        && Storage.serializeDocument(merged) === '# T\n- [ ] a\n## General\n- [ ] b\n',
         JSON.stringify(merged.categories));
 
     // Locked rule: missing H1 gains '# TODO'.
     record('serializeDocument: missing H1 gains # TODO',
-        Storage.serializeDocument(Storage.parseDocument('- [ ] a\n')) === '# TODO\n## Genel\n- [ ] a\n', '');
+        Storage.serializeDocument(Storage.parseDocument('- [ ] a\n')) === '# TODO\n## General\n- [ ] a\n', '');
 
     record('serializeDocument: empty document → only # TODO',
         Storage.serializeDocument(Storage.parseDocument('')) === '# TODO\n', '');
 
     // Locked rule: [X] normalized to [x] on write.
     record('serializeDocument: [X] normalized to [x]',
-        Storage.serializeDocument(Storage.parseDocument('- [X] a\n')) === '# TODO\n## Genel\n- [x] a\n', '');
+        Storage.serializeDocument(Storage.parseDocument('- [X] a\n')) === '# TODO\n## General\n- [x] a\n', '');
 
     // Heading and task-prefix normalizations + trailing newline.
     record('serializeDocument: headings, prefixes, trailing newline normalized',
@@ -483,7 +483,7 @@ function testSerializeDocument() {
             === '# TODO\n## Notes\n- [ ] a\n', '');
 
     // Interleaved inline tags survive verbatim (raw is authoritative).
-    const INTERLEAVED = '# T\n## Genel\n- [ ] buy @due(x) milk\n';
+    const INTERLEAVED = '# T\n## General\n- [ ] buy @due(x) milk\n';
     record('serializeDocument: interleaved inline tags preserved verbatim',
         Storage.serializeDocument(Storage.parseDocument(INTERLEAVED)) === INTERLEAVED, '');
 
@@ -549,9 +549,9 @@ function testExtensibilitySkeleton() {
     record('skeleton: addCategory empty name is a no-op',
         Storage.addCategory('# T\n', '  ') === '# T\n', '');
 
-    // An implicit 'Genel' counts as existing — no second 'Genel' section.
-    record('skeleton: implicit Genel counts as existing for addCategory',
-        Storage.addCategory('# T\n- [ ] a\n## A\n- [ ] b\n', 'Genel')
+    // An implicit 'General' counts as existing — no second 'General' section.
+    record('skeleton: implicit General counts as existing for addCategory',
+        Storage.addCategory('# T\n- [ ] a\n## A\n- [ ] b\n', 'General')
             === '# T\n- [ ] a\n## A\n- [ ] b\n', '');
 
     // addTaskTag appends the pair and keeps raw/text in sync.
@@ -589,7 +589,7 @@ function testExtensibilitySkeleton() {
 function testAtomicWritePath() {
     // Normal writes keep working: fixed content survives a real disk write
     // and comes back complete (no partial/truncated state).
-    const CONTENT = '# My TODOs\n\n## Genel\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
+    const CONTENT = '# My TODOs\n\n## General\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
     Storage.writeTodo(TODO, CONTENT);
     record('atomicWrite: write → read back is byte-identical (complete file)',
         Storage.readTodo().raw === CONTENT, JSON.stringify(Storage.readTodo().raw));
@@ -617,7 +617,7 @@ function testPathParams() {
     const tmpDir = GLib.dir_make_tmp('todo-test-XXXXXX');
     const tmpPath = `${tmpDir}/todo.md`;
 
-    const CONTENT = '# T\n\n## Genel\n- [ ] path test\n';
+    const CONTENT = '# T\n\n## General\n- [ ] path test\n';
     Storage.writeTodo(tmpPath, CONTENT);
     record('pathParams: write → read round-trip honors the explicit path',
         Storage.readTodo(tmpPath).raw === CONTENT, '');

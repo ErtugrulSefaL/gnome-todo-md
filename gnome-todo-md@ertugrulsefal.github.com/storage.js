@@ -184,9 +184,9 @@ export function splitLines(content) {
 
 /**
  * Name of the implicit category for tasks/lines that appear before the first
- * '##' heading. Always serialized as a real '## Genel' heading.
+ * '##' heading. Always serialized as a real '## General' heading.
  */
-export const FALLBACK_CATEGORY = 'Genel';
+export const FALLBACK_CATEGORY = 'General';
 
 /**
  * Extract free-form `@key(value)` tags from raw task text as an ordered
@@ -244,7 +244,7 @@ const makeTaskItem = (raw, done) => ({
  *   helpers. Tags are free-form (no whitelist) and kept as an ordered pair list.
  * - Everything else (notes, blank lines, plain list items) is an extra kept
  *   verbatim, in original order.
- * - Lines before the first '##' land in the FALLBACK_CATEGORY ('Genel').
+ * - Lines before the first '##' land in the FALLBACK_CATEGORY ('General').
  *
  * @param {string} content - Raw file content.
  * @returns {{title: string|null, categories: Array<{name: string, items: Array}>}}
@@ -274,8 +274,8 @@ export function parseDocument(content) {
         if (h2) {
             const name = h2[1].trim();
             if (name === FALLBACK_CATEGORY && current !== null && current.implicit) {
-                // An explicit '## Genel' takes over the fallback bucket so the
-                // model never holds two 'Genel' categories. Items parsed so far
+                // An explicit '## General' takes over the fallback bucket so the
+                // model never holds two 'General' categories. Items parsed so far
                 // appeared BEFORE the heading in the file — kept in `preItems`
                 // and re-emitted headingless before it (round-trip fidelity).
                 current.implicit = false;
@@ -332,11 +332,11 @@ export function categoryTasks(category) {
  * - Task lines are rebuilt from `raw` verbatim (raw is authoritative; it
  *   keeps the original tag positions/spacing). Mutations that change text or
  *   tags are responsible for keeping `raw` in sync.
- * - An implicit 'Genel' category (parser fallback, no heading seen) gets its
- *   '## Genel' heading written ONLY when it contains at least one task;
+ * - An implicit 'General' category (parser fallback, no heading seen) gets its
+ *   '## General' heading written ONLY when it contains at least one task;
  *   extras-only implicit content stays headingless so unchanged files
  *   round-trip byte-identical. Explicit categories always get a heading.
- * - When an explicit '## Genel' heading takes over the fallback bucket, items
+ * - When an explicit '## General' heading takes over the fallback bucket, items
  *   parsed before the heading (`preItems`) are re-emitted verbatim BEFORE it,
  *   mirroring the original file layout.
  * - A missing document title gains a '# TODO' line.
@@ -474,16 +474,16 @@ export function deleteTask(content, index) {
 
 /**
  * Append a new incomplete task to the category named `categoryName` (default
- * "Genel" — locked rule: tasks added without a category UI always land
+ * "General" — locked rule: tasks added without a category UI always land
  * there). Inserted after the last existing task of the category so trailing
  * blank/note lines stay at the end of the block. A missing category is
- * created at the end of the document: 'Genel' as implicit (heading appears
+ * created at the end of the document: 'General' as implicit (heading appears
  * once it holds tasks), others as explicit categories. Since Faz 2 this is
  * Document-based (parse → mutate → serialize); string-in/string-out.
  *
  * @param {string} content - Raw file content.
  * @param {string} text - Task text (may contain @tag(value) pairs).
- * @param {string} [categoryName] - Target category; defaults to "Genel".
+ * @param {string} [categoryName] - Target category; defaults to "General".
  * @returns {string} Updated content.
  */
 export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
@@ -517,8 +517,8 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
  * slots. Moving the first task up or the last task down is a no-op, and so
  * is an index that no task owns.
  *
- * Note: tasks living in a merged '## Genel' preItems block (parsed before an
- * explicit '## Genel' heading) are not movable in this phase — moveTask only
+ * Note: tasks living in a merged '## General' preItems block (parsed before an
+ * explicit '## General' heading) are not movable in this phase — moveTask only
  * operates on a category's main item list.
  *
  * @param {string} content - Raw file content.
@@ -557,8 +557,8 @@ export function moveTask(content, index, direction) {
  * needs to wire this in).
  *
  * No-op when the name is empty/whitespace or a category of that name already
- * exists (case-sensitive file semantics; an implicit 'Genel' counts as
- * existing, so no second 'Genel' section can ever be created).
+ * exists (case-sensitive file semantics; an implicit 'General' counts as
+ * existing, so no second 'General' section can ever be created).
  *
  * @param {string} content - Raw file content.
  * @param {string} name - Category name (trimmed before use).
