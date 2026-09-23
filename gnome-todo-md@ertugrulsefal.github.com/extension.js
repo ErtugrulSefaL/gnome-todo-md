@@ -261,7 +261,12 @@ export default class TodoExtension extends Extension {
             this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
             this._scrollWrapper.clip_to_allocation = true;
             this._scrollWrapper.add_child(this._contentSection.actor);
-            menu.box.add_child(this._scrollWrapper);
+        } else {
+            // Detach before rebuilding the fixed rows: the wrapper is re
+            // attached right below them further down, so the tab bar stays
+            // the first row (set_child_below_sibling only affects stacking,
+            // not the BoxLayout order — user-tested).
+            menu.box.remove_child(this._scrollWrapper);
         }
         this._contentSection.removeAll();
 
@@ -381,11 +386,10 @@ export default class TodoExtension extends Extension {
             newCategoryRow.entry.grab_key_focus();
         }
 
-        // The persistent scroll wrapper was added to menu.box once (outside
-        // addMenuItem tracking), while the tab bar is rebuilt every refresh
-        // and lands AFTER it in the box — force the wrapper to stay at the
-        // bottom so the tab bar remains the first row.
-        menu.box.set_child_below_sibling(this._scrollWrapper, null);
+        // Re-attach the persistent scroll wrapper BELOW the fixed rows
+        // (tab bar first). Detaching/re-attaching does not touch the
+        // vadjustment, so the scroll position survives.
+        menu.box.add_child(this._scrollWrapper);
 
         // Faz 6.5: scrollable content area (the shell's own PopupSubMenu
         // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
