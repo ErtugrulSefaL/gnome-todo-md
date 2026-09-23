@@ -4,6 +4,24 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.8.0 - 2026-09-23
+
+### Added
+- Category tabs: a permanent tab bar above the content — `Tümü` (default)
+  plus one tab per category. Tabs filter the menu to a single category; the
+  active tab is remembered for the session and falls back to `Tümü` when its
+  category disappears.
+- New-category creation from the menu: a `+` button at the far right of the
+  tab bar opens an inline name entry; the new category becomes the active
+  tab and is automatically assigned the next palette color (wrapping around
+  after the last palette entry).
+- Tabs and headers carry the category color.
+
+### Fixed
+- Writing the new category file before assigning its auto color — the
+  settings-change signal previously triggered the dead-key pruning before
+  the file contained the category, erasing the color.
+
 ## 0.7.0 - 2026-09-23
 
 ### Added
