@@ -210,6 +210,14 @@ export default class TodoExtension extends Extension {
                     style_class: 'todo-tab button',
                     toggle_mode: true,
                 });
+                // Tabs carry the category color too (the content header is
+                // filtered away when a tab is inactive).
+                if (tab.name) {
+                    const tabCss = Storage.categoryColorCss(tab.name, prunedColors);
+                    if (tabCss) {
+                        button.set_style(tabCss);
+                    }
+                }
                 button.set_checked(this._activeCategory === tab.name);
                 button.set_x_expand(true);
                 button.connect('clicked', () => {
