@@ -381,6 +381,12 @@ export default class TodoExtension extends Extension {
             newCategoryRow.entry.grab_key_focus();
         }
 
+        // The persistent scroll wrapper was added to menu.box once (outside
+        // addMenuItem tracking), while the tab bar is rebuilt every refresh
+        // and lands AFTER it in the box — force the wrapper to stay at the
+        // bottom so the tab bar remains the first row.
+        menu.box.set_child_below_sibling(this._scrollWrapper, null);
+
         // Faz 6.5: scrollable content area (the shell's own PopupSubMenu
         // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
         // clip_to_allocation + CSS max-height — the scrollbar only engages
