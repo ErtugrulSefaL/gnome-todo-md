@@ -62,6 +62,21 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             settings.reset('todo-file-path');
         });
         row.add_suffix(resetButton);
+
+        // Max menu content height (scroll area limit, in pixels).
+        const heightRow = new Adw.SpinRow({
+            title: 'Max menu height',
+            subtitle: 'Scroll area limit in pixels (default 400)',
+            adjustment: new Gtk.Adjustment({
+                lower: 200,
+                upper: 2000,
+                step_increment: 50,
+                value: settings.get_int('max-menu-height'),
+            }),
+        });
+        settings.bind('max-menu-height', heightRow, 'value',
+            Gio.SettingsBindFlags.DEFAULT);
+        group.add(heightRow);
     }
 
     _buildColorsPage(window, settings) {

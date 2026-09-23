@@ -36,6 +36,11 @@ export default class TodoExtension extends Extension {
             () => {
                 this._refreshTodoMenu();
             });
+        // Re-render when the height limit changes (inline max-height).
+        this._heightSignal = this._settings.connect('changed::max-menu-height',
+            () => {
+                this._refreshTodoMenu();
+            });
 
         // Create a panel button.
         this._indicator = new PanelMenu.Button(0.0, this.metadata.name, false);
@@ -88,6 +93,10 @@ export default class TodoExtension extends Extension {
         if (this._colorSignal) {
             this._settings.disconnect(this._colorSignal);
             this._colorSignal = null;
+        }
+        if (this._heightSignal) {
+            this._settings.disconnect(this._heightSignal);
+            this._heightSignal = null;
         }
         if (this._indicator) {
             this._indicator.menu.disconnect(this._openSignal);
@@ -226,6 +235,12 @@ export default class TodoExtension extends Extension {
     _refreshTodoMenu() {
         const menu = this._indicator.menu;
         menu.removeAll();
+        // The scroll wrapper is added via menu.box (not addMenuItem), so
+        // removeAll() does not track it — destroy it explicitly.
+        if (this._scrollWrapper) {
+            this._scrollWrapper.destroy();
+            this._scrollWrapper = null;
+        }
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
@@ -343,6 +358,24 @@ export default class TodoExtension extends Extension {
             newCategoryRow.entry.grab_key_focus();
         }
 
+        // Faz 6.5: scrollable content area (the shell's own PopupSubMenu
+        // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
+        // clip_to_allocation + CSS max-height — the scrollbar only engages
+        // once a max-height is set). The tab bar stays fixed above it.
+        const maxMenuHeight = this._settings.get_int('max-menu-height');
+        const contentSection = new PopupMenu.PopupMenuSection();
+        this._scrollWrapper = new St.ScrollView({
+            style_class: 'todo-scroll',
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
+            x_expand: true,
+        });
+        // The user-configured limit: inline style beats any stylesheet
+        // default. Without a limit the menu grows unbounded.
+        this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
+        this._scrollWrapper.clip_to_allocation = true;
+        this._scrollWrapper.add_child(contentSection);
+        menu.box.add_child(this._scrollWrapper);
+
         const visibleSections = this._activeCategory === ALL_TAB
             ? sections
             : sections.filter(section => section.name === this._activeCategory);
@@ -378,14 +411,14 @@ export default class TodoExtension extends Extension {
                 this._toggleAdd(categoryName);
             });
             header.add_child(addBtn);
-            menu.addMenuItem(header);
+            contentSection.addMenuItem(header);
 
             // The active add entry renders directly under its category
             // header; render derives solely from _addingCategory, so two
             // open adders can never coexist (single-add invariant).
             if (this._addingCategory === categoryName) {
                 const addRow = this._makeAddRow(categoryName);
-                menu.addMenuItem(addRow.row);
+                contentSection.addMenuItem(addRow.row);
                 // Grab focus only after the row is on stage.
                 addRow.entry.grab_key_focus();
             }
@@ -398,14 +431,14 @@ export default class TodoExtension extends Extension {
                 // _editingIndex, so two open editors can never coexist.
                 if (task.index === this._editingIndex) {
                     const editRow = this._makeEditRow(task);
-                    menu.addMenuItem(editRow.row);
+                    contentSection.addMenuItem(editRow.row);
                     // Grab focus only after the row is on stage; an actor that
                     // is not yet mapped cannot take key focus.
                     editRow.entry.grab_key_focus();
                     continue;
                 }
 
-                menu.addMenuItem(this._makeTaskRow(task,
+                contentSection.addMenuItem(this._makeTaskRow(task,
                     ti === 0, ti === tasks.length - 1));
             }
         }

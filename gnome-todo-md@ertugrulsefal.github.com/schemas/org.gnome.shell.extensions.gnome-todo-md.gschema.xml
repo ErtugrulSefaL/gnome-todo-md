@@ -24,5 +24,13 @@
         Maps a category name to a CSS color string (for example '#e01b24').
       </description>
     </key>
+    <key name="max-menu-height" type="i">
+      <default>400</default>
+      <summary>Maximum menu content height</summary>
+      <description>
+        Maximum height of the scrollable menu content area in pixels. The
+        area scrolls when its content exceeds this height.
+      </description>
+    </key>
   </schema>
 </schemalist>
