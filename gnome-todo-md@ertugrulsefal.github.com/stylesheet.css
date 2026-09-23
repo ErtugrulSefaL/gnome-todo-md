@@ -23,3 +23,19 @@
     font-weight: bold;
     padding: 4px 8px 2px 8px;
 }
+
+/* Faz 6: category tabs. The active tab gets St's :checked pseudo-class
+ * (St.Button toggle_mode + set_checked). */
+.todo-tab-bar {
+    spacing: 4px;
+    padding: 2px 0;
+}
+
+.todo-tab {
+    padding: 2px 8px;
+    font-weight: normal;
+}
+
+.todo-tab:checked {
+    font-weight: bold;
+}

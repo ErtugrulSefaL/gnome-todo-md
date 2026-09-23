@@ -124,6 +124,20 @@ export default class TodoExtension extends Extension {
     }
 
     /**
+     * Switch the active category tab. Closes any open inline interaction
+     * (locked Faz 6 decision: a tab switch must not leave an edit or add
+     * entry open). Remembered for the session (Q2=EVET); an unknown
+     * category falls back to 'Tümü' at render time.
+     *
+     * @param {string|null} categoryName - Category to show, or null for 'Tümü'.
+     */
+    _switchTo(categoryName) {
+        this._cancelEditing();
+        this._activeCategory = categoryName;
+        this._refreshTodoMenu();
+    }
+
+    /**
      * Resolve the todo file path from the GSettings value (empty value and
      * '~' forms fall back / expand — see Storage.resolveTodoPath).
      *
@@ -169,7 +183,51 @@ export default class TodoExtension extends Extension {
             sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
-        for (const section of sections) {
+        // Faz 6: tab bar. 'Tümü' shows every category (default); the other
+        // tabs filter the content to one category. The content model is
+        // unchanged — a tab only picks what gets rendered.
+        const ALL_TAB = null;
+        if (this._activeCategory === undefined) {
+            this._activeCategory = ALL_TAB;
+        }
+        // Drop the remembered selection if its category no longer exists.
+        if (this._activeCategory !== ALL_TAB
+            && !sections.some(section => section.name === this._activeCategory)) {
+            this._activeCategory = ALL_TAB;
+        }
+
+        if (sections.length > 1) {
+            const tabBar = new PopupMenu.PopupBaseMenuItem(
+                {activate: false, can_focus: false});
+            const box = new St.BoxLayout({style_class: 'todo-tab-bar'});
+            box.set_x_expand(true);
+            const tabs = [{name: null, label: 'Tümü'}]
+                .concat(sections.map(section => ({
+                    name: section.name, label: section.name})));
+            for (const tab of tabs) {
+                const button = new St.Button({
+                    label: tab.label,
+                    style_class: 'todo-tab button',
+                    toggle_mode: true,
+                });
+                button.set_checked(this._activeCategory === tab.name);
+                button.set_x_expand(true);
+                button.connect('clicked', () => {
+                    this._switchTo(tab.name);
+                });
+                box.add_child(button);
+            }
+            const tabItem = new PopupMenu.PopupBaseMenuItem(
+                {activate: false, can_focus: false});
+            tabItem.add_child(box);
+            menu.addMenuItem(tabItem);
+        }
+
+        const visibleSections = this._activeCategory === ALL_TAB
+            ? sections
+            : sections.filter(section => section.name === this._activeCategory);
+
+        for (const section of visibleSections) {
             // Non-reactive header + interactive child: the proven entryItem
             // pattern (an interactive child inside a non-reactive row).
             const header = new PopupMenu.PopupBaseMenuItem(
