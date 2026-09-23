@@ -4,6 +4,13 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.10.0 - 2026-09-23
+
+### Changed
+- UI labels and the fallback category name are English: the default tab is
+  `All` and tasks added without a category UI land under `## General`
+  (existing files keep their own category names).
+
 ## 0.9.0 - 2026-09-23
 
 ### Added
