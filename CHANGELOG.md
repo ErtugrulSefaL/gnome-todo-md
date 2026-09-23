@@ -4,6 +4,23 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.9.0 - 2026-09-23
+
+### Added
+- Scrollable menu content: the menu content area (headers + tasks) scrolls
+  once it exceeds the height limit; the tab bar stays fixed above it
+  (the shell's own `PopupSubMenu` scroll pattern, `popupMenu.js` 46.0).
+- `max-menu-height` setting (200–2000 px, default 400) in the preferences —
+  applied live, without a Shell reload.
+
+### Changed
+- The scroll area is a persistent part of the menu: content is refilled in
+  place, so the scroll position survives every action (edit, move, add,
+  delete). A tab switch intentionally starts at the top.
+
+### Fixed
+- The tab bar stays the first row above the scroll area.
+
 ## 0.8.0 - 2026-09-23
 
 ### Added
