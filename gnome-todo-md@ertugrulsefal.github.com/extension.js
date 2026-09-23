@@ -373,7 +373,9 @@ export default class TodoExtension extends Extension {
         // default. Without a limit the menu grows unbounded.
         this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
         this._scrollWrapper.clip_to_allocation = true;
-        this._scrollWrapper.add_child(contentSection);
+        // PopupMenuSection is a PopupMenuBase (not an actor); its box IS the
+        // actor (section.actor === section.box, popupMenu.js 46.0 :1193).
+        this._scrollWrapper.add_child(contentSection.actor);
         menu.box.add_child(this._scrollWrapper);
 
         const visibleSections = this._activeCategory === ALL_TAB
