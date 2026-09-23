@@ -207,6 +207,8 @@ export default class TodoExtension extends Extension {
     _switchTo(categoryName) {
         this._cancelEditing();
         this._activeCategory = categoryName;
+        // Different content: start the scroll view at the top.
+        this._scrollToTopNext = true;
         this._refreshTodoMenu();
     }
 
@@ -237,9 +239,17 @@ export default class TodoExtension extends Extension {
         menu.removeAll();
         // The scroll wrapper is added via menu.box (not addMenuItem), so
         // removeAll() does not track it — destroy it explicitly.
+        let previousScroll = 0;
         if (this._scrollWrapper) {
+            previousScroll = this._scrollWrapper.vadjustment.value;
             this._scrollWrapper.destroy();
             this._scrollWrapper = null;
+        }
+        if (this._scrollToTopNext) {
+            // A tab switch re-renders different content: start at the top
+            // instead of restoring the old offset.
+            previousScroll = 0;
+            this._scrollToTopNext = false;
         }
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
@@ -377,6 +387,20 @@ export default class TodoExtension extends Extension {
         // actor (section.actor === section.box, popupMenu.js 46.0 :1193).
         this._scrollWrapper.add_child(contentSection.actor);
         menu.box.add_child(this._scrollWrapper);
+
+        // Restore the scroll position across rebuilds: edits, moves and adds
+        // must not jump the view back to the top (user-reported). The idle
+        // runs after layout so the adjustment has a real range; the guard
+        // tolerates a further rebuild having replaced the wrapper.
+        const pendingScroll = previousScroll;
+        if (pendingScroll > 0) {
+            GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                if (this._scrollWrapper) {
+                    this._scrollWrapper.vadjustment.value = pendingScroll;
+                }
+                return GLib.SOURCE_REMOVE;
+            });
+        }
 
         const visibleSections = this._activeCategory === ALL_TAB
             ? sections
