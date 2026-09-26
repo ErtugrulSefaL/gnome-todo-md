@@ -56,10 +56,6 @@ export default class TodoExtension extends Extension {
                     this._indicator.menu.box.set_style(
                         `width: ${w}px; max-width: ${w}px;`);
                 }
-                if (this._tabBar) {
-                    this._tabBar.scroller.set_style(
-                        `min-width: ${w}px; max-width: ${w}px;`);
-                }
                 if (this._scrollWrapper) {
                     this._scrollWrapper.set_style(
                         `max-height: ${this._settings.get_int('max-menu-height')}px;`
@@ -377,8 +373,7 @@ export default class TodoExtension extends Extension {
             const bar = new St.BoxLayout({style_class: 'todo-tab-bar'});
             bar.set_x_expand(true);
             bar.set_reactive(true); // receive scroll events
-            const tabsBox = new St.BoxLayout();
-            const maxW = this._settings.get_int('menu-width');
+                    const tabsBox = new St.BoxLayout();
             const tabScroller = new St.ScrollView({
                 hscrollbar_policy: St.PolicyType.AUTOMATIC,
                 vscrollbar_policy: St.PolicyType.NEVER,
@@ -391,11 +386,13 @@ export default class TodoExtension extends Extension {
             });
             tabScroller.add_child(tabsBox);
             tabScroller.set_x_expand(true);
-            // FIXED width: CSS min-width OVERWRITES the computed minimum
-            // (st-theme-node.c :3936) while max-width clamps the natural
-            // (:3944). Without min-width the tabs' own (large) minimum
-            // propagates up and widens the menu (user test 6).
-            tabScroller.set_style(`min-width: ${maxW}px; max-width: ${maxW}px;`);
+            // NOTE: no min-width/max-width here — the menu.box itself is
+            // force-sized (width + max-width, see _refreshTodoMenu), and a
+            // min-width on the scroller would eat the full menu width and
+            // push the far-right '+' button out of view (user report). The
+            // scroller just expands into the remaining space; once the tabs'
+            // minimum width exceeds that allocation the horizontal
+            // scrollbar engages.
             // Mouse wheel anywhere on the tab bar scrolls it horizontally.
             // UP = scroll left, DOWN = scroll right; SMOOTH deltas supported.
             bar.connect('scroll-event', (actor, event) => {
