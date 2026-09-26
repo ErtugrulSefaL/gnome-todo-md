@@ -313,6 +313,46 @@ function testStaticChecks() {
         readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/gschemas.compiled') !== '',
         'getSettings() loads the schemas/ dir from the extension directory');
 
+    // Faz 6.6: fixed menu width, always-scroll tab bar, fixed checkbox area.
+    record('static: the persistent tab bar is a plain actor (NO PopupBaseMenuItem)',
+        /this\._tabBar = \{bar, tabsBox/.test(ui)
+            && /menu\.box\.remove_child\(this\._tabBar\.bar\)/.test(ui),
+        'menu.box children with a PopupBaseMenuItem _delegate are DESTROYED by '
+        + 'menu.removeAll() (popupMenu.js :827-850) — shell SEGV, 2026-09-26');
+    record('static: schema declares menu-width with a described default',
+        /<key name="menu-width" type="i">[\s\S]*?<default>500<\/default>[\s\S]*?<description>[\s\S]+?<\/description>/.test(
+            readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.gnome-todo-md.gschema.xml')),
+        'menu-width is a described int key defaulting to 500');
+    record('static: no tab-bar-mode remnants (mode removed entirely)',
+        !/tab-bar-mode|tabModes|scrollMode/.test(ui + '\n'
+            + readFileText('gnome-todo-md@ertugrulsefal.github.com/prefs.js'))
+            && !/tab-bar-mode/.test(
+                readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.gnome-todo-md.gschema.xml')),
+        'shrink mode and the mode setting were removed (user decision)');
+    record('static: tab bar handles wheel scrolling anywhere (scroll-event)',
+        /scroll-event/.test(ui) && /hadjustment/.test(ui),
+        'wheel over the tab bar scrolls horizontally, not only the scrollbar');
+    record('static: task rows have a fixed-width checkbox area',
+        /todo-check/.test(ui) && /todo-check/.test(css)
+            && !/setOrnament\(PopupMenu\.Ornament\.CHECK\)/.test(ui),
+        'checkbox is a fixed-width actor, never appended text (user decision)');
+    record('static: task/header labels ellipsize via clutter_text (never CSS)',
+        /clutter_text\.set_ellipsize\(Pango\.EllipsizeMode\.END\)/.test(ui)
+            && !/\.todo-text\s*{[^}]*text-overflow/.test(css),
+        'Pango.EllipsizeMode on the Clutter text (verified pattern)');
+    record('static: hscrollbar_policy inside the always-on tab scroller',
+        (ui.match(/hscrollbar_policy:/g) || []).length === 1,
+        'the tab bar is unconditionally horizontally scrollable');
+    record('static: scroll-mode tab labels use EllipsizeMode.NONE',
+        /EllipsizeMode\.NONE/.test(ui),
+        'St.Label defaults to END (st-label.c :336); an ellipsized label has '
+        + 'a small min width so the scroll cap never engages (user test)');
+    record('static: text actors are width-capped (ellipsize needs constraint)',
+        /max-width: \$\{this\._settings\.get_int\('menu-width'\)\}px/.test(ui)
+            && !/max-width:\s*28em/.test(css)
+            && !/max-width:\s*28em/.test(ui),
+        'width cap comes from the menu-width setting, not a fixed value');
+
     // Faz 4: single-interaction invariant — every edit-state reset pairs the
     // two fields, and opening an edit closes the add entry (the exact bug
     // fixed in 0ab4e16: _startEditing missed the _addingCategory reset).
@@ -705,6 +745,12 @@ function testCategoryColors() {
             === ''
         && Storage.categoryColorCss('İş', {'İş': 'red; background: url(x)'})
             === '', '');
+
+    record('categoryColorHex: valid hex passes through (Faz 6.6 checkbox fill)',
+        Storage.categoryColorHex('İş', map) === '#e01b24'
+        && Storage.categoryColorHex('Yok', map) === null
+        && Storage.categoryColorHex('İş', {'İş': 'url(evil)'}) === null
+        && Storage.categoryColorHex('İş', null) === null, '');
 
     record('pruneCategoryColors: dead keys are removed',
         JSON.stringify(Storage.pruneCategoryColors(map, ['İş', 'Notes']))
