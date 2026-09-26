@@ -4,6 +4,15 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.1 - 2026-09-26
+
+### Fixed
+- The far-right `+` (new-category) button of the tab bar was pushed out of
+  view: the tab scroller's `min-width` ate the full fixed menu width. The
+  scroller now just expands into the remaining space (the menu box itself
+  is force-sized), and the horizontal scrollbar still engages when the
+  tabs overflow.
+
 ## 0.11.0 - 2026-09-26
 
 ### Added
