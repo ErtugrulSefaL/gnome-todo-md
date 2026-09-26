@@ -81,6 +81,18 @@ export function categoryColorCss(name, colors) {
 }
 
 /**
+ * The validated hex color of a category (or null when it has none). Pure;
+ * used where the raw hex is needed (e.g. the task checkbox fill, Faz 6.6:
+ * the done checkbox is filled with the category color).
+ */
+export function categoryColorHex(name, colors) {
+    const color = colors ? colors[name] : null;
+    return typeof color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(color)
+        ? color
+        : null;
+}
+
+/**
  * Convert 8-bit RGB values to a '#rrggbb' string (Faz 5; used by prefs when
  * a Gdk.RGBA changes).
  *
