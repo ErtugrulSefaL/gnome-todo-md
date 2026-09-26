@@ -24,6 +24,15 @@
         Maps a category name to a CSS color string (for example '#e01b24').
       </description>
     </key>
+    <key name="menu-width" type="i">
+      <default>500</default>
+      <summary>Fixed menu content width</summary>
+      <description>
+        Fixed width of the menu content in pixels. Long task texts are
+        truncated with an ellipsis at this width and the category tab bar
+        scrolls horizontally once it exceeds it.
+      </description>
+    </key>
     <key name="max-menu-height" type="i">
       <default>400</default>
       <summary>Maximum menu content height</summary>
