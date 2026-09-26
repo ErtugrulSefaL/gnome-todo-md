@@ -2,6 +2,7 @@ import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+import Pango from 'gi://Pango';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -36,13 +37,35 @@ export default class TodoExtension extends Extension {
             () => {
                 this._refreshTodoMenu();
             });
-        // Re-render when the height limit changes (inline max-height).
+        // Re-render when the height or width changes (inline styles).
         this._heightSignal = this._settings.connect('changed::max-menu-height',
             () => {
                 if (this._scrollWrapper) {
                     this._scrollWrapper.set_style(
-                        `max-height: ${this._settings.get_int('max-menu-height')}px;`);
+                        `max-height: ${this._settings.get_int('max-menu-height')}px;`
+                        + ` min-width: ${this._settings.get_int('menu-width')}px;`);
                 }
+            });
+        // Re-render when the menu width changes: the menu box carries the
+        // forced width, the persistent tab scroller its min/max pair —
+        // both re-applied inline, then the menu rebuilds.
+        this._widthSignal = this._settings.connect('changed::menu-width',
+            () => {
+                const w = this._settings.get_int('menu-width');
+                if (this._indicator) {
+                    this._indicator.menu.box.set_style(
+                        `width: ${w}px; max-width: ${w}px;`);
+                }
+                if (this._tabBar) {
+                    this._tabBar.scroller.set_style(
+                        `min-width: ${w}px; max-width: ${w}px;`);
+                }
+                if (this._scrollWrapper) {
+                    this._scrollWrapper.set_style(
+                        `max-height: ${this._settings.get_int('max-menu-height')}px;`
+                        + ` min-width: ${w}px;`);
+                }
+                this._refreshTodoMenu();
             });
 
         // Create a panel button.
@@ -101,10 +124,18 @@ export default class TodoExtension extends Extension {
             this._settings.disconnect(this._heightSignal);
             this._heightSignal = null;
         }
+        if (this._widthSignal) {
+            this._settings.disconnect(this._widthSignal);
+            this._widthSignal = null;
+        }
         if (this._scrollWrapper) {
             this._scrollWrapper.destroy();
             this._scrollWrapper = null;
             this._contentSection = null;
+        }
+        if (this._tabBar) {
+            this._tabBar.bar.destroy();
+            this._tabBar = null;
         }
         if (this._indicator) {
             this._indicator.menu.disconnect(this._openSignal);
@@ -166,6 +197,7 @@ export default class TodoExtension extends Extension {
             style_class: 'todo-edit-entry',
         });
         entry.set_x_expand(true);
+        this._capWidth(entry);
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 const name = e.get_text().trim();
@@ -215,8 +247,9 @@ export default class TodoExtension extends Extension {
     _switchTo(categoryName) {
         this._cancelEditing();
         this._activeCategory = categoryName;
-        // Different content: start the scroll view at the top.
-        this._scrollToTopNext = true;
+        // NOTE: the scroll position is deliberately NOT reset here
+        // (Faz 6.6: selecting a category must not jump to the top — the
+        // persistent wrapper keeps both scroll offsets across refreshes).
         this._refreshTodoMenu();
     }
 
@@ -245,6 +278,15 @@ export default class TodoExtension extends Extension {
     _refreshTodoMenu() {
         const menu = this._indicator.menu;
         menu.removeAll();
+        // FIXED menu width (Faz 6.6): the BoxPointer takes its size from
+        // the menu's NATURAL width; min-width alone only raises the
+        // minimum (st-theme-node.c :3936) and never widens the natural
+        // (:3943), so short content still shrank the menu (user test 5).
+        // CSS 'width' FORCES the preferred width to W and 'max-width'
+        // clamps the natural down to the same W — the frame can then
+        // never be narrower or wider than W.
+        const menuWidth = this._settings.get_int('menu-width');
+        menu.box.set_style(`width: ${menuWidth}px; max-width: ${menuWidth}px;`);
         // Persistent scroll wrapper (created once, lives as long as the
         // extension is enabled): content is cleared and refilled per
         // refresh, so the vadjustment — and the scroll position — survive
@@ -258,7 +300,14 @@ export default class TodoExtension extends Extension {
                 vscrollbar_policy: St.PolicyType.AUTOMATIC,
                 x_expand: true,
             });
-            this._scrollWrapper.set_style(`max-height: ${maxMenuHeight}px;`);
+            // Fixed width (single GSettings value, min == max): the menu
+            // must not widen with content nor shrink with short categories
+            // (Faz 6.6: single adjustable width, user decision). The menu
+            // box itself is force-sized in _refreshTodoMenu (width +
+            // max-width); this min-width keeps the wrapper filling it.
+            const menuWidth = this._settings.get_int('menu-width');
+            this._scrollWrapper.set_style(
+                `max-height: ${maxMenuHeight}px; min-width: ${menuWidth}px;`);
             this._scrollWrapper.clip_to_allocation = true;
             this._scrollWrapper.add_child(this._contentSection.actor);
         } else {
@@ -314,20 +363,113 @@ export default class TodoExtension extends Extension {
             this._activeCategory = ALL_TAB;
         }
 
-        const tabBar = new PopupMenu.PopupBaseMenuItem(
-            {activate: false, can_focus: false});
-        const box = new St.BoxLayout({style_class: 'todo-tab-bar'});
-        box.set_x_expand(true);
+        // Faz 6.6: the tab bar is PERSISTENT (created once, like the
+        // content scroll wrapper) and ALWAYS horizontally scrollable —
+        // only the tab buttons are refilled per refresh, so the
+        // hadjustment (horizontal scroll position) survives every
+        // rebuild, including category switches (user test 4).
+        // CRITICAL: it must be a PLAIN actor, NOT a PopupBaseMenuItem —
+        // menu.box children with a PopupBaseMenuItem _delegate are
+        // destroyed by menu.removeAll() (popupMenu.js 46.0 :827-850
+        // _getMenuItems + destroy), which crashed the shell (SEGV,
+        // journal 2026-09-26 21:26).
+        if (!this._tabBar) {
+            const bar = new St.BoxLayout({style_class: 'todo-tab-bar'});
+            bar.set_x_expand(true);
+            bar.set_reactive(true); // receive scroll events
+            const tabsBox = new St.BoxLayout();
+            const maxW = this._settings.get_int('menu-width');
+            const tabScroller = new St.ScrollView({
+                hscrollbar_policy: St.PolicyType.AUTOMATIC,
+                vscrollbar_policy: St.PolicyType.NEVER,
+                // CRITICAL: St's own wheel handler consumes scroll events
+                // (st-scroll-view.c :751 returns TRUE) and routes the
+                // wheel to the VADJUSTMENT only (:771) — useless here
+                // (vscrollbar NEVER). Disabling it lets our handler on
+                // `bar` receive the wheel instead.
+                enable_mouse_scrolling: false,
+            });
+            tabScroller.add_child(tabsBox);
+            tabScroller.set_x_expand(true);
+            // FIXED width: CSS min-width OVERWRITES the computed minimum
+            // (st-theme-node.c :3936) while max-width clamps the natural
+            // (:3944). Without min-width the tabs' own (large) minimum
+            // propagates up and widens the menu (user test 6).
+            tabScroller.set_style(`min-width: ${maxW}px; max-width: ${maxW}px;`);
+            // Mouse wheel anywhere on the tab bar scrolls it horizontally.
+            // UP = scroll left, DOWN = scroll right; SMOOTH deltas supported.
+            bar.connect('scroll-event', (actor, event) => {
+                const adj = tabScroller.hadjustment;
+                if (!adj) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                const direction = event.get_scroll_direction();
+                if (direction === Clutter.ScrollDirection.SMOOTH) {
+                    // Vertical wheel produces dy; horizontal wheel/trackpad dx.
+                    const [dx, dy] = event.get_scroll_delta();
+                    adj.value += (dx + dy) * adj.step_increment;
+                    return Clutter.EVENT_STOP;
+                }
+                if (direction === Clutter.ScrollDirection.DOWN) {
+                    adj.value += adj.step_increment;
+                    return Clutter.EVENT_STOP;
+                }
+                if (direction === Clutter.ScrollDirection.UP) {
+                    adj.value -= adj.step_increment;
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+            // Far-right '+' — the new-category entry point (fixed, outside
+            // the scroller so it is always reachable).
+            const addCatBtn = new St.Button({
+                style_class: 'todo-icon-button button',
+                child: new St.Icon({
+                    icon_name: 'list-add-symbolic',
+                    style_class: 'system-status-icon',
+                }),
+            });
+            addCatBtn.set_x_align(Clutter.ActorAlign.END);
+            addCatBtn.connect('clicked', () => {
+                this._cancelEditing();
+                this._addingNewCategory = !this._addingNewCategory;
+                this._refreshTodoMenu();
+            });
+            bar.add_child(tabScroller);
+            bar.add_child(addCatBtn);
+            this._tabBar = {bar, tabsBox, scroller: tabScroller};
+        } else {
+            // Detach and clear the tab buttons; the scroller (and its
+            // hadjustment) survive.
+            menu.box.remove_child(this._tabBar.bar);
+            this._tabBar.tabsBox.remove_all_children();
+        }
+
+        // Re-attach the persistent tab bar as the FIRST row (refill only;
+        // the scroller's hadjustment — horizontal scroll — survives).
+        menu.box.add_child(this._tabBar.bar);
+        // Refill the tab buttons into the persistent tabsBox (the scroller
+        // itself survives — its hadjustment keeps the scroll position).
+        // Tab labels keep EllipsizeMode.NONE: an ellipsized label reports a
+        // small MINIMUM width, so the scroll cap never engages and the tabs
+        // get squeezed instead of scrolling (St.Label defaults to END,
+        // st-label.c :336 — user-tested).
+        const tabsBox = this._tabBar.tabsBox;
         if (sections.length > 1) {
             const tabs = [{name: null, label: 'All'}]
                 .concat(sections.map(section => ({
                     name: section.name, label: section.name})));
             for (const tab of tabs) {
                 const button = new St.Button({
-                    label: tab.label,
                     style_class: 'todo-tab button',
                     toggle_mode: true,
                 });
+                // St.Button has NO clutter_text of its own (runtime error
+                // 'button.clutter_text is undefined', journal 2026-09-26);
+                // the child St.Label owns the text.
+                const tabLabel = new St.Label({text: tab.label});
+                button.set_child(tabLabel);
+                tabLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
                 // Tabs carry the category color too (the content header is
                 // filtered away when a tab is inactive).
                 if (tab.name) {
@@ -337,47 +479,27 @@ export default class TodoExtension extends Extension {
                     }
                 }
                 button.set_checked(this._activeCategory === tab.name);
-                button.set_x_expand(true);
                 button.connect('clicked', () => {
                     this._switchTo(tab.name);
                 });
-                box.add_child(button);
+                tabsBox.add_child(button);
             }
         } else {
             // Single category: show it as a (checked) tab for visual balance.
             const button = new St.Button({
-                label: sections[0].name,
                 style_class: 'todo-tab button',
                 toggle_mode: true,
             });
+            const tabLabel = new St.Label({text: sections[0].name});
+            button.set_child(tabLabel);
+            tabLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
             if (prunedColors[sections[0].name]) {
                 button.set_style(
                     Storage.categoryColorCss(sections[0].name, prunedColors));
             }
             button.set_checked(true);
-            box.add_child(button);
+            tabsBox.add_child(button);
         }
-
-        // Far-right '+' — the new-category entry point.
-        const addCatBtn = new St.Button({
-            style_class: 'todo-icon-button button',
-            child: new St.Icon({
-                icon_name: 'list-add-symbolic',
-                style_class: 'system-status-icon',
-            }),
-        });
-        addCatBtn.set_x_align(Clutter.ActorAlign.END);
-        addCatBtn.connect('clicked', () => {
-            this._cancelEditing();
-            this._addingNewCategory = !this._addingNewCategory;
-            this._refreshTodoMenu();
-        });
-        box.add_child(addCatBtn);
-
-        const tabItem = new PopupMenu.PopupBaseMenuItem(
-            {activate: false, can_focus: false});
-        tabItem.add_child(box);
-        menu.addMenuItem(tabItem);
 
         // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {
@@ -411,12 +533,15 @@ export default class TodoExtension extends Extension {
                 text: section.name,
                 style_class: 'todo-category-header',
             });
+            // Same width cap as task labels (menu-width, GSettings) + fixed
+            // ellipsize: a long category name must not widen the menu.
+            label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
             // Q1=A: the color applies to the header TEXT via inline style
             // (set_style verified in the offline mirror, st14 st.widget).
             const colorCss = Storage.categoryColorCss(section.name, prunedColors);
-            if (colorCss) {
-                label.set_style(colorCss);
-            }
+            const headerStyle
+                = `max-width: ${this._settings.get_int('menu-width')}px;`;
+            label.set_style(headerStyle + (colorCss || ''));
             label.set_x_expand(true);
             header.add_child(label);
 
@@ -433,6 +558,11 @@ export default class TodoExtension extends Extension {
                 this._toggleAdd(categoryName);
             });
             header.add_child(addBtn);
+            // Faz 6.6: every content row fills the FIXED wrapper width — without
+            // x_expand a short category's rows keep their natural width and
+            // the right side collapses (the menu 'shrinks' on switch — user
+            // test 5).
+            header.set_x_expand(true);
             contentSection.addMenuItem(header);
 
             // The active add entry renders directly under its category
@@ -440,6 +570,7 @@ export default class TodoExtension extends Extension {
             // open adders can never coexist (single-add invariant).
             if (this._addingCategory === categoryName) {
                 const addRow = this._makeAddRow(categoryName);
+                addRow.row.set_x_expand(true);
                 contentSection.addMenuItem(addRow.row);
                 // Grab focus only after the row is on stage.
                 addRow.entry.grab_key_focus();
@@ -453,6 +584,7 @@ export default class TodoExtension extends Extension {
                 // _editingIndex, so two open editors can never coexist.
                 if (task.index === this._editingIndex) {
                     const editRow = this._makeEditRow(task);
+                    editRow.row.set_x_expand(true);
                     contentSection.addMenuItem(editRow.row);
                     // Grab focus only after the row is on stage; an actor that
                     // is not yet mapped cannot take key focus.
@@ -460,18 +592,16 @@ export default class TodoExtension extends Extension {
                     continue;
                 }
 
-                contentSection.addMenuItem(this._makeTaskRow(task,
-                    ti === 0, ti === tasks.length - 1));
+                const taskRow = this._makeTaskRow(task,
+                    ti === 0, ti === tasks.length - 1, section.name,
+                    prunedColors);
+                taskRow.set_x_expand(true);
+                contentSection.addMenuItem(taskRow);
             }
         }
 
-        // A tab switch re-renders different content: start at the top. The
-        // adjustment is live here (wrapper persists), so a direct set works
-        // without any idle hack.
-        if (this._scrollToTopNext) {
-            this._scrollWrapper.vadjustment.value = 0;
-            this._scrollToTopNext = false;
-        }
+        // (The scroll position is never reset: the persistent wrapper keeps
+        // it across tab switches — Faz 6.6 decision.)
     }
 
     /**
@@ -485,49 +615,100 @@ export default class TodoExtension extends Extension {
      *   (the down button is hidden at the category's bottom edge).
      * @returns {PopupMenu.PopupBaseMenuItem} The task row.
      */
-    _makeTaskRow(task, isFirst, isLast) {
+    /**
+     * Constrain an actor's width to the GSettings menu-width cap
+     * (fixed default + user-adjustable). Used by the inline add/edit/
+     * new-category entries so a long text being typed cannot widen the
+     * menu (user test: 'not ekleme sırasında ... büyüyor').
+     * @param {Clutter.Actor} actor - The actor to cap.
+     */
+    _capWidth(actor) {
+        actor.set_style(
+            `max-width: ${this._settings.get_int('menu-width')}px;`);
+    }
+
+    _makeTaskRow(task, isFirst, isLast, categoryName, colors) {
         const index = task.index;
         const row = new PopupMenu.PopupBaseMenuItem();
         const label = new St.Label({
             text: task.text,
             style_class: task.done ? 'todo-text todo-done' : 'todo-text',
         });
+        // Fixed behavior (Faz 6.6 decision: A is NOT user-configurable):
+        // long task texts truncate with an ellipsis instead of widening the
+        // menu. The full text stays reachable via the row's edit button.
+        // Width from GSettings menu-width (inline style; CSS max-width
+        // + Pango.EllipsizeMode.END = the constrained-width pattern).
+        label.set_style(
+            `max-width: ${this._settings.get_int('menu-width')}px;`);
+        label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
+
+        // Fixed-width checkbox area at the START of every row (Faz 6.6:
+        // the check never appends to the text, so checking a task can
+        // never widen the menu). A 16x16 circle in BOTH states: empty
+        // outline when pending, filled with the CATEGORY COLOR and a
+        // white check when done (St.Bin centers the child; St.Widget has
+        // no layout, which is why the check drifted — user test).
+        const hexColor = Storage.categoryColorHex(categoryName, colors);
+        const checkBox = new St.Bin({
+            style_class: task.done ? 'todo-check todo-check-done' : 'todo-check',
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
         if (task.done) {
-            row.setOrnament(PopupMenu.Ornament.CHECK);
+            checkBox.set_child(new St.Icon({
+                icon_name: 'object-select-symbolic',
+                style_class: 'todo-check-icon',
+            }));
+        }
+        if (task.done && hexColor) {
+            // Category color fill (validated hex only — same guard as the
+            // inline header colors).
+            checkBox.set_style(
+                `background-color: ${hexColor}; border-color: transparent;`);
+        }
+        row.add_child(checkBox);
+
+        if (task.done) {
             // Fade completed rows via actor opacity (CSS opacity is not
             // reliably honored by St.Label); 0.6 * 255.
             label.opacity = 153;
         }
 
         // Move up/down within the category (locked: no cross-category moves).
-        // Hidden at the category's edges; go-up/go-down-symbolic verified in
-        // the local Adwaita icon theme.
-        let upBtn = null;
-        let downBtn = null;
-        if (!isFirst) {
-            upBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                child: new St.Icon({
-                    icon_name: 'go-up-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            upBtn.connect('clicked', () => {
-                this._moveTask(index, 'up');
-            });
+        // ALWAYS created and allocated (go-up/go-down-symbolic verified in
+        // the local Adwaita icon theme) but INSENSITIVE at the category's
+        // edges: rows must keep a constant button area so every task line
+        // ends at the same x position regardless of its position (user
+        // test: rows at the edges had different widths).
+        const upBtn = new St.Button({
+            style_class: 'todo-icon-button button',
+            child: new St.Icon({
+                icon_name: 'go-up-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        upBtn.set_reactive(!isFirst);
+        if (isFirst) {
+            upBtn.set_style('opacity: 0.4;');
         }
-        if (!isLast) {
-            downBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                child: new St.Icon({
-                    icon_name: 'go-down-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            downBtn.connect('clicked', () => {
-                this._moveTask(index, 'down');
-            });
+        upBtn.connect('clicked', () => {
+            this._moveTask(index, 'up');
+        });
+        const downBtn = new St.Button({
+            style_class: 'todo-icon-button button',
+            child: new St.Icon({
+                icon_name: 'go-down-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        downBtn.set_reactive(!isLast);
+        if (isLast) {
+            downBtn.set_style('opacity: 0.4;');
         }
+        downBtn.connect('clicked', () => {
+            this._moveTask(index, 'down');
+        });
 
         // Delete button pinned to the right of the task text.
         const delBtn = new St.Button({
@@ -559,22 +740,14 @@ export default class TodoExtension extends Extension {
         // (Clutter uses x_expand, not GTK's hexpand.)
         label.set_x_expand(true);
         label.set_x_align(Clutter.ActorAlign.START);
-        if (upBtn !== null) {
-            upBtn.set_x_align(Clutter.ActorAlign.END);
-        }
-        if (downBtn !== null) {
-            downBtn.set_x_align(Clutter.ActorAlign.END);
-        }
+        upBtn.set_x_align(Clutter.ActorAlign.END);
+        downBtn.set_x_align(Clutter.ActorAlign.END);
         editBtn.set_x_align(Clutter.ActorAlign.END);
         delBtn.set_x_align(Clutter.ActorAlign.END);
 
         row.add_child(label);
-        if (upBtn !== null) {
-            row.add_child(upBtn);
-        }
-        if (downBtn !== null) {
-            row.add_child(downBtn);
-        }
+        row.add_child(upBtn);
+        row.add_child(downBtn);
         row.add_child(editBtn);
         row.add_child(delBtn);
 
@@ -647,6 +820,7 @@ export default class TodoExtension extends Extension {
         // committing the edit rewrites the whole line, and raw keeps the tags.
         entry.set_text(task.raw);
         entry.set_x_expand(true);
+        this._capWidth(entry);
         entry.connect('key-release-event', (e, event) => {
             const symbol = event.get_key_symbol();
             if (symbol === Clutter.KEY_Return) {
@@ -719,6 +893,7 @@ export default class TodoExtension extends Extension {
             style_class: 'todo-edit-entry',
         });
         entry.set_x_expand(true);
+        this._capWidth(entry);
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 this._addTask(e.get_text(), categoryName);

@@ -77,6 +77,23 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         settings.bind('max-menu-height', heightRow, 'value',
             Gio.SettingsBindFlags.DEFAULT);
         group.add(heightRow);
+
+        // Fixed menu content width (single adjustable value, no min/max
+        // split — Faz 6.6 decision). Long task texts truncate with an
+        // ellipsis at this width; the tab bar scrolls horizontally.
+        const widthRow = new Adw.SpinRow({
+            title: 'Menu width',
+            subtitle: 'Fixed menu width in pixels (default 500)',
+            adjustment: new Gtk.Adjustment({
+                lower: 300,
+                upper: 2000,
+                step_increment: 50,
+                value: settings.get_int('menu-width'),
+            }),
+        });
+        settings.bind('menu-width', widthRow, 'value',
+            Gio.SettingsBindFlags.DEFAULT);
+        group.add(widthRow);
     }
 
     _buildColorsPage(window, settings) {
