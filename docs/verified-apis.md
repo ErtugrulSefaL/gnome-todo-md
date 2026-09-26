@@ -84,6 +84,12 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 - Shell **JS UI modules** (PopupMenu, PanelMenu, Main, MessageTray) are not GIR
   docs at all — verify in gnome-shell source (`js/ui/*.js`) at the version tag.
 
+| 2026-09-26 | v0.11.0 | `menu.removeAll()` destroys every `menu.box` child whose `_delegate` is a PopupBaseMenuItem (popupMenu.js 46.0 :827-850 `_getMenuItems` → `destroy()`) — persistent rows on `menu.box` must be plain actors | journal SEGV 21:26:11 (`clutter_actor_remove_child` assertion + disposed-object access); fixed + static guard |
+| 2026-09-26 | v0.11.0 | CSS `min-width` only raises the computed minimum (`st-theme-node.c :3936`); `width` raises the natural (`:3943`), `max-width` clamps it (`:3944-45`) — a fixed popup frame needs `width` + `max-width` on `menu.box` | source + user test (menu shrank with short content) |
+| 2026-09-26 | v0.11.0 | St.Label's internal Clutter.Text defaults to PANGO_ELLIPSIZE_END (`st-label.c :336`); ellipsized labels report a small min width → scroll caps squeeze instead of scrolling; horizontal-scroll content needs `EllipsizeMode.NONE` | source + user test |
+| 2026-09-26 | v0.11.0 | StScrollView's scroll-event handler consumes wheel events (`st-scroll-view.c :751` returns TRUE) and routes UP/DOWN to the VADJUSTMENT only (`:771`); horizontal wheel needs `enable-mouse-scrolling: false` + own `scroll-event` handler | source + user test |
+
+
 ## Pending (verify before writing, when the phase starts)
 
 - Phase 2 (categorization/ordering/tags): parser/serializer are pure `storage.js`
@@ -98,3 +104,4 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
   `_editingIndex = -1` invariant used by add/toggle/delete (single-edit rule).
 - Phase 4 (keybinding): `Shell.util`? / metadata `keybindings` + Settings schema —
   verify against gjs.guide + extension docs before implementing.
+
