@@ -16,13 +16,20 @@ it simple: one markdown file, live panel menu, nothing else.
 ## Features
 
 - Panel indicator with a popup menu listing your tasks from `~/todo.md`
-- **Tabs**: a permanent tab bar (`All` + one tab per category) filters the
-  menu to a single category; the active tab is remembered for the session.
-  A **`+` at the far right** creates a new category (auto-colored from the
+- **Fixed menu width** (user-adjustable): the menu frame never widens or
+  shrinks with content; long texts truncate with an ellipsis
+- **Tabs**: a permanent, horizontally scrollable tab bar (`All` + one tab
+  per category) filters the menu to a single category; the scroll position
+  survives every rebuild and the mouse wheel scrolls the bar anywhere. A
+  **`+` at the far right** creates a new category (auto-colored from the
   palette, in order, wrapping around); tabs and headers carry the category
   color
 - **Scrollable menu**: content taller than the configured limit scrolls;
-  the tab bar stays fixed and the scroll position survives every action
+  the tab bar stays fixed and both scroll positions survive every action
+  (including category switches)
+- **Checkbox column**: every task row starts with a fixed-width circle —
+  filled with the category color + a check when done — so checking a task
+  can never widen the menu
 - **Categories**: `## Category` sections render as non-clickable headers;
   tasks are grouped under them — every category header (including empty
   ones) has a **`+` button** that opens an inline entry to add a task right
@@ -55,6 +62,9 @@ gnome-extensions prefs gnome-todo-md@ertugrulsefal.github.com
   immediately — no Shell reload needed.
 - **Max menu height** (200–2000 px, default 400) limits the scrollable
   content area.
+- **Menu width** (300–2000 px, default 500) fixes the menu frame width;
+  long task texts truncate with an ellipsis and the tab bar scrolls
+  horizontally at this width.
 
 ## The file format
 
@@ -118,9 +128,17 @@ Tests snapshot `~/todo.md` before running and restore it byte-identically.
 - [x] Phase 1 — core menu (list / add / delete / check) + live reload
 - [x] Phase 1.5 — in-place task editing
 - [x] Phase 2 — categories, within-category ordering, free-form tags
-- [ ] Phase 3 — notifications + archiving
-- [ ] Phase 4 — keyboard shortcut
-- [ ] Phase 5 — desktop-pinned widget
+- [x] Phase 3 — settings + custom todo file path
+- [x] Phase 4 — add tasks to any category (per-category `+`)
+- [x] Phase 5 — category colors (settings + preferences picker)
+- [x] Phase 6 — category tabs + in-menu category creation
+- [x] Phase 6.5 — scrollable menu with a configurable max height
+- [x] Phase 6.6 — fixed menu width, always-scrollable persistent tab bar,
+      fixed checkbox column, wheel scrolling, scroll position preservation
+- [ ] Phase 7 — live date tags (`@due`/`@start`)
+- [ ] Phase 8 — notifications + archiving
+- [ ] Phase 9 — keyboard shortcut
+- [ ] Phase 10 — desktop-pinned widget
 
 ## License
 

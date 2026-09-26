@@ -4,6 +4,37 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.0 - 2026-09-26
+
+### Added
+- Fixed menu width: the menu frame never widens or shrinks with content
+  (new `menu-width` setting, 300–2000 px, default 500 — the single width
+  value replaces any min/max split).
+- Fixed-width checkbox column at the start of every task row: an empty
+  circle when pending, filled with the category color + a white check when
+  done — checking a task can never widen the menu.
+- Mouse wheel scrolls the category tab bar horizontally anywhere on the
+  bar (St's own wheel handler routes the wheel to the vertical adjustment
+  only, so `enable-mouse-scrolling` is disabled on the tab scroller).
+
+### Changed
+- The category tab bar is always horizontally scrollable: the `shrink`
+  mode and the `tab-bar-mode` setting were removed entirely (scroll was
+  made the permanent behavior; shrink can return later if needed).
+- The tab bar is now a persistent actor: only the tab buttons are
+  refilled on refresh, so the horizontal scroll position (and the content
+  scroll position) survive every rebuild, including category switches —
+  selecting a category no longer jumps to the top.
+- More comfortable tab bar spacing/padding.
+
+### Fixed
+- The menu width no longer propagates the tabs' large minimum width: the
+  menu box is force-sized via CSS `width` + `max-width` (CSS `min-width`
+  alone never widens the natural width).
+- A shell crash (SEGV): persistent rows attached to `menu.box` must be
+  plain actors — `menu.removeAll()` destroys every `menu.box` child whose
+  `_delegate` is a `PopupBaseMenuItem` (`popupMenu.js` :827-850).
+
 ## 0.10.0 - 2026-09-23
 
 ### Changed
