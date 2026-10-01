@@ -478,6 +478,26 @@ function testStaticChecks() {
         unpaired.length ? unpaired.join(' | ')
             : 'at most one inline interaction may be open: opening the edit, '
             + 'the category add or the new-category entry closes the other two');
+
+    // Audit D5: addCategory rejects a name it cannot write as a heading. The UI
+    // must then keep the entry open — closing it first turned Enter into a
+    // dead key with no feedback.
+    //
+    // Both halves are windowed: a global indexOf happily matches an unrelated
+    // `this._addingNewCategory = false;` further down the file (in
+    // _cancelEditing), which is how the first version of this guard passed
+    // against the exact bug it was written for. Line windows, not character
+    // counts — a comment length must not decide whether a guard holds.
+    const addLine = uiLines.findIndex(line => line.includes('const updated = Storage.addCategory'));
+    const rejectLine = uiLines.findIndex(line => line.includes('if (updated === parsed.raw) {'));
+    record('static: a rejected category name keeps the inline entry open',
+        addLine !== -1 && rejectLine > addLine
+        && !uiLines.slice(addLine, rejectLine)
+            .some(line => line.includes('this._addingNewCategory = false;'))
+        && uiLines.slice(rejectLine, rejectLine + 12)
+            .some(line => line.includes('this._addingNewCategory = false;')),
+        'close the new-category entry only AFTER the rejection check, so a '
+        + 'name addCategory refuses leaves the text on screen');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
@@ -647,6 +667,67 @@ function testSerializeDocument() {
     const once = Storage.serializeDocument(Storage.parseDocument(CANONICAL));
     record('serializeDocument: idempotent (serialize∘parse applied twice is stable)',
         Storage.serializeDocument(Storage.parseDocument(once)) === once, '');
+}
+
+// ---- category name hygiene (audit D5) -----------------------------------
+
+// addCategory writes `## <name>`. A name that cannot survive that round-trip
+// used to be written anyway: 'a\nb' escaped the heading and left `b` as stray
+// text, and '## Injected' produced a nested-looking heading. Both are now
+// rejected, and the caller keeps the entry open so Enter is not a dead key.
+function testCategoryNameHygiene() {
+    const BASE = '# TODO\n## Notes\n- [ ] x\n';
+
+    const added = name => {
+        const out = Storage.addCategory(BASE, name);
+        return out === BASE ? '<reddedildi>' : out;
+    };
+
+    record('addCategory: a line break in the name is rejected',
+        added('a\nb') === '<reddedildi>'
+        && added('a\rb') === '<reddedildi>'
+        && added('\n') === '<reddedildi>',
+        JSON.stringify(added('a\nb')));
+
+    record('addCategory: a leading # is rejected (no nested heading)',
+        added('## Injected') === '<reddedildi>'
+        && added('# TODO') === '<reddedildi>'
+        && added('### Derin') === '<reddedildi>',
+        JSON.stringify(added('## Injected')));
+
+    record('addCategory: empty and whitespace-only names are rejected',
+        added('') === '<reddedildi>'
+        && added('   ') === '<reddedildi>'
+        && added('\t') === '<reddedildi>', '');
+
+    record('addCategory: an existing name is still rejected',
+        added('Notes') === '<reddedildi>', '');
+
+    record('addCategory: a rejected call returns the file byte-identically',
+        Storage.addCategory(BASE, 'a\nb') === BASE, '');
+
+    record('addCategory: ordinary names are accepted and trimmed',
+        added('   Work   ') === '# TODO\n## Notes\n- [ ] x\n## Work\n'
+        && added('İş takip') === '# TODO\n## Notes\n- [ ] x\n## İş takip\n',
+        JSON.stringify(added('   Work   ')));
+
+    record('addCategory: names that look like content but are legal',
+        added('- [ ] x') === '# TODO\n## Notes\n- [ ] x\n## - [ ] x\n'
+        && added('...') === '# TODO\n## Notes\n- [ ] x\n## ...\n', '');
+
+    const created = Storage.parseDocument(added('İş takip')).categories;
+    record('addCategory: the stored name is exactly what was accepted',
+        created[created.length - 1].name === 'İş takip',
+        JSON.stringify(created.map(c => c.name)));
+
+    record('isUsableCategoryName: rejects only what would corrupt the file',
+        Storage.isUsableCategoryName('Work') === true
+        && Storage.isUsableCategoryName('İş takip') === true
+        && Storage.isUsableCategoryName('- [ ] x') === true
+        && Storage.isUsableCategoryName('') === false
+        && Storage.isUsableCategoryName('#x') === false
+        && Storage.isUsableCategoryName('a\nb') === false
+        && Storage.isUsableCategoryName('a\rb') === false, '');
 }
 
 // ---- preamble fidelity (audit D2 + D4, one model change) ---------------
@@ -1025,6 +1106,8 @@ testWriteRead();
 restoreOriginal();
 testParseDocument();
 testSerializeDocument();
+testCategoryNameHygiene();
+testPreambleFidelity();
 testPreambleFidelity();
 testAtomicWritePath();
 testPathParams();

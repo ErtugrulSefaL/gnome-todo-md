@@ -190,32 +190,35 @@ export default class TodoExtension extends Extension {
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 const name = e.get_text().trim();
-                this._addingNewCategory = false;
-                if (name) {
-                    const parsed = Storage.readTodo(this._todoPath());
-                    const updated = Storage.addCategory(parsed.raw, name);
-                    if (updated !== parsed.raw) {
-                        // Write the file FIRST: setting the color below fires
-                        // changed::category-colors synchronously, and the
-                        // refresh's dead-key pruning would remove the just
-                        // written color because the file does not contain
-                        // the new category yet (found by user testing).
-                        Storage.writeTodo(this._todoPath(), updated);
-
-                        // Auto-color: the next palette entry in order,
-                        // wrapping around after the last (Faz 6 request).
-                        const existingCount =
-                            Storage.parseDocument(parsed.raw).categories.length;
-                        const colors =
-                            this._settings.get_value('category-colors')
-                                .recursiveUnpack();
-                        colors[name] = Storage.nextCategoryColor(existingCount);
-                        this._settings.set_value('category-colors',
-                            GLib.Variant.new('a{ss}', colors));
-
-                        this._activeCategory = name;
-                    }
+                const parsed = Storage.readTodo(this._todoPath());
+                const updated = Storage.addCategory(parsed.raw, name);
+                if (updated === parsed.raw) {
+                    // Rejected: empty, already taken, or a name that cannot be
+                    // written as a heading. Keep the entry open with the text
+                    // the user typed — closing it here would make Enter look
+                    // like a broken button.
+                    return Clutter.EVENT_STOP;
                 }
+                this._addingNewCategory = false;
+
+                // Write the file FIRST: setting the color below fires
+                // changed::category-colors synchronously, and the
+                // refresh's dead-key pruning would remove the just
+                // written color because the file does not contain
+                // the new category yet (found by user testing).
+                Storage.writeTodo(this._todoPath(), updated);
+
+                // Auto-color: the next palette entry in order,
+                // wrapping around after the last (Faz 6 request).
+                const existingCount =
+                    Storage.parseDocument(parsed.raw).categories.length;
+                const colors = this._settings.get_value('category-colors')
+                    .recursiveUnpack();
+                colors[name] = Storage.nextCategoryColor(existingCount);
+                this._settings.set_value('category-colors',
+                    GLib.Variant.new('a{ss}', colors));
+
+                this._activeCategory = name;
                 this._refreshTodoMenu();
                 return Clutter.EVENT_STOP;
             }

@@ -4,6 +4,34 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.8 - 2026-10-02
+
+### Fixed
+- A category name containing a line break no longer corrupts the file. Typing
+  `a` + Enter + `b` wrote `## a` followed by a stray `b` text line, and `a`
+  was left as an orphan section.
+- A name starting with `#` (`## Injected`, `# TODO`) is no longer written as a
+  nested-looking heading.
+- Pressing Enter on a name `addCategory` refuses no longer closes the entry
+  silently. Empty, duplicate and unusable names leave the text on screen so it
+  can be corrected, instead of looking like a dead button.
+
+  Rejected names are refused outright rather than rewritten, so what gets
+  stored is always exactly what was typed.
+
+### Added
+- `Storage.isUsableCategoryName()` plus tests for the rejection rules, and a
+  static guard that the UI only closes the entry *after* the rejection check.
+  Tests: 144 → 167.
+
+  The first version of that guard was wrong: it searched the whole file for
+  the closing assignment and matched an unrelated one in `_cancelEditing()`, so
+  it passed against the exact bug it was written for. It now uses line windows.
+
+  Note: two categories differing only in case (`work` / `Work`) are *not*
+  treated as a conflict — the `category-colors` map is keyed by exact name, so
+  they already have separate entries and each resolves correctly.
+
 ## 0.11.7 - 2026-10-02
 
 ### Fixed

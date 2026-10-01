@@ -616,11 +616,27 @@ export function moveTask(content, index, direction) {
 }
 
 /**
+ * A category name is written as `## <name>`, so it has to survive a re-read as
+ * a heading and must not break the line structure: no line breaks (they would
+ * escape the heading and leave stray text behind), and no leading '#' (that
+ * nests a heading inside the heading). Such names are rejected outright rather
+ * than silently rewritten — the user typed something, and quietly storing a
+ * different name would hide it.
+ *
+ * @param {string} name - Trimmed candidate name.
+ * @returns {boolean} True when the name can be written as a category heading.
+ */
+export function isUsableCategoryName(name) {
+    return name.length > 0 && !/[\r\n]/.test(name) && !name.startsWith('#');
+}
+
+/**
  * Append a new empty, explicit category at the end of the document (Faz 2
  * extensibility skeleton — no UI calls this yet; a future "+" button only
  * needs to wire this in).
  *
- * No-op when the name is empty/whitespace or a category of that name already
+ * No-op when the name is unusable (see isUsableCategoryName) or a category of
+ * that name already
  * exists (case-sensitive file semantics; an implicit 'General' counts as
  * existing, so no second 'General' section can ever be created).
  *
@@ -630,7 +646,7 @@ export function moveTask(content, index, direction) {
  */
 export function addCategory(content, name) {
     const trimmed = name.trim();
-    if (!trimmed) {
+    if (!isUsableCategoryName(trimmed)) {
         return content;
     }
     const doc = parseDocument(content);
