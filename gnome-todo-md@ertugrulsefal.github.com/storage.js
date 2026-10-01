@@ -262,7 +262,14 @@ const makeTaskItem = (raw, done) => ({
  * @returns {{title: string|null, categories: Array<{name: string, items: Array}>}}
  */
 export function parseDocument(content) {
-    const doc = {title: null, categories: []};
+    // Line endings are the file's, not ours. addTask/addCategory rewrite the
+    // whole document, so without this a CRLF file would be silently converted
+    // to LF the first time a task was added.
+    const doc = {
+        title: null,
+        categories: [],
+        eol: content.includes('\r\n') ? '\r\n' : '\n',
+    };
     let current = null;
 
     const ensureCategory = () => {
@@ -383,9 +390,11 @@ export function renderSections(doc) {
  *   first `preCount` items are re-emitted verbatim BEFORE it, mirroring the
  *   original file layout. One list, one boundary.
  * - A missing document title gains a '# TODO' line.
- * - Deliberate normalizations (locked decisions): '[X]' → '[x]',
- *   '##Name' → '## Name', canonical '- [ ] ' task prefix, and exactly one
- *   trailing newline.
+ * - Line endings are preserved: the file is written back with the ending it
+ *   was read with (any CRLF in the file means CRLF for the whole file).
+ * - Deliberate normalizations (locked decisions, documented in README.md
+ *   "Deliberate normalizations"): '[X]' → '[x]', '##Name' → '## Name',
+ *   canonical '- [ ] ' task prefix, and exactly one trailing newline.
  *
  * @param {{title: string|null, categories: Array}} doc - Document model.
  * @returns {string} Markdown content.
@@ -421,7 +430,8 @@ export function serializeDocument(doc) {
         pushItems(category.items.slice(preCount));
     }
 
-    return lines.join('\n') + '\n';
+    const eol = doc.eol ?? '\n';
+    return lines.join(eol) + eol;
 }
 
 /**
@@ -470,13 +480,18 @@ export function toggleTask(content, index) {
         return content;
     }
 
-    const match = line.match(/^(\s*-\s+\[)([ xX])(\]\s+.*)$/);
+    // A CRLF file keeps a trailing '\r' on every line. `.` in a JS regex does
+    // not match it, so matching the raw line silently failed and checking a
+    // task did nothing at all. Match without the CR, then put it back.
+    const cr = line.endsWith('\r') ? '\r' : '';
+    const match = (cr ? line.slice(0, -1) : line)
+        .match(/^(\s*-\s+\[)([ xX])(\]\s+.*)$/);
     if (!match) {
         return content;
     }
 
     const newMark = match[2].toLowerCase() === 'x' ? ' ' : 'x';
-    lines[index] = match[1] + newMark + match[3];
+    lines[index] = match[1] + newMark + match[3] + cr;
     return lines.join('\n');
 }
 
@@ -495,12 +510,18 @@ export function editTask(content, index, text) {
         return content;
     }
 
-    const match = lines[index].match(/^(\s*-\s+\[[ xX]\]\s+).*$/);
+    // See toggleTask: the CR has to come off before matching. Otherwise a CRLF
+    // file misses here, falls into the plain-text branch below and loses the
+    // checkbox entirely ('- [ ] a' became 'b').
+    const raw = lines[index];
+    const cr = raw.endsWith('\r') ? '\r' : '';
+    const match = (cr ? raw.slice(0, -1) : raw)
+        .match(/^(\s*-\s+\[[ xX]\]\s+).*$/);
     if (match) {
-        lines[index] = match[1] + text;
+        lines[index] = match[1] + text + cr;
     } else {
         // Not a checkbox line: replace with plain text (keeps it a line).
-        lines[index] = text;
+        lines[index] = text + cr;
     }
 
     return lines.join('\n');

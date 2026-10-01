@@ -646,6 +646,53 @@ function testSerializeDocument() {
     record('serializeDocument: missing H1 gains # TODO',
         Storage.serializeDocument(Storage.parseDocument('- [ ] a\n')) === '# TODO\n## General\n- [ ] a\n', '');
 
+    // Locked, documented normalization (README "Deliberate normalizations"):
+    // the file is always written with LF. Line-level mutations keep the CR
+    // bytes because they edit raw lines; only the document-level ones rewrite
+    // the file. No content is lost either way.
+    const CRLF = '# TODO\r\n## C\r\n- [ ] a\r\n';
+    record('CRLF: checking a task works (the regex could not see past \\r)',
+        Storage.toggleTask(CRLF, 2) === '# TODO\r\n## C\r\n- [x] a\r\n'
+        && Storage.toggleTask(Storage.toggleTask(CRLF, 2), 2)
+            === CRLF,
+        JSON.stringify(Storage.toggleTask(CRLF, 2)));
+
+    record('CRLF: inline editing keeps the checkbox',
+        Storage.editTask(CRLF, 2, 'b') === '# TODO\r\n## C\r\n- [ ] b\r\n',
+        JSON.stringify(Storage.editTask(CRLF, 2, 'b')));
+
+    record('CRLF: deleting a task still works',
+        Storage.deleteTask(CRLF, 2) === '# TODO\r\n## C\r\n',
+        JSON.stringify(Storage.deleteTask(CRLF, 2)));
+
+    record('CRLF: a non-checkbox line is still replaced verbatim, CR kept',
+        Storage.editTask(CRLF, 0, 'z') === 'z\r\n## C\r\n- [ ] a\r\n'
+        && Storage.editTask('# TODO\n- [ ] a\n', 0, 'z') === 'z\n- [ ] a\n',
+        JSON.stringify(Storage.editTask(CRLF, 0, 'z')));
+
+    record('CRLF: document-level writes keep the file\'s line endings',
+        Storage.addTask(CRLF, 'b', 'C')
+            === '# TODO\r\n## C\r\n- [ ] a\r\n- [ ] b\r\n'
+        && Storage.addCategory(CRLF, 'D')
+            === '# TODO\r\n## C\r\n- [ ] a\r\n## D\r\n',
+        JSON.stringify(Storage.addTask(CRLF, 'b', 'C')));
+
+    record('CRLF: round-trip is byte-identical (the whole point)',
+        Storage.serializeDocument(Storage.parseDocument(CRLF)) === CRLF,
+        JSON.stringify(Storage.serializeDocument(Storage.parseDocument(CRLF))));
+
+    record('LF: round-trip stays byte-identical (no eol regression)',
+        Storage.serializeDocument(Storage.parseDocument(
+            '# TODO\n## C\n- [ ] a\n')) === '# TODO\n## C\n- [ ] a\n', '');
+
+    record('eol: any CRLF in the file means CRLF for the whole file',
+        // Mixed input (last line LF-only): the output is CRLF throughout.
+        // ('## General' is the documented implicit-category heading.)
+        Storage.serializeDocument(Storage.parseDocument('# T\r\n- [ ] a\n'))
+            === '# T\r\n## General\r\n- [ ] a\r\n',
+        JSON.stringify(Storage.serializeDocument(
+            Storage.parseDocument('# T\r\n- [ ] a\n'))));
+
     record('serializeDocument: empty document → only # TODO',
         Storage.serializeDocument(Storage.parseDocument('')) === '# TODO\n', '');
 

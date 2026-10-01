@@ -84,6 +84,21 @@ gnome-extensions prefs gnome-todo-md@ertugrulsefal.github.com
 Anything that is not a `##` heading or a checkbox line (notes, blank lines)
 is preserved verbatim on every rewrite — the file stays hand-editable.
 
+### Deliberate normalizations
+
+Three small rewrites happen when the extension writes the file. They are
+intentional, and everything else round-trips byte-for-byte:
+
+| Written as | If you wrote | Why |
+|---|---|---|
+| `[x]` | `[X]` | one canonical spelling of "done" |
+| `## Name` | `##Name` | the space is required by the format |
+| `- [ ] text` | `-  [ ]  text` | canonical task prefix |
+
+Line endings are **not** one of them: a file with Windows line endings is
+written back with Windows line endings, so editing it through WSL or a
+Windows editor does not produce a whole-file diff.
+
 ## File layout
 
 | Path | Purpose |

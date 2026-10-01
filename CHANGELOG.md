@@ -4,6 +4,35 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.9 - 2026-10-02
+
+### Fixed
+- **Checking a task did nothing on a file with Windows line endings.** A CR at
+  the end of each line is a line terminator as far as a JavaScript regex is
+  concerned, so the checkbox pattern never matched and the toggle was a silent
+  no-op.
+- **Editing a task destroyed its checkbox on such a file.** The same mismatch
+  sent the edit down the "not a checkbox line" path, which replaces the line
+  with plain text — `- [ ] a` became `b`. The task survived as text but lost
+  its checkbox and vanished from the task list.
+
+  `parseDocument` stripped the CR all along; the line-level helpers did not.
+  Both now match without the CR and put it back.
+
+### Changed
+- Line endings are preserved: a file with Windows line endings is written back
+  with Windows line endings. Previously the first document-level write
+  (adding a task or a category) silently rewrote the whole file with LF.
+  Line-level edits already kept them. A file with mixed endings is written
+  with CRLF throughout.
+
+  This makes a CRLF file round-trip byte-identically, like an LF one does.
+
+### Added
+- Eight tests covering the CRLF paths: toggle, edit, delete, the non-checkbox
+  fallback, document-level writes, and round-trip in both directions.
+  Tests: 167 → 175.
+
 ## 0.11.8 - 2026-10-02
 
 ### Fixed
