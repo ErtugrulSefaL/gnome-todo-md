@@ -287,12 +287,14 @@ export function parseDocument(content) {
             const name = h2[1].trim();
             if (name === FALLBACK_CATEGORY && current !== null && current.implicit) {
                 // An explicit '## General' takes over the fallback bucket so the
-                // model never holds two 'General' categories. Items parsed so far
-                // appeared BEFORE the heading in the file — kept in `preItems`
-                // and re-emitted headingless before it (round-trip fidelity).
+                // model never holds two 'General' categories. The items parsed
+                // so far appeared BEFORE the heading, so remember where the
+                // boundary falls (`preCount`) and keep every item in ONE list
+                // — a second list (the old `preItems`) was invisible to
+                // categoryTasks/addTaskTag/moveTask, which silently did nothing
+                // for the tasks in it.
                 current.implicit = false;
-                current.preItems = current.items;
-                current.items = [];
+                current.preCount = current.items.length;
             } else {
                 current = {name, items: [], implicit: false};
                 doc.categories.push(current);
@@ -300,9 +302,12 @@ export function parseDocument(content) {
             continue;
         }
 
-        // '# ' document title (first one only; later ones are extras).
+        // '# ' document title. Only a heading that OPENS the file is the
+        // document title; one that appears further down belongs to the section
+        // it sits in and is kept as an extra, so the title line cannot jump to
+        // the top of the file on the next write.
         if (/^#\s.*$/.test(line)) {
-            if (doc.title === null) {
+            if (doc.title === null && current === null) {
                 doc.title = line;
             } else {
                 ensureCategory().items.push({type: 'extra', raw: line});
@@ -374,9 +379,9 @@ export function renderSections(doc) {
  *   '## General' heading written ONLY when it contains at least one task;
  *   extras-only implicit content stays headingless so unchanged files
  *   round-trip byte-identical. Explicit categories always get a heading.
- * - When an explicit '## General' heading takes over the fallback bucket, items
- *   parsed before the heading (`preItems`) are re-emitted verbatim BEFORE it,
- *   mirroring the original file layout.
+ * - When an explicit '## General' heading takes over the fallback bucket, the
+ *   first `preCount` items are re-emitted verbatim BEFORE it, mirroring the
+ *   original file layout. One list, one boundary.
  * - A missing document title gains a '# TODO' line.
  * - Deliberate normalizations (locked decisions): '[X]' → '[x]',
  *   '##Name' → '## Name', canonical '- [ ] ' task prefix, and exactly one
@@ -399,13 +404,21 @@ export function serializeDocument(doc) {
     };
 
     for (const category of doc.categories) {
-        if (category.preItems !== undefined) {
-            pushItems(category.preItems);
-            lines.push(`## ${category.name}`);
-        } else if (!category.implicit || categoryTasks(category).length > 0) {
+        // `preCount` leading items belong before the heading (see
+        // parseDocument); everything after it belongs below. The heading is
+        // emitted unless the category is an implicit one with no tasks.
+        const preCount = category.preCount ?? 0;
+        const withHeading = category.preCount !== undefined
+            || !category.implicit
+            || categoryTasks(category).length > 0;
+        if (withHeading && preCount === 0) {
             lines.push(`## ${category.name}`);
         }
-        pushItems(category.items);
+        pushItems(category.items.slice(0, preCount));
+        if (withHeading && preCount > 0) {
+            lines.push(`## ${category.name}`);
+        }
+        pushItems(category.items.slice(preCount));
     }
 
     return lines.join('\n') + '\n';
@@ -555,9 +568,9 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
  * slots. Moving the first task up or the last task down is a no-op, and so
  * is an index that no task owns.
  *
- * Note: tasks living in a merged '## General' preItems block (parsed before an
- * explicit '## General' heading) are not movable in this phase — moveTask only
- * operates on a category's main item list.
+ * Note: the task sequence spans the whole category, including items that sat
+ * above an explicit '## General' heading in the file; moving one across that
+ * boundary moves the boundary with it (decision A: allowed).
  *
  * @param {string} content - Raw file content.
  * @param {number} index - 0-based line index of the task to move.
@@ -584,6 +597,19 @@ export function moveTask(content, index, direction) {
         const ib = items.indexOf(tasks[other]);
         items[ia] = tasks[other];
         items[ib] = tasks[pos];
+
+        // A swap across the '## Name' boundary moves one item from the
+        // headingless preamble into the section (or back). Keep preCount in
+        // step so the round-trip stays faithful, and emit the heading first
+        // once nothing is left above it — a trailing empty section would be
+        // pointless.
+        if (category.preCount !== undefined
+            && (ia < category.preCount) !== (ib < category.preCount)) {
+            category.preCount += ia < category.preCount ? 1 : -1;
+            if (category.preCount >= category.items.length) {
+                category.preCount = 0;
+            }
+        }
         return serializeDocument(doc);
     }
     return content;

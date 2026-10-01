@@ -649,6 +649,90 @@ function testSerializeDocument() {
         Storage.serializeDocument(Storage.parseDocument(once)) === once, '');
 }
 
+// ---- preamble fidelity (audit D2 + D4, one model change) ---------------
+
+// The region of a file before its first explicit '## Name' heading used to be
+// parked in a SECOND item list (`preItems`). Every consumer read `items`, so
+// those tasks were invisible in the menu and silently refused tags and moves.
+// Now one list holds them and `preCount` marks where the heading goes. D2 rides
+// along: a '# ' heading that does not open the file stays where the user put
+// it instead of being hoisted to the top on the next write.
+function testPreambleFidelity() {
+    const PREAMBLE = '# T\n- [ ] a\n## General\n- [ ] b\n';
+
+    const doc = Storage.parseDocument(PREAMBLE);
+    record('preamble: one item list, no second list to go stale',
+        doc.categories.length === 1
+        && doc.categories[0].items.length === 2
+        && !('preItems' in doc.categories[0]),
+        JSON.stringify(Object.keys(doc.categories[0])));
+
+    record('preamble: round-trip is byte-identical (heading position kept)',
+        Storage.serializeDocument(doc) === PREAMBLE,
+        JSON.stringify(Storage.serializeDocument(doc)));
+
+    // D4 — the menu saw only the tasks below the heading.
+    const rendered = Storage.renderSections(doc);
+    record('D4: tasks above the heading are rendered in the menu',
+        rendered.length === 1
+        && JSON.stringify(rendered[0].tasks.map(task => task.text))
+            === JSON.stringify(['a', 'b']),
+        JSON.stringify(rendered.map(s => s.tasks.map(t => t.text))));
+
+    // D4 — addTaskTag silently ignored any index it could not find.
+    record('D4: a task above the heading accepts an inline tag',
+        Storage.addTaskTag(PREAMBLE, 1, 'due', 'mon')
+            === '# T\n- [ ] a @due(mon)\n## General\n- [ ] b\n',
+        JSON.stringify(Storage.addTaskTag(PREAMBLE, 1, 'due', 'mon')));
+
+    // D4 — moveTask could not see those tasks at all.
+    record('D4: tasks above the heading reorder among themselves',
+        Storage.moveTask('# T\n- [ ] a\n- [ ] z\n## General\n- [ ] b\n', 1, 'down')
+            === '# T\n- [ ] z\n- [ ] a\n## General\n- [ ] b\n',
+        JSON.stringify(Storage.moveTask(
+            '# T\n- [ ] a\n- [ ] z\n## General\n- [ ] b\n', 1, 'down')));
+
+    record('D4: first task up is still a no-op',
+        Storage.moveTask(PREAMBLE, 1, 'up') === PREAMBLE, '');
+
+    // Decision A: crossing the boundary is allowed and the boundary follows.
+    const crossed = Storage.moveTask(PREAMBLE, 1, 'down');
+    record('D4: moving across the heading moves the boundary with it',
+        crossed === '# T\n## General\n- [ ] b\n- [ ] a\n',
+        JSON.stringify(crossed));
+
+    // Once the boundary reaches 0 the heading is emitted first and stays
+    // there — moving a task back up restores the order, not the old layout.
+    record('D4: crossing back restores the original task order',
+        Storage.moveTask(crossed, 3, 'up') === '# T\n## General\n- [ ] a\n- [ ] b\n',
+        JSON.stringify(Storage.moveTask(crossed, 3, 'up')));
+
+    record('D4: a crossed file is stable under repeated writes',
+        Storage.serializeDocument(Storage.parseDocument(crossed)) === crossed,
+        JSON.stringify(crossed));
+
+    // D2 — the '# ' line used to jump to the top of the file.
+    const midTitle = '## A\n\n# T\n\n- [ ] x\n';
+    const rewritten = Storage.serializeDocument(Storage.parseDocument(midTitle));
+    record('D2: a title line below a heading stays inside its section',
+        rewritten === '# TODO\n## A\n\n# T\n\n- [ ] x\n',
+        JSON.stringify(rewritten));
+
+    record('D2: no line of the user\'s file changes order',
+        JSON.stringify(rewritten.split('\n').filter(line => line !== '# TODO'))
+            === JSON.stringify(midTitle.split('\n')),
+        JSON.stringify(rewritten.split('\n')));
+
+    record('D2: a file-opening heading is still the document title',
+        Storage.parseDocument('# TODO\n## A\n# T\n').title === '# TODO',
+        JSON.stringify(Storage.parseDocument('# TODO\n## A\n# T\n').title));
+
+    record('D2: addCategory no longer hoists a mid-file title',
+        Storage.addCategory(midTitle, 'B')
+            === '# TODO\n## A\n\n# T\n\n- [ ] x\n## B\n',
+        JSON.stringify(Storage.addCategory(midTitle, 'B')));
+}
+
 // ---- moveTask: within-category reordering (Faz 2 step 6) -----------------
 
 function testMoveTask() {
@@ -941,6 +1025,7 @@ testWriteRead();
 restoreOriginal();
 testParseDocument();
 testSerializeDocument();
+testPreambleFidelity();
 testAtomicWritePath();
 testPathParams();
 testResolveTodoPath();

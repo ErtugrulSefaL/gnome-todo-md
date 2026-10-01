@@ -4,6 +4,30 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.7 - 2026-10-02
+
+### Fixed
+- **Tasks written above an explicit `## General` heading were invisible**
+  (audit D4). The lines before a file's first category heading were parked in a
+  second item list that only the serializer read, so such tasks never appeared
+  in the menu, and adding an inline tag or pressing ↑/↓ on them silently did
+  nothing. The category now keeps one item list with a `preCount` marking where
+  the heading belongs — the second list could not go stale.
+- **A `# ` heading that is not the first line no longer jumps to the top of the
+  file** (audit D2). Only a heading that opens the file is the document title;
+  one further down stays inside the section it sits in. Previously adding a
+  task or a category rewrote the whole document and hoisted that line to the
+  top, shifting the user's blank lines with it.
+
+  A file with no opening heading still gains the leading `# TODO` line — that
+  is a locked rule, deliberately unchanged.
+
+### Added
+- Thirteen tests covering the preamble: round-trip fidelity, menu visibility,
+  inline tags, reordering, moving across the heading boundary (allowed, the
+  boundary follows, and the result is stable), and title position. Tests:
+  131 → 144.
+
 ## 0.11.6 - 2026-10-02
 
 ### Fixed
