@@ -746,6 +746,7 @@ export default class TodoExtension extends Extension {
     _startEditing(index) {
         this._editingIndex = index;
         this._addingCategory = null;
+        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 
@@ -848,6 +849,7 @@ export default class TodoExtension extends Extension {
         }
         this._editingIndex = -1;
         this._addingCategory = categoryName;
+        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 

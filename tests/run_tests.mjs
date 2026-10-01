@@ -442,6 +442,42 @@ function testStaticChecks() {
     record('static: opening an edit closes the add entry (_startEditing)',
         /_editingIndex = index;\n\s*this\._addingCategory = null;/.test(ui),
         'an edit replaces any open category add entry');
+
+    // Audit D3: those two guards above only ever looked at two of the three
+    // fields, so _addingNewCategory could be left open next to an edit or a
+    // category add entry — two focusable entries at once. Opening any of the
+    // three must close the other two, directly or via _cancelEditing().
+    const EDIT_STATE = [
+        {field: 'this._editingIndex', closed: '-1'},
+        {field: 'this._addingCategory', closed: 'null'},
+        {field: 'this._addingNewCategory', closed: 'false'},
+    ];
+    const uiLines = ui.split('\n');
+    const unpaired = [];
+    uiLines.forEach((line, i) => {
+        for (const {field, closed} of EDIT_STATE) {
+            const match = line.match(
+                new RegExp(`^\\s*${field.replace('.', '\\.')} = (.+);$`));
+            if (!match || match[1].trim() === closed) continue;
+            // A reset is a compact three-line block, so the neighbouring
+            // assignments can sit on either side of the one being checked.
+            const around = uiLines.slice(i - 3, i).join('\n')
+                + '\n' + uiLines.slice(i + 1, i + 4).join('\n');
+            const before = uiLines.slice(i - 2, i).join('\n');
+            const others = EDIT_STATE.filter(other => other.field !== field);
+            const allClosed = others.every(
+                other => around.includes(`${other.field} = ${other.closed};`));
+            if (!allClosed && !before.includes('this._cancelEditing();')) {
+                unpaired.push(`line ${i + 1} opens ${field} without closing `
+                    + others.map(other => other.field).join(' + '));
+            }
+        }
+    });
+    record('static: the three edit-state fields are opened and closed together',
+        unpaired.length === 0,
+        unpaired.length ? unpaired.join(' | ')
+            : 'at most one inline interaction may be open: opening the edit, '
+            + 'the category add or the new-category entry closes the other two');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------

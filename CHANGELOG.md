@@ -4,6 +4,22 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.6 - 2026-10-02
+
+### Fixed
+- Starting a task edit or a per-category add entry while the "new category"
+  entry was open left both on screen at once — two focusable text entries in the
+  same menu, from a single interaction. `_startEditing()` and `_toggleAdd()`
+  now close the new-category entry too, so the single-interaction rule holds
+  across all three states.
+
+### Added
+- A static guard that actually enforces that rule. The two existing guards
+  only ever compared two of the three edit-state fields, so the suite reported
+  green on exactly this bug; the new one checks that opening any of the three
+  states closes the other two (directly or through `_cancelEditing()`), and
+  names the offending line and the missing fields. Tests: 130 → 131.
+
 ## 0.11.5 - 2026-10-02
 
 ### Fixed
