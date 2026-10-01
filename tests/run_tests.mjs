@@ -414,6 +414,15 @@ function testStaticChecks() {
                 || DECLARATION.test(block.lines[i].trim());
         })),
         'a docstring drifted away from the code it documents');
+
+    // Audit D1: the storage tests pin renderSections(); this pins the UI half —
+    // which list the prune is handed. Pruning against doc.categories ([] for an
+    // empty file) deleted the whole color map through set_value, permanently.
+    record('static: color pruning uses the rendered sections, not doc.categories',
+        /pruneCategoryColors\(\s*colors,\s*sections\.map\(/.test(ui)
+        && !/pruneCategoryColors\([^)]*doc\.categories/.test(ui),
+        'prune against `sections` — an empty file still renders the implicit '
+        + 'General header, so the raw document list is not what is on screen');
     record('static: scroll-mode tab labels use EllipsizeMode.NONE',
         /EllipsizeMode\.NONE/.test(ui),
         'St.Label defaults to END (st-label.c :336); an ellipsized label has '
@@ -832,6 +841,40 @@ function testCategoryColors() {
 
     record('pruneCategoryColors: empty map stays empty',
         JSON.stringify(Storage.pruneCategoryColors({}, ['A'])) === '{}', '');
+
+    // --- Audit D1: an empty file must not wipe the category color map -------
+    // The menu renders the implicit 'General' header for an empty document,
+    // but the prune used to run against the raw doc.categories ([]), so every
+    // color was dropped and written back through set_value — permanent loss.
+    const emptyDoc = Storage.parseDocument('');
+    const emptySections = Storage.renderSections(emptyDoc);
+    const populatedDoc = Storage.parseDocument('# TODO\n## İş\n- [ ] x\n## Notes\n');
+    record('renderSections: empty document renders the implicit General section',
+        emptySections.length === 1
+        && emptySections[0].name === Storage.FALLBACK_CATEGORY
+        && emptySections[0].tasks.length === 0,
+        JSON.stringify(emptySections.map(s => s.name)));
+
+    record('renderSections: keeps document order and per-category tasks',
+        JSON.stringify(Storage.renderSections(populatedDoc).map(s => s.name))
+            === JSON.stringify(['İş', 'Notes'])
+        && Storage.renderSections(populatedDoc)[0].tasks.length === 1
+        && Storage.renderSections(populatedDoc)[1].tasks.length === 0, '');
+
+    record('D1 regression: empty file keeps General, still prunes dead keys',
+        JSON.stringify(Storage.pruneCategoryColors(
+            {'General': '#e01b24', 'Cyber': '#3584e4'},
+            emptySections.map(section => section.name)))
+            === JSON.stringify({'General': '#e01b24'}),
+        'a whole-file wipe (someone truncates ~/todo.md, the file monitor '
+        + 'fires) used to delete every category color permanently');
+
+    record('D1 regression: pruning still removes genuinely dead categories',
+        JSON.stringify(Storage.pruneCategoryColors(
+            {'İş': '#e01b24', 'Silinmiş': '#3584e4'},
+            Storage.renderSections(populatedDoc).map(s => s.name)))
+            === JSON.stringify({'İş': '#e01b24'}),
+        'the fix must not disable dead-key pruning');
 
     record('rgbToHex: 8-bit RGB values become #rrggbb',
         Storage.rgbToHex(224, 27, 36) === '#e01b24'

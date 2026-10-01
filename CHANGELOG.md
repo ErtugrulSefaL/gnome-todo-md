@@ -4,6 +4,28 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.5 - 2026-10-02
+
+### Fixed
+- **Data loss (audit D1): an emptied todo file no longer wipes every category
+  color, permanently.** The menu pruned dead color keys against the raw
+  document, whose category list is empty when the file is empty — while the
+  menu itself was rendering the implicit `General` header. So emptying
+  `~/todo.md` (a stray `:dgg`, a `> todo.md` redirect, any script) and letting
+  the file monitor fire deleted the whole color map through `set_value`, with
+  no way to get it back. The header also rendered uncolored until the next
+  refresh.
+
+  The category list is now derived once, by `Storage.renderSections()`, and the
+  prune goes through it — the menu rows and the prune can no longer disagree
+  about which categories exist. Genuinely dead keys are still pruned.
+
+### Added
+- `Storage.renderSections()` — the single source of truth for "which
+  categories exist right now" (pure, unit-tested).
+- Regression coverage for the data-loss path, plus a static guard that pins the
+  prune to `sections` so the UI half cannot drift back. Tests: 125 → 130.
+
 ## 0.11.4 - 2026-10-02
 
 ### Changed

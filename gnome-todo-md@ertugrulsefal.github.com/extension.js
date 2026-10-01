@@ -302,30 +302,27 @@ export default class TodoExtension extends Extension {
 
         const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
 
+        // Every category renders as a non-clickable header row (with a '+'
+        // button) followed by its task rows — task-less categories are
+        // actionable now that adding is per-category.
+        const sections = Storage.renderSections(doc);
+
         // Faz 5: category colors from the settings map. Dead keys (categories
         // that no longer exist) are pruned automatically; the write happens
         // only when the prune actually removed something, so the
         // changed:: signal does not cause a refresh loop.
+        //
+        // Pruned against `sections`, never against `doc.categories`: an empty
+        // file still renders the implicit 'General' header, and pruning
+        // against the raw document treated it as dead — which deleted the
+        // whole color map and rendered the header uncolored (audit D1).
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
         const prunedColors = Storage.pruneCategoryColors(colors,
-            doc.categories.map(category => category.name));
+            sections.map(section => section.name));
         if (prunedColors !== colors) {
             this._settings.set_value('category-colors',
                 GLib.Variant.new('a{ss}', prunedColors));
-        }
-
-        // Every category renders as a non-clickable header row (with a '+'
-        // button) followed by its task rows — task-less categories are
-        // actionable now that adding is per-category. An empty document (no
-        // categories at all) gets a synthetic implicit 'General' header so the
-        // first task can be added from an empty file.
-        const sections = doc.categories.map(category => ({
-            name: category.name,
-            tasks: Storage.categoryTasks(category),
-        }));
-        if (sections.length === 0) {
-            sections.push({name: Storage.FALLBACK_CATEGORY, tasks: []});
         }
 
                 // Faz 6: tab bar, ALWAYS rendered ('All' shows every category — default;

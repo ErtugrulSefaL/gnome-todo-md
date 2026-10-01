@@ -338,6 +338,32 @@ export function categoryTasks(category) {
 }
 
 /**
+ * The category list the menu actually renders.
+ *
+ * This is the single source of truth for "which categories exist right now":
+ * the menu rows AND the color pruning in the UI both go through it. Deriving
+ * them separately is what let an empty file look like it had no categories
+ * (raw `doc.categories` is `[]`), so pruning deleted the whole color map while
+ * the menu was rendering the implicit 'General' header — permanently, through
+ * `set_value`. Do not re-derive the list from `doc.categories` elsewhere.
+ *
+ * @param {{categories: Array<{name: string, items: Array}>}} doc
+ * @returns {Array<{name: string, tasks: Array}>} One entry per rendered
+ *   category; an empty document yields the implicit 'General' section so a
+ *   first task can be added to an empty file.
+ */
+export function renderSections(doc) {
+    const sections = doc.categories.map(category => ({
+        name: category.name,
+        tasks: categoryTasks(category),
+    }));
+    if (sections.length === 0) {
+        sections.push({name: FALLBACK_CATEGORY, tasks: []});
+    }
+    return sections;
+}
+
+/**
  * Serialize a Document model back to markdown content.
  *
  * Round-trip rules (locked, see plan.md):
