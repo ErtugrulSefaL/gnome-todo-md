@@ -325,7 +325,7 @@ export default class TodoExtension extends Extension {
                 GLib.Variant.new('a{ss}', prunedColors));
         }
 
-                // Faz 6: tab bar, ALWAYS rendered ('All' shows every category — default;
+        // Faz 6: tab bar, ALWAYS rendered ('All' shows every category — default;
         // other tabs filter the content to one category). The content model
         // is unchanged — a tab only picks what gets rendered. A '+' button at
         // the far right opens the new-category inline entry (design change:
