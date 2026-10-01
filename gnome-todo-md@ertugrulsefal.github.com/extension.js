@@ -3,6 +3,7 @@ import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import Pango from 'gi://Pango';
+import Atk from 'gi://Atk';
 
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
@@ -406,6 +407,7 @@ export default class TodoExtension extends Extension {
             // the scroller so it is always reachable).
             const addCatBtn = new St.Button({
                 style_class: 'todo-icon-button button',
+                accessible_name: 'New category',
                 child: new St.Icon({
                     icon_name: 'list-add-symbolic',
                     style_class: 'system-status-icon',
@@ -529,6 +531,7 @@ export default class TodoExtension extends Extension {
 
             const addBtn = new St.Button({
                 style_class: 'todo-icon-button button',
+                accessible_name: `Add task to ${section.name}`,
                 child: new St.Icon({
                     icon_name: 'list-add-symbolic',
                     style_class: 'system-status-icon',
@@ -625,6 +628,17 @@ export default class TodoExtension extends Extension {
             `max-width: ${this._settings.get_int('menu-width')}px;`);
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
 
+        // Accessibility (audit D8): a task row is a checkable menu item, so
+        // tell assistive technology what it is and whether it is done.
+        // PopupBaseMenuItem defaults to Atk.Role.MENU_ITEM and has no
+        // checkAccessibleState() (that lives on PopupSwitchMenuItem), so the
+        // CHECKED state is maintained here — the row is rebuilt on every
+        // refresh, which keeps it in sync with `task.done`.
+        row.accessible_role = Atk.Role.CHECK_MENU_ITEM;
+        row.label_actor = label;
+        if (task.done) {
+            row.add_accessible_state(Atk.StateType.CHECKED);
+        }
         // Fixed-width checkbox area at the START of every row (Faz 6.6:
         // the check never appends to the text, so checking a task can
         // never widen the menu). A 16x16 circle in BOTH states: empty
@@ -665,6 +679,9 @@ export default class TodoExtension extends Extension {
         // test: rows at the edges had different widths).
         const upBtn = new St.Button({
             style_class: 'todo-icon-button button',
+            // Icon-only button: without this a screen reader announces
+            // "button" with no name (audit D8).
+            accessible_name: 'Move up',
             child: new St.Icon({
                 icon_name: 'go-up-symbolic',
                 style_class: 'system-status-icon',
@@ -679,6 +696,9 @@ export default class TodoExtension extends Extension {
         });
         const downBtn = new St.Button({
             style_class: 'todo-icon-button button',
+            // Icon-only button: without this a screen reader announces
+            // "button" with no name (audit D8).
+            accessible_name: 'Move down',
             child: new St.Icon({
                 icon_name: 'go-down-symbolic',
                 style_class: 'system-status-icon',
@@ -695,6 +715,9 @@ export default class TodoExtension extends Extension {
         // Delete button pinned to the right of the task text.
         const delBtn = new St.Button({
             style_class: 'todo-icon-button button',
+            // Icon-only button: without this a screen reader announces
+            // "button" with no name (audit D8).
+            accessible_name: 'Delete task',
             child: new St.Icon({
                 icon_name: 'user-trash-symbolic',
                 style_class: 'system-status-icon',
@@ -709,6 +732,9 @@ export default class TodoExtension extends Extension {
         // TRUE), so the row's activate (toggle) never fires.
         const editBtn = new St.Button({
             style_class: 'todo-icon-button button',
+            // Icon-only button: without this a screen reader announces
+            // "button" with no name (audit D8).
+            accessible_name: 'Edit task',
             child: new St.Icon({
                 icon_name: 'document-edit-symbolic',
                 style_class: 'system-status-icon',

@@ -4,6 +4,27 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.10 - 2026-10-02
+
+### Added
+- Accessibility (audit D8). Screen readers can now use the menu:
+  - the six icon-only buttons (new category, add task, move up, move down,
+    delete, edit) announce what they do instead of just "button";
+  - task rows carry `Atk.Role.CHECK_MENU_ITEM` with the `CHECKED` state and
+    their text label attached, so a screen reader can tell a finished task
+    from a pending one.
+
+  `PopupBaseMenuItem` has no `checkAccessibleState()` — that method lives on
+  `PopupSwitchMenuItem` — so the state is maintained where the row is built,
+  which keeps it in sync because rows are rebuilt on every refresh.
+
+  The audit also listed "the tab bar is not keyboard reachable" as a
+  regression from the SEGV fix. That is not the case: `PopupMenuSection` does
+  not override `get_focus_chain`, and St's default returns every visible
+  child, so the plain `St.Button` tabs are in the menu's focus chain —
+  confirmed by keypress test (↓ reaches the tabs, Enter activates one). No
+  code change was needed.
+
 ## 0.11.9 - 2026-10-02
 
 ### Fixed

@@ -498,6 +498,24 @@ function testStaticChecks() {
             .some(line => line.includes('this._addingNewCategory = false;')),
         'close the new-category entry only AFTER the rejection check, so a '
         + 'name addCategory refuses leaves the text on screen');
+
+    // Audit D8: an icon-only button with no accessible_name is announced as
+    // just "button". The tab buttons carry visible text, so they are exempt.
+    const iconButtons = (ui.match(/new St\.Button\(\{/g) || []).length;
+    record('static: every icon-only button has an accessible_name',
+        (ui.match(/accessible_name:/g) || []).length === 6
+        && iconButtons === 8,
+        '6 icon-only buttons (new category, add task, up, down, delete, '
+        + 'edit) must be named; the 2 tab buttons have a text label instead');
+
+    record('static: task rows carry the checkable-menu-item semantics',
+        /import Atk from 'gi:\/\/Atk';/.test(ui)
+        && /row\.accessible_role = Atk\.Role\.CHECK_MENU_ITEM;/.test(ui)
+        && /row\.label_actor = label;/.test(ui)
+        && /row\.add_accessible_state\(Atk\.StateType\.CHECKED\);/.test(ui),
+        'a screen reader must learn what a row is and whether it is done '
+        + '(PopupBaseMenuItem has no checkAccessibleState — that is only on '
+        + 'PopupSwitchMenuItem, so the state is maintained here)');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
