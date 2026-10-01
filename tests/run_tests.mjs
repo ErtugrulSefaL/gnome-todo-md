@@ -309,9 +309,16 @@ function testStaticChecks() {
     record('static: metadata declares the settings-schema id',
         /"settings-schema"\s*:\s*"org\.gnome\.shell\.extensions\.gnome-todo-md"/.test(meta),
         'ExtensionBase.getSettings() reads metadata["settings-schema"]');
-    record('static: compiled GSettings schema is committed (schemas/gschemas.compiled)',
-        readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/gschemas.compiled') !== '',
-        'getSettings() loads the schemas/ dir from the extension directory');
+    // The schema XML is the only file the review guidelines require; GNOME 45+
+    // compiles the binary at install time and shipping gschemas.compiled is the
+    // single most frequent extensions.gnome.org rejection reason ("Please
+    // remove schemas/gschemas.compiled. Not needed for 45+ packages.").
+    // The binary stays in the working tree (the extension is installed through
+    // a symlink and getSettings() reads it at runtime), so this guard asserts
+    // that git can never pick it up again.
+    record('static: schemas/gschemas.compiled is NOT committed',
+        /^\*\.compiled$/m.test(readFileText('.gitignore')),
+        'do not commit schemas/gschemas.compiled — reviewers reject it on every 45+ upload');
 
     // Faz 6.6: fixed menu width, always-scroll tab bar, fixed checkbox area.
     record('static: the persistent tab bar is a plain actor (NO PopupBaseMenuItem)',

@@ -2,3 +2,7 @@
 .goosehints
 plan.md
 test.md
+
+# Build artifact: GNOME 45+ compiles the schema at install time. Committing it
+# is the most common extensions.gnome.org rejection reason.
+*.compiled

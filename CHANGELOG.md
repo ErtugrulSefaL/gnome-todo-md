@@ -4,6 +4,20 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.2 - 2026-10-02
+
+### Fixed
+- `schemas/gschemas.compiled` is no longer committed. GNOME 45+ compiles the
+  schema at install time, so the binary was dead weight in the package — and
+  the single most frequent extensions.gnome.org rejection reason ("Please
+  remove `schemas/gschemas.compiled`. Not needed for 45+ packages."). The XML
+  stays; the compiled binary is now a gitignored build artifact (it is still
+  produced locally, because the extension is installed through a symlink and
+  `getSettings()` reads it at runtime).
+- The static test that *required* the committed binary — which kept CI green by
+  enforcing the rejection reason — is inverted: it now fails if the artifact
+  can be tracked by git again.
+
 ## 0.11.1 - 2026-09-26
 
 ### Fixed
