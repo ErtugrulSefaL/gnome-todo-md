@@ -4,6 +4,20 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.4 - 2026-10-02
+
+### Changed
+- `metadata.json` `description` rewritten for extensions.gnome.org. It was
+  a single 41-character sentence; it now states what the extension does, lists
+  the shipped features as bullets, names the tested configuration, and
+  **declares its file access** — the extension reads and writes one user file,
+  so reviewers expect that spelled out. Format follows the review guidelines
+  (`\n` paragraphs, `*` bullets). No behaviour change.
+
+### Added
+- A static guard keeps the description honest: it must declare file access,
+  name the supported shell version, and use a bullet list. Tests: 124 → 125.
+
 ## 0.11.3 - 2026-10-02
 
 ### Fixed

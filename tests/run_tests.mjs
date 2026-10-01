@@ -334,6 +334,19 @@ function testStaticChecks() {
     record('static: metadata declares the settings-schema id',
         /"settings-schema"\s*:\s*"org\.gnome\.shell\.extensions\.gnome-todo-md"/.test(meta),
         'ExtensionBase.getSettings() reads metadata["settings-schema"]');
+
+    // Faz 0.3: reviewers flag capabilities the description does not declare —
+    // this extension reads and writes a user file, so the description has to
+    // say so. Parsed (not regexed) so a key that merely looks like a
+    // description cannot satisfy the check.
+    const description = JSON.parse(meta).description;
+    record('static: metadata description declares file access and compatibility',
+        /\b(file|read|writes?|disk|filesystem|storage)/i.test(description)
+        && description.includes('GNOME Shell 46')
+        && /\n\*/.test(description)
+        && description.length >= 200,
+        'EGO expects the description to state what the extension reads/writes, '
+        + 'which shell versions it supports, and to list features as bullets');
     // The schema XML is the only file the review guidelines require; GNOME 45+
     // compiles the binary at install time and shipping gschemas.compiled is the
     // single most frequent extensions.gnome.org rejection reason ("Please
