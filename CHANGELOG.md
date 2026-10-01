@@ -4,6 +4,19 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.11 - 2026-10-02
+
+### Fixed
+- The menu's deferred refresh is now cancellable. Opening the menu schedules
+  the rebuild with `GLib.idle_add` and the source id was thrown away, so
+  turning the extension off while that callback was pending left it to run
+  against an already-destroyed menu. The id is stored and removed in
+  `disable()`, as the review guidelines require for every main loop source —
+  including ones that already returned `SOURCE_REMOVE`.
+
+### Added
+- A static guard for it. Tests: 177 → 178.
+
 ## 0.11.10 - 2026-10-02
 
 ### Added

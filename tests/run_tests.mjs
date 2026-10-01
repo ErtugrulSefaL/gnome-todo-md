@@ -516,6 +516,19 @@ function testStaticChecks() {
         'a screen reader must learn what a row is and whether it is done '
         + '(PopupBaseMenuItem has no checkAccessibleState — that is only on '
         + 'PopupSwitchMenuItem, so the state is maintained here)');
+
+    // Audit S6: a main loop source that is not tracked cannot be removed in
+    // disable(), which the review guidelines require even when the callback
+    // returns SOURCE_REMOVE — a pending idle would refresh a torn-down menu.
+    const idleLine = uiLines.findIndex(line => line.includes('= GLib.idle_add('));
+    record('static: the open-menu idle is tracked and cancelled in disable()',
+        /this\._openIdleId = GLib\.idle_add\(/.test(ui)
+        && idleLine !== -1
+        && uiLines.slice(idleLine, idleLine + 8)
+            .some(line => line.includes('this._openIdleId = 0;'))
+        && /disable\(\)\s*\{[\s\S]{0,900}?GLib\.Source\.remove\(this\._openIdleId\)/.test(ui),
+        'store the GLib.idle_add source id and remove it in disable() — every '
+        + 'main loop source must be removable when the extension is turned off');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------

@@ -19,6 +19,7 @@ export default class TodoExtension extends Extension {
         this._editingIndex = -1;
         this._addingCategory = null;
         this._addingNewCategory = false;
+        this._openIdleId = 0;
 
         // GSettings backend (schema id: metadata.json settings-schema).
         this._settings = this.getSettings();
@@ -83,7 +84,16 @@ export default class TodoExtension extends Extension {
                 if (open) {
                     // GLib.idle_add takes (priority, func). A single-argument
                     // call throws and the rebuild silently never runs.
-                    GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                    //
+                    // The source id is kept so disable() can cancel it: the
+                    // guidelines require every main loop source to be removed
+                    // there, even one that returns SOURCE_REMOVE, and a
+                    // pending idle would otherwise refresh a torn-down menu.
+                    if (this._openIdleId) {
+                        GLib.Source.remove(this._openIdleId);
+                    }
+                    this._openIdleId = GLib.idle_add(GLib.PRIORITY_DEFAULT_IDLE, () => {
+                        this._openIdleId = 0;
                         this._refreshTodoMenu();
                         return GLib.SOURCE_REMOVE;
                     });
@@ -109,6 +119,13 @@ export default class TodoExtension extends Extension {
 
     disable() {
         this._unwatchTodoFile();
+        // Every main loop source has to go, even one that already returned
+        // SOURCE_REMOVE — a pending idle would call back into a torn-down
+        // menu (review-guidelines: "Remove main loop sources").
+        if (this._openIdleId) {
+            GLib.Source.remove(this._openIdleId);
+            this._openIdleId = 0;
+        }
         if (this._settingsSignal) {
             this._settings.disconnect(this._settingsSignal);
             this._settingsSignal = null;
