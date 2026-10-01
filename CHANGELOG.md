@@ -4,6 +4,31 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.3 - 2026-10-02
+
+### Fixed
+- Comment integrity in `extension.js` (audit D7). Four defective JSDoc blocks
+  are gone:
+  - `_makeNewCategoryRow`: the docstring had been duplicated verbatim.
+  - `_switchTo`: a truncated, **never-closed** docstring had swallowed four
+    lines of dead code *and* `_todoPath()`'s own docstring; both are separated
+    again.
+  - `_makeTaskRow`: its docstring was stranded above `_capWidth`, leaving the
+    method undocumented — moved back onto the method it describes.
+  - `_addTask`: a pre-Phase-4 docstring with the wrong signature (`text` only,
+    no `category`) sat above the current one.
+
+  None of these were reachable by `node --check`: a duplicated, unclosed or
+  misattached docstring is still valid JavaScript. Comment stripping confirms
+  the change is comment-only — 584 code lines, token-for-token identical.
+
+### Added
+- Three static guards close that blind spot for good (`tests/run_tests.mjs`,
+  over `extension.js`, `storage.js` and `prefs.js`): no duplicated JSDoc
+  blocks, no live code swallowed by an unclosed one, and every doc block
+  attached to a declaration. Each was verified by re-injecting the defect it
+  guards against. Test count: 121 → 124.
+
 ## 0.11.2 - 2026-10-02
 
 ### Fixed

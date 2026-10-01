@@ -258,6 +258,31 @@ function noMatch(name, content, forbiddenPattern, incident) {
     record(name, m === null, m === null ? incident : `found: "${m[0]}" — ${incident}`);
 }
 
+// Comment-integrity scanning (Faz 0.2 / audit D7). `node --check` cannot catch
+// any of these defects: a duplicated, unclosed or misattached JSDoc block is
+// still valid JavaScript, because all three survive the parser as comments.
+// The audit found one of each in extension.js; the worst had swallowed four
+// lines of live code plus the next method's docstring.
+const SOURCE_FILES = ['extension.js', 'storage.js', 'prefs.js']
+    .map(name => `gnome-todo-md@ertugrulsefal.github.com/${name}`);
+
+// Line starts a declaration a docstring is allowed to document: a function,
+// class, constant, or a class method signature.
+const DECLARATION = /^(export\s+)?(default\s+)?(async\s+)?(function|class|const|let|var|get)\b|^[A-Za-z_$][\w$]*\s*\(/;
+
+// Every /** … */ block in `src`, as {start, end, lines} (end = the `*/` line).
+function docBlocks(src) {
+    const lines = src.split('\n');
+    const blocks = [];
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].trim().startsWith('/**')) continue;
+        const start = i;
+        while (i < lines.length && !lines[i].includes('*/')) i++;
+        blocks.push({start, end: i, lines});
+    }
+    return blocks;
+}
+
 function testStaticChecks() {
     const ui = readFileText('gnome-todo-md@ertugrulsefal.github.com/extension.js');
     const prefs = readFileText('gnome-todo-md@ertugrulsefal.github.com/prefs.js');
@@ -350,6 +375,32 @@ function testStaticChecks() {
     record('static: hscrollbar_policy inside the always-on tab scroller',
         (ui.match(/hscrollbar_policy:/g) || []).length === 1,
         'the tab bar is unconditionally horizontally scrollable');
+
+    // Faz 0.2 / audit D7: comment integrity. These three defects are invisible
+    // to `node --check` — a duplicated, unclosed or misattached JSDoc block is
+    // valid JavaScript, because all three survive the parser as comments.
+    record('static: no duplicated JSDoc blocks (two /** blocks back-to-back)',
+        SOURCE_FILES.every(rel => {
+            const lines = readFileText(rel).split('\n');
+            return !lines.some((line, i) => line.trim() === '*/'
+                && i + 1 < lines.length && lines[i + 1].trim() === '/**');
+        }),
+        'a docstring was copy-pasted over another; delete the stale copy');
+    record('static: no code swallowed by a JSDoc block',
+        SOURCE_FILES.every(rel => docBlocks(readFileText(rel)).every(block =>
+            block.lines.slice(block.start + 1, block.end).every(line => {
+                const text = line.trim();
+                return text === '' || text.startsWith('*');
+            }))),
+        'a /** block was never closed, so live code became comment text');
+    record('static: every JSDoc block documents a declaration',
+        SOURCE_FILES.every(rel => docBlocks(readFileText(rel)).every(block => {
+            let i = block.end + 1;
+            while (i < block.lines.length && block.lines[i].trim() === '') i++;
+            return i >= block.lines.length
+                || DECLARATION.test(block.lines[i].trim());
+        })),
+        'a docstring drifted away from the code it documents');
     record('static: scroll-mode tab labels use EllipsizeMode.NONE',
         /EllipsizeMode\.NONE/.test(ui),
         'St.Label defaults to END (st-label.c :336); an ellipsized label has '

@@ -178,13 +178,6 @@ export default class TodoExtension extends Extension {
      * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
      *   and its entry, so the caller can grab focus after adding to the menu.
      */
-    /**
-     * Build the inline "new category" row: an empty entry. Enter commits via
-     * Storage.addCategory; the new category becomes the active tab.
-     *
-     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
-     *   and its entry, so the caller can grab focus after adding to the menu.
-     */
     _makeNewCategoryRow() {
         const row = new PopupMenu.PopupBaseMenuItem(
             {activate: false, can_focus: false});
@@ -246,14 +239,6 @@ export default class TodoExtension extends Extension {
         // NOTE: the scroll position is deliberately NOT reset here
         // (Faz 6.6: selecting a category must not jump to the top — the
         // persistent wrapper keeps both scroll offsets across refreshes).
-        this._refreshTodoMenu();
-    }
-
-
-    /**
-     * Switch the active category tab. Closes any open inline interaction
-        this._cancelEditing();
-        this._activeCategory = categoryName;
         this._refreshTodoMenu();
     }
 
@@ -602,17 +587,6 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Build a clickable task row: label (strikethrough + fade when done),
-     * move up/down buttons, and edit + delete buttons pinned to the right.
-     *
-     * @param {object} task - Document task item ({index, raw, done, tags, text}).
-     * @param {boolean} isFirst - True when the task is first in its category
-     *   (the up button is hidden at the category's top edge).
-     * @param {boolean} isLast - True when the task is last in its category
-     *   (the down button is hidden at the category's bottom edge).
-     * @returns {PopupMenu.PopupBaseMenuItem} The task row.
-     */
-    /**
      * Constrain an actor's width to the GSettings menu-width cap
      * (fixed default + user-adjustable). Used by the inline add/edit/
      * new-category entries so a long text being typed cannot widen the
@@ -624,6 +598,17 @@ export default class TodoExtension extends Extension {
             `max-width: ${this._settings.get_int('menu-width')}px;`);
     }
 
+    /**
+     * Build a clickable task row: label (strikethrough + fade when done),
+     * move up/down buttons, and edit + delete buttons pinned to the right.
+     *
+     * @param {object} task - Document task item ({index, raw, done, tags, text}).
+     * @param {boolean} isFirst - True when the task is first in its category
+     *   (the up button is hidden at the category's top edge).
+     * @param {boolean} isLast - True when the task is last in its category
+     *   (the down button is hidden at the category's bottom edge).
+     * @returns {PopupMenu.PopupBaseMenuItem} The task row.
+     */
     _makeTaskRow(task, isFirst, isLast, categoryName, colors) {
         const index = task.index;
         const row = new PopupMenu.PopupBaseMenuItem();
@@ -830,11 +815,6 @@ export default class TodoExtension extends Extension {
         return {row, entry};
     }
 
-    /**
-     * Add a task to the end of ~/todo.md and refresh the menu.
-     *
-     * @param {string} text - Task text to add.
-     */
     /**
      * Add a task to the given category, persist and refresh.
      *
