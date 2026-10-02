@@ -755,6 +755,11 @@ export function addTaskTag(content, index, key, value) {
  *
  * @param {string} path - Absolute file path to write to.
  * @param {string} content - Full file content to write.
+ * @returns {boolean} True when the file was written, false when the write
+ *   failed (disk full, read-only file, missing parent directory). Callers MUST
+ *   check it: reporting success anyway made the UI close its inline entry and
+ *   refresh from the unchanged file, so whatever the user had just typed
+ *   vanished with no message (audit N4).
  */
 export function writeTodo(path, content) {
     // Loud failure instead of silently encoding `undefined` into an empty
@@ -772,10 +777,13 @@ export function writeTodo(path, content) {
     const bytes = new TextEncoder().encode(content);
     try {
         file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
+        return true;
     } catch (e) {
         // Surface failures (disk full, permissions) without crashing the
         // extension; the next refresh keeps showing the on-disk content, so
-        // the UI stays consistent with the file.
+        // the UI stays consistent with the file. The FALSE return is what lets
+        // the caller keep the user's input instead of dropping it silently.
         console.error(`todo: failed to write ${path}: ${e}`);
+        return false;
     }
 }

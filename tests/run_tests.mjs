@@ -504,14 +504,59 @@ function testStaticChecks() {
     // counts — a comment length must not decide whether a guard holds.
     const addLine = uiLines.findIndex(line => line.includes('const updated = Storage.addCategory'));
     const rejectLine = uiLines.findIndex(line => line.includes('if (updated === parsed.raw) {'));
-    record('static: a rejected category name keeps the inline entry open',
-        addLine !== -1 && rejectLine > addLine
-        && !uiLines.slice(addLine, rejectLine)
-            .some(line => line.includes('this._addingNewCategory = false;'))
-        && uiLines.slice(rejectLine, rejectLine + 12)
+    const writeLine = uiLines.findIndex(line => line.includes('if (!Storage.writeTodo(this._todoPath(), updated)) {'));
+    // Windowed on writeLine: a plain findIndex would match the FIRST
+    // `this._addingNewCategory = false;` in the file — the one in enable(),
+    // which is nowhere near this handler.
+    const closeLine = uiLines.findIndex((line, i) =>
+        i > writeLine && line.includes('this._addingNewCategory = false;'));
+    record('static: the new-category entry closes only after BOTH guards',
+        addLine !== -1 && rejectLine > addLine && writeLine > rejectLine
+        && closeLine > writeLine
+        && !uiLines.slice(addLine, closeLine)
             .some(line => line.includes('this._addingNewCategory = false;')),
-        'close the new-category entry only AFTER the rejection check, so a '
-        + 'name addCategory refuses leaves the text on screen');
+        'close the entry only AFTER the rejection check (D5) and AFTER the '
+        + 'failed-write check (N4), so a name addCategory refuses — or a file '
+        + 'that cannot be written — leaves the typed text on screen. Order, '
+        + 'not a line count: the first version of this guard used a 12-line '
+        + 'window and a comment block alone could break it.');
+
+    // Audit N4: the two handlers that can lose TYPED INPUT must check the write
+    // result. Discovered by mutation testing: reverting either check kept the
+    // suite green, because the only N4 guard covered the new-category path.
+    // The three no-input handlers (toggle/delete/move) deliberately refresh
+    // anyway — a click has no text to lose, and re-reading the file is what
+    // makes the menu truthful.
+    //
+    // A window would repeat the mistake above, so the handler body is cut at
+    // its real closing brace (methods end at 4-space indentation).
+    const handlerBody = signature => {
+        const start = uiLines.findIndex(line => line.includes(signature));
+        if (start === -1) {
+            return null;
+        }
+        for (let i = start + 1; i < uiLines.length; i++) {
+            if (uiLines[i] === '    }') {
+                return uiLines.slice(start, i).join('\n');
+            }
+        }
+        return null;
+    };
+    const addBody = handlerBody('_addTask(text, category) {');
+    const editBody = handlerBody('_finishEditing(text) {');
+    record('static: _addTask keeps the typed task when the write fails',
+        addBody !== null && /if \(!Storage\.writeTodo\(/.test(addBody)
+        && addBody.indexOf('if (!Storage.writeTodo(')
+            < addBody.indexOf('this._addingCategory = null;'),
+        'a failed write must return BEFORE the inline entry closes, or the '
+        + 'text the user typed is gone with no message');
+
+    record('static: _finishEditing keeps the edited text when the write fails',
+        editBody !== null && /if \(!Storage\.writeTodo\(/.test(editBody)
+        && editBody.indexOf('if (!Storage.writeTodo(')
+            < editBody.indexOf('this._editingIndex = -1;'),
+        'same rule for the edit commit: the old text stays on disk, the new one '
+        + 'stays on screen');
 
     // Audit D8: an icon-only button with no accessible_name is announced as
     // just "button". The tab buttons carry visible text, so they are exempt.
@@ -1227,6 +1272,23 @@ function testCategoryColors() {
                 Storage.parseDocument('- [ ] a\n## General\n- [ ] b\n'))))
             === JSON.stringify(['General']),
         'parseDocument marks the taken-over bucket implicit:false, so it prunes');
+
+    record('writeTodo: a failed write reports false so the caller can react',
+        Storage.writeTodo(TODO + '/no/such/dir/todo.md', 'x') === false
+        && Storage.writeTodo(TODO, '- [ ] probe\n') === true,
+        'audit N4: writeTodo used to swallow the failure and return nothing, so '
+        + 'the UI closed the inline entry and refreshed from the unchanged file '
+        + '- whatever the user had typed vanished with no message');
+
+    record('writeTodo: empty content still throws loudly (never a false return)',
+        (() => { try {
+            Storage.writeTodo(TODO, '');
+            return false;
+        } catch (e) {
+            return true;
+        } })(),
+        'the empty-write guard is a programming error, not an I/O failure, so '
+        + 'it must not be downgraded to a false return');
 
     record('rgbToHex: 8-bit RGB values become #rrggbb',
         Storage.rgbToHex(224, 27, 36) === '#e01b24'

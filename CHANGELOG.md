@@ -4,6 +4,35 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.14 - 2026-10-03
+
+### Fixed
+- **A failed write no longer swallows what you just typed.** When the todo
+  file could not be written — disk full, read-only file, a `todo-file-path`
+  pointing somewhere unwritable — the extension closed the inline entry and
+  refreshed the menu from the unchanged file. The task you had just typed was
+  gone, and nothing on screen said so; the only trace was a line in the
+  journal. `writeTodo` now reports success or failure, and the add / edit /
+  new-category paths keep the entry open with your text when it fails, exactly
+  as a rejected category name already did.
+
+  Toggle, delete and move still refresh after a failed write: a click has no
+  text to lose, and re-reading the file is what keeps the menu truthful.
+
+### Changed
+- `Storage.writeTodo` returns `boolean` instead of `undefined`. Callers that
+  ignore it keep their old behaviour; the three that can lose typed input now
+  check it.
+- The static guard for the new-category entry no longer counts lines: it
+  asserts the *order* (rejection check → write check → close), because a
+  comment block alone was enough to break the old 12-line window.
+- New guards for the add and edit paths, added because mutation testing showed
+  reverting either one kept the suite green.
+
+### Tests
+- 172 → 176, plus 5 new mutants all killed (N4-M1…M5): the return value, the
+  add check, the edit check, the new-category check, and the guard's ordering.
+
 ## 0.11.13 - 2026-10-02
 
 ### Fixed

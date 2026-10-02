@@ -217,14 +217,15 @@ export default class TodoExtension extends Extension {
                     // like a broken button.
                     return Clutter.EVENT_STOP;
                 }
+                if (!Storage.writeTodo(this._todoPath(), updated)) {
+                    // Audit N4: a failed write changes NOTHING — the entry
+                    // stays open with the typed name, and no colour is stored
+                    // for a category the file does not contain.
+                    return Clutter.EVENT_STOP;
+                }
+                // File first, then colour: `changed::category-colors` fires
+                // synchronously and the refresh prunes keys the file lacks.
                 this._addingNewCategory = false;
-
-                // Write the file FIRST: setting the color below fires
-                // changed::category-colors synchronously, and the
-                // refresh's dead-key pruning would remove the just
-                // written color because the file does not contain
-                // the new category yet (found by user testing).
-                Storage.writeTodo(this._todoPath(), updated);
 
                 // Auto-color: the next palette entry in order,
                 // wrapping around after the last (Faz 6 request).
@@ -832,7 +833,11 @@ export default class TodoExtension extends Extension {
         }
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
-        Storage.writeTodo(this._todoPath(), updated);
+        // Audit N4: a failed write must not close the edit and discard the new
+        // text. Same rule as _addTask.
+        if (!Storage.writeTodo(this._todoPath(), updated)) {
+            return;
+        }
         this._editingIndex = -1;
         this._addingCategory = null;
         this._addingNewCategory = false;
@@ -884,12 +889,18 @@ export default class TodoExtension extends Extension {
             return;
         }
 
+        const parsed = Storage.readTodo(this._todoPath());
+        const updated = Storage.addTask(parsed.raw, trimmed, category);
+        // Audit N4: the write result decides whether the entry may close. On
+        // failure (disk full, read-only file) the typed text STAYS in the entry
+        // instead of vanishing with a refresh that re-reads the old file — the
+        // same behaviour the rejected-category-name path already uses (audit D5).
+        if (!Storage.writeTodo(this._todoPath(), updated)) {
+            return;
+        }
         this._editingIndex = -1;
         this._addingCategory = null;
         this._addingNewCategory = false;
-        const parsed = Storage.readTodo(this._todoPath());
-        const updated = Storage.addTask(parsed.raw, trimmed, category);
-        Storage.writeTodo(this._todoPath(), updated);
         this._refreshTodoMenu();
     }
 
