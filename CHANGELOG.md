@@ -4,6 +4,35 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.13.0 - 2026-10-03
+
+### Added
+- **`tabBar.js`**: the category tab strip moved out of `extension.js` into a
+  `TabBar` class (`attach` / `detach` / `clearTabs` / `refill`). The strip is
+  still a persistent plain actor on `menu.box` — that invariant is unchanged and
+  now guarded in the module it lives in. This is the first step of splitting the
+  entry point, which the EGO best practices ask for ("Modules are Better Than a
+  Single File", "Keep the Default Entry Point as Small as Possible" — very large
+  files can make the review page lag on diffs).
+
+  `extension.js`: 998 → 890 lines. Nothing was rewritten in the move: 129 lines
+  out, 21 in.
+
+### Tests
+- The static guards now read the **whole shell-side surface, derived from the
+  directory**, instead of one hardcoded file. Before this, moving code into a
+  module would have left every "must not appear in the UI layer" guard passing
+  over a file it no longer read — green and measuring nothing, the inverse of the
+  tautological test audit N1 found.
+- Three guards rewritten without magic numbers: the tab-bar invariant, the
+  per-button `accessible_name` check (was "6 named / 8 buttons"), and the
+  docstring scanner's file list.
+- Mutation-tested, and the mutations found three defects in the tests themselves:
+  a forbidden-call regex that missed the real syntax (`PopupMenu.PopupBaseMenuItem`
+  has a dot), a guard matching its own explanatory comment, and a block scanner
+  mixing coordinates between commented and raw source.
+- 177 → 177 tests, 4 new mutants killed.
+
 ## 0.12.0 - 2026-10-03
 
 ### Changed

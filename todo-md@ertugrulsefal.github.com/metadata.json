@@ -4,6 +4,6 @@
   "description": "Todo MD puts a plain markdown checkbox file in the panel menu, so the list stays readable in any editor and on any device.\n\nTasks live in a single file — ~/todo.md by default, or any path set in the preferences.\n\nFeatures:\n* ## Category sections become colored tabs; each tab and each category header has a + button for adding a task or a new category\n* Check, uncheck, edit inline, delete, and reorder tasks inside their category\n* Fixed menu width and a configurable maximum height; the tab bar and the list keep their scroll position\n* Edits made outside the shell are picked up live by a file monitor\n* Preferences: todo file path, menu width, maximum menu height, category colors\n\nCompatibility: GNOME Shell 46, tested on Ubuntu 24.04 with X11.\n\nFile access: the extension only reads and writes the markdown todo file you configure (~/todo.md by default), plus its own GSettings. No network requests, no subprocesses, no clipboard use.",
   "url": "https://github.com/ErtugrulSefaL/gnome-todo-md",
   "settings-schema": "org.gnome.shell.extensions.todo-md",
-  "version-name": "0.12.0",
+  "version-name": "0.13.0",
   "shell-version": ["46"]
 }

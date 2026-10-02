@@ -11,6 +11,7 @@ import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import * as Storage from './storage.js';
+import {TabBar} from './tabBar.js';
 
 export default class TodoExtension extends Extension {
     enable() {
@@ -385,134 +386,26 @@ export default class TodoExtension extends Extension {
         // _getMenuItems + destroy), which crashed the shell (SEGV,
         // journal 2026-09-26 21:26).
         if (!this._tabBar) {
-            const bar = new St.BoxLayout({style_class: 'todo-tab-bar'});
-            bar.set_x_expand(true);
-            bar.set_reactive(true); // receive scroll events
-                    const tabsBox = new St.BoxLayout();
-            const tabScroller = new St.ScrollView({
-                hscrollbar_policy: St.PolicyType.AUTOMATIC,
-                vscrollbar_policy: St.PolicyType.NEVER,
-                // CRITICAL: St's own wheel handler consumes scroll events
-                // (st-scroll-view.c :751 returns TRUE) and routes the
-                // wheel to the VADJUSTMENT only (:771) — useless here
-                // (vscrollbar NEVER). Disabling it lets our handler on
-                // `bar` receive the wheel instead.
-                enable_mouse_scrolling: false,
-            });
-            tabScroller.add_child(tabsBox);
-            tabScroller.set_x_expand(true);
-            // NOTE: no min-width/max-width here — the menu.box itself is
-            // force-sized (width + max-width, see _refreshTodoMenu), and a
-            // min-width on the scroller would eat the full menu width and
-            // push the far-right '+' button out of view (user report). The
-            // scroller just expands into the remaining space; once the tabs'
-            // minimum width exceeds that allocation the horizontal
-            // scrollbar engages.
-            // Mouse wheel anywhere on the tab bar scrolls it horizontally.
-            // UP = scroll left, DOWN = scroll right; SMOOTH deltas supported.
-            bar.connect('scroll-event', (actor, event) => {
-                const adj = tabScroller.hadjustment;
-                if (!adj) {
-                    return Clutter.EVENT_PROPAGATE;
-                }
-                const direction = event.get_scroll_direction();
-                if (direction === Clutter.ScrollDirection.SMOOTH) {
-                    // Vertical wheel produces dy; horizontal wheel/trackpad dx.
-                    const [dx, dy] = event.get_scroll_delta();
-                    adj.value += (dx + dy) * adj.step_increment;
-                    return Clutter.EVENT_STOP;
-                }
-                if (direction === Clutter.ScrollDirection.DOWN) {
-                    adj.value += adj.step_increment;
-                    return Clutter.EVENT_STOP;
-                }
-                if (direction === Clutter.ScrollDirection.UP) {
-                    adj.value -= adj.step_increment;
-                    return Clutter.EVENT_STOP;
-                }
-                return Clutter.EVENT_PROPAGATE;
-            });
-            // Far-right '+' — the new-category entry point (fixed, outside
-            // the scroller so it is always reachable).
-            const addCatBtn = new St.Button({
-                style_class: 'todo-icon-button button',
-                accessible_name: 'New category',
-                child: new St.Icon({
-                    icon_name: 'list-add-symbolic',
-                    style_class: 'system-status-icon',
-                }),
-            });
-            addCatBtn.set_x_align(Clutter.ActorAlign.END);
-            addCatBtn.connect('clicked', () => {
+            // The strip itself lives in tabBar.js; this file only decides WHEN
+            // it exists, where it sits and what fills it.
+            this._tabBar = new TabBar();
+            this._tabBar.newCategoryButton.connect('clicked', () => {
                 this._cancelEditing();
                 this._addingNewCategory = !this._addingNewCategory;
                 this._refreshTodoMenu();
             });
-            bar.add_child(tabScroller);
-            bar.add_child(addCatBtn);
-            this._tabBar = {bar, tabsBox, scroller: tabScroller};
         } else {
-            // Detach and clear the tab buttons; the scroller (and its
+            // Detach and clear the tab buttons; the strip (and its
             // hadjustment) survive.
-            menu.box.remove_child(this._tabBar.bar);
-            this._tabBar.tabsBox.remove_all_children();
+            this._tabBar.detach(menu.box);
+            this._tabBar.clearTabs();
         }
 
-        // Re-attach the persistent tab bar as the FIRST row (refill only;
-        // the scroller's hadjustment — horizontal scroll — survives).
-        menu.box.add_child(this._tabBar.bar);
-        // Refill the tab buttons into the persistent tabsBox (the scroller
-        // itself survives — its hadjustment keeps the scroll position).
-        // Tab labels keep EllipsizeMode.NONE: an ellipsized label reports a
-        // small MINIMUM width, so the scroll cap never engages and the tabs
-        // get squeezed instead of scrolling (St.Label defaults to END,
-        // st-label.c :336 — user-tested).
-        const tabsBox = this._tabBar.tabsBox;
-        if (sections.length > 1) {
-            const tabs = [{name: null, label: 'All'}]
-                .concat(sections.map(section => ({
-                    name: section.name, label: section.name})));
-            for (const tab of tabs) {
-                const button = new St.Button({
-                    style_class: 'todo-tab button',
-                    toggle_mode: true,
-                });
-                // St.Button has NO clutter_text of its own (runtime error
-                // 'button.clutter_text is undefined', journal 2026-09-26);
-                // the child St.Label owns the text.
-                const tabLabel = new St.Label({text: tab.label});
-                button.set_child(tabLabel);
-                tabLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-                // Tabs carry the category color too (the content header is
-                // filtered away when a tab is inactive).
-                if (tab.name) {
-                    const tabCss = Storage.categoryColorCss(tab.name, prunedColors);
-                    if (tabCss) {
-                        button.set_style(tabCss);
-                    }
-                }
-                button.set_checked(this._activeCategory === tab.name);
-                button.connect('clicked', () => {
-                    this._switchTo(tab.name);
-                });
-                tabsBox.add_child(button);
-            }
-        } else {
-            // Single category: show it as a (checked) tab for visual balance.
-            const button = new St.Button({
-                style_class: 'todo-tab button',
-                toggle_mode: true,
-            });
-            const tabLabel = new St.Label({text: sections[0].name});
-            button.set_child(tabLabel);
-            tabLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-            if (prunedColors[sections[0].name]) {
-                button.set_style(
-                    Storage.categoryColorCss(sections[0].name, prunedColors));
-            }
-            button.set_checked(true);
-            tabsBox.add_child(button);
-        }
+        // Re-attach the persistent tab bar as the FIRST row (refill only; the
+        // scroller's hadjustment — horizontal scroll — survives).
+        this._tabBar.attach(menu.box);
+        this._tabBar.refill(sections, prunedColors, this._activeCategory,
+            name => this._switchTo(name));
 
         // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {

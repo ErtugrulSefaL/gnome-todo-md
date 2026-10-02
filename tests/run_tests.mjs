@@ -261,6 +261,33 @@ function readFileText(relPath) {
     return new TextDecoder().decode(bytes);
 }
 
+// Every regular .js file in `relDir`, sorted. Used to keep the guarded
+// surface honest as the extension grows modules (see testStaticChecks).
+//
+// NOTE: `GLib.Dir.open(path)` throws "At least 2 arguments required" in GJS —
+// the bare C name is not the exposed form. `Gio.File.enumerate_children()` is
+// the API that works, verified against the offline mirror (gio20~2.0
+// `gio.file`: `enumerate_children(attributes, flags, cancellable)` +
+// `gio.file-enumerator.next_file`).
+function listJsFiles(relDir) {
+    const dir = Gio.File.new_for_path(GLib.get_current_dir() + '/' + relDir);
+    const enumerator = dir.enumerate_children(
+        'standard::name,standard::type', Gio.FileQueryInfoFlags.NONE, null);
+    if (enumerator === null) {
+        return [];
+    }
+    const names = [];
+    let info;
+    while ((info = enumerator.next_file(null)) !== null) {
+        if (info.get_file_type() === Gio.FileType.REGULAR
+            && info.get_name().endsWith('.js')) {
+            names.push(info.get_name());
+        }
+    }
+    enumerator.close(null);
+    return names.sort();
+}
+
 function noMatch(name, content, forbiddenPattern, incident) {
     const m = content.match(forbiddenPattern);
     record(name, m === null, m === null ? incident : `found: "${m[0]}" — ${incident}`);
@@ -271,8 +298,18 @@ function noMatch(name, content, forbiddenPattern, incident) {
 // still valid JavaScript, because all three survive the parser as comments.
 // The audit found one of each in extension.js; the worst had swallowed four
 // lines of live code plus the next method's docstring.
-const SOURCE_FILES = ['extension.js', 'storage.js', 'prefs.js']
+// Derived from the directory, not hand-listed: after the A1 split a hardcoded
+// list would have quietly stopped scanning every new module, and the D7
+// comment-integrity checks would have been measuring half the code.
+const SOURCE_FILES = listJsFiles('todo-md@ertugrulsefal.github.com')
     .map(name => `todo-md@ertugrulsefal.github.com/${name}`);
+
+// Source with comments removed. Negative guards ("this must never appear in
+// the UI layer") otherwise match the prose that explains WHY the thing is
+// forbidden — which every well-commented module eventually does.
+function stripComments(src) {
+    return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
 
 // Line starts a declaration a docstring is allowed to document: a function,
 // class, constant, or a class method signature.
@@ -292,12 +329,38 @@ function docBlocks(src) {
 }
 
 function testStaticChecks() {
-    const ui = readFileText('todo-md@ertugrulsefal.github.com/extension.js');
     const prefs = readFileText('todo-md@ertugrulsefal.github.com/prefs.js');
-    const store = readFileText('todo-md@ertugrulsefal.github.com/storage.js');
     const meta = readFileText('todo-md@ertugrulsefal.github.com/metadata.json');
     const css = readFileText('todo-md@ertugrulsefal.github.com/stylesheet.css');
+    const store = readFileText('todo-md@ertugrulsefal.github.com/storage.js');
+    // The guarded UI surface is DERIVED FROM THE DIRECTORY, not hardcoded.
+    // When extension.js is split into modules, every "this must not appear in
+    // the UI layer" guard would keep passing simply because the code moved
+    // out of the one file it reads — the same failure mode as audit N1's
+    // tautological D1 test, inverted: a guard that measures nothing and is
+    // green. Deriving the list means a new module joins the surface the day
+    // it is created, and the check below fails loudly if one does not.
+    // prefs.js is excluded on purpose: different process, checked separately.
+    const EXT_DIR = 'todo-md@ertugrulsefal.github.com';
+    const dirJsFiles = listJsFiles(EXT_DIR);
+    // prefs.js is the only excluded file: it runs in the preferences process.
+    const uiNames = dirJsFiles.filter(name => name !== 'prefs.js');
+    const uiSources = uiNames.map(name => readFileText(`${EXT_DIR}/${name}`));
+    const ui = uiSources.join('\n');
     const all = ui + '\n' + prefs + '\n' + store;
+    // The tripwire: `dirJsFiles` is counted independently of the list that is
+    // actually read, so replacing the derived list with hardcoded names (the
+    // obvious future edit) makes the two counts diverge and this fails. Without
+    // it, a module left out of the guards is invisible AND green.
+    record('static: the guarded UI surface covers every shell-side module',
+        dirJsFiles.length === uiNames.length + 1
+        && uiNames.includes('extension.js')
+        && uiSources.length >= 2
+        && ui.length > 10000
+        && ui.includes('export default class TodoExtension'),
+        `guarded: ${uiNames.join(', ')} (${ui.length} chars); a module left out `
+        + 'is invisible to every static guard — and a guard that measures '
+        + 'nothing still reports PASS');
 
     // Real incident: idle_add(() => ...) threw on every menu open (Phase 1).
     record('static: every GLib.idle_add call passes (priority, func)',
@@ -367,9 +430,22 @@ function testStaticChecks() {
         'do not commit schemas/gschemas.compiled — reviewers reject it on every 45+ upload');
 
     // Faz 6.6: fixed menu width, always-scroll tab bar, fixed checkbox area.
+    // The A1 split moved the strip into tabBar.js, so the guard moves with it
+    // and now also asserts the module itself is clean. The rule is the
+    // invariant, not the old code shape: nothing in tabBar.js may be a
+    // PopupMenu item, and it must attach as a raw actor child of menu.box.
+    const tabBarSrc = readFileText('todo-md@ertugrulsefal.github.com/tabBar.js');
     record('static: the persistent tab bar is a plain actor (NO PopupBaseMenuItem)',
-        /this\._tabBar = \{bar, tabsBox/.test(ui)
-            && /menu\.box\.remove_child\(this\._tabBar\.bar\)/.test(ui),
+        // NOTE the namespace dot: the real syntax is
+        // `PopupMenu.PopupBaseMenuItem`. A first version searched for
+        // `PopupMenu(Item|BaseMenuItem)`, which that string does not contain —
+        // the guard passed while the forbidden call sat in the file, and only
+        // mutation testing caught it.
+        !/(PopupMenu\s*\.\s*Popup\w*MenuItem)|(\bPopupMenuItem\b)|(\baddMenuItem\b)/
+            .test(stripComments(tabBarSrc))
+        && /menuBox\.add_child\(this\.bar\)/.test(tabBarSrc)
+        && /this\._tabBar\.attach\(menu\.box\)/.test(ui)
+        && /this\._tabBar\.detach\(menu\.box\)/.test(ui),
         'menu.box children with a PopupBaseMenuItem _delegate are DESTROYED by '
         + 'menu.removeAll() (popupMenu.js :827-850) — shell SEGV, 2026-09-26');
     record('static: schema declares menu-width with a described default',
@@ -561,11 +637,40 @@ function testStaticChecks() {
     // Audit D8: an icon-only button with no accessible_name is announced as
     // just "button". The tab buttons carry visible text, so they are exempt.
     const iconButtons = (ui.match(/new St\.Button\(\{/g) || []).length;
-    record('static: every icon-only button has an accessible_name',
-        (ui.match(/accessible_name:/g) || []).length === 6
-        && iconButtons === 8,
-        '6 icon-only buttons (new category, add task, up, down, delete, '
-        + 'edit) must be named; the 2 tab buttons have a text label instead');
+    // Rewritten after the A1 split: counting "6 named / 8 buttons" was tied to
+    // one file and to a fixed shape, so moving one button broke it while
+    // measuring nothing. The rule is now per-button: every St.Button is either
+    // named with accessible_name, or a .todo-tab whose label is set immediately
+    // after construction (a visible text label is its accessible name).
+    const buttonBlocks = (src) => {
+        // Scan the COMMENT-STRIPPED text end to end: matching on the original
+        // and slicing from it would mix two coordinate systems (the first
+        // version did exactly that and matched a `new St.Button(` mentioned
+        // inside prose).
+        const clean = stripComments(src);
+        const out = [];
+        const re = /new St\.Button\(\{/g;
+        let m;
+        while ((m = re.exec(clean)) !== null) {
+            let depth = 0;
+            let i = m.index + 'new St.Button('.length - 1;
+            for (; i < clean.length; i++) {
+                if (clean[i] === '{') depth++;
+                else if (clean[i] === '}' && --depth === 0) break;
+            }
+            out.push(clean.slice(m.index, i + 1));
+            re.lastIndex = i + 1;
+        }
+        return out;
+    };
+    const buttons = buttonBlocks(ui);
+    const unnamed = buttons.filter(block =>
+        !/accessible_name:/.test(block) && !/todo-tab button/.test(block));
+    record('static: every button is named or carries a visible label',
+        buttons.length >= 7 && unnamed.length === 0,
+        `${unnamed.length} unnamed of ${buttons.length}; an icon-only button `
+        + 'without accessible_name is announced as just "button" (audit D8) — '
+        + `first: ${unnamed[0] ? unnamed[0].slice(0, 80) : 'n/a'}`);
 
     record('static: task rows carry the checkable-menu-item semantics',
         /import Atk from 'gi:\/\/Atk';/.test(ui)
