@@ -17,12 +17,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends gjs libglib2.0-dev-bin
 
       - name: Compile the GSettings schema (strict)
-        run: glib-compile-schemas --strict 'gnome-todo-md@ertugrulsefal.github.com/schemas/'
+        run: glib-compile-schemas --strict 'todo-md@ertugrulsefal.github.com/schemas/'
 
       - name: JS syntax checks
         run: |
           for f in extension.js prefs.js storage.js; do
-            cp "gnome-todo-md@ertugrulsefal.github.com/$f" "/tmp/$f.mjs"
+            cp "todo-md@ertugrulsefal.github.com/$f" "/tmp/$f.mjs"
             node --check "/tmp/$f.mjs"
           done
 

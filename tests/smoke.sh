@@ -17,7 +17,7 @@
 
 set -u
 
-UUID="gnome-todo-md@ertugrulsefal.github.com"
+UUID="todo-md@ertugrulsefal.github.com"
 
 # Looking Glass / journalctl-style errors live in the Shell process, but the
 # reliable non-interactive signal here is the extension state from

@@ -4,6 +4,28 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.12.0 - 2026-10-03
+
+### Changed
+- **The UUID no longer contains the GNOME trademark.** `gnome-todo-md@ertugrulsefal.github.com`
+  → **`todo-md@ertugrulsefal.github.com`**, and the settings schema is now
+  `org.gnome.shell.extensions.todo-md` (the mandatory `org.gnome.shell.extensions.`
+  base is unchanged — only the extension's own part lost the brand name).
+
+  The review guidelines say extensions must not include copyrighted or
+  trademarked content, and list "brand names and phrases" as the first example;
+  `ego-lint` fails both the UUID and the schema id on this. Doing it now rather
+  than later: **a UUID cannot be changed after upload** — a rename afterwards means
+  unpublishing and re-uploading as a different extension.
+
+  The extension directory, the schema file, the tests, the CI workflow and the
+  README were renamed with it. The GitHub repository name is unchanged.
+
+### Migration (for anyone installing the development version)
+Settings live under `/org/gnome/shell/extensions/<uuid>/` in dconf, so they do
+not follow a rename automatically. Copy the old keys to the new path:
+`todo-file-path`, `category-colors`, `menu-width`, `max-menu-height`.
+
 ## 0.11.14 - 2026-10-03
 
 ### Fixed

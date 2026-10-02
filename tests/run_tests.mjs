@@ -21,7 +21,7 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-import * as Storage from '../gnome-todo-md@ertugrulsefal.github.com/storage.js';
+import * as Storage from '../todo-md@ertugrulsefal.github.com/storage.js';
 
 // Where the file-level tests write.
 const TODO = GLib.dir_make_tmp(null) + '/todo.md';
@@ -272,7 +272,7 @@ function noMatch(name, content, forbiddenPattern, incident) {
 // The audit found one of each in extension.js; the worst had swallowed four
 // lines of live code plus the next method's docstring.
 const SOURCE_FILES = ['extension.js', 'storage.js', 'prefs.js']
-    .map(name => `gnome-todo-md@ertugrulsefal.github.com/${name}`);
+    .map(name => `todo-md@ertugrulsefal.github.com/${name}`);
 
 // Line starts a declaration a docstring is allowed to document: a function,
 // class, constant, or a class method signature.
@@ -292,11 +292,11 @@ function docBlocks(src) {
 }
 
 function testStaticChecks() {
-    const ui = readFileText('gnome-todo-md@ertugrulsefal.github.com/extension.js');
-    const prefs = readFileText('gnome-todo-md@ertugrulsefal.github.com/prefs.js');
-    const store = readFileText('gnome-todo-md@ertugrulsefal.github.com/storage.js');
-    const meta = readFileText('gnome-todo-md@ertugrulsefal.github.com/metadata.json');
-    const css = readFileText('gnome-todo-md@ertugrulsefal.github.com/stylesheet.css');
+    const ui = readFileText('todo-md@ertugrulsefal.github.com/extension.js');
+    const prefs = readFileText('todo-md@ertugrulsefal.github.com/prefs.js');
+    const store = readFileText('todo-md@ertugrulsefal.github.com/storage.js');
+    const meta = readFileText('todo-md@ertugrulsefal.github.com/metadata.json');
+    const css = readFileText('todo-md@ertugrulsefal.github.com/stylesheet.css');
     const all = ui + '\n' + prefs + '\n' + store;
 
     // Real incident: idle_add(() => ...) threw on every menu open (Phase 1).
@@ -340,7 +340,7 @@ function testStaticChecks() {
     // Faz 3: settings infrastructure must be complete — getSettings() falls
     // back to metadata["settings-schema"] and loads schemas/ from the ext dir.
     record('static: metadata declares the settings-schema id',
-        /"settings-schema"\s*:\s*"org\.gnome\.shell\.extensions\.gnome-todo-md"/.test(meta),
+        /"settings-schema"\s*:\s*"org\.gnome\.shell\.extensions\.todo-md"/.test(meta),
         'ExtensionBase.getSettings() reads metadata["settings-schema"]');
 
     // Faz 0.3: reviewers flag capabilities the description does not declare —
@@ -374,13 +374,13 @@ function testStaticChecks() {
         + 'menu.removeAll() (popupMenu.js :827-850) — shell SEGV, 2026-09-26');
     record('static: schema declares menu-width with a described default',
         /<key name="menu-width" type="i">[\s\S]*?<default>500<\/default>[\s\S]*?<description>[\s\S]+?<\/description>/.test(
-            readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.gnome-todo-md.gschema.xml')),
+            readFileText('todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.todo-md.gschema.xml')),
         'menu-width is a described int key defaulting to 500');
     record('static: no tab-bar-mode remnants (mode removed entirely)',
         !/tab-bar-mode|tabModes|scrollMode/.test(ui + '\n'
-            + readFileText('gnome-todo-md@ertugrulsefal.github.com/prefs.js'))
+            + readFileText('todo-md@ertugrulsefal.github.com/prefs.js'))
             && !/tab-bar-mode/.test(
-                readFileText('gnome-todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.gnome-todo-md.gschema.xml')),
+                readFileText('todo-md@ertugrulsefal.github.com/schemas/org.gnome.shell.extensions.todo-md.gschema.xml')),
         'shrink mode and the mode setting were removed (user decision)');
     record('static: tab bar handles wheel scrolling anywhere (scroll-event)',
         /scroll-event/.test(ui) && /hadjustment/.test(ui),

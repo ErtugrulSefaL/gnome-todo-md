@@ -1,4 +1,4 @@
-# gnome-todo-md (GNOME Shell Extension)
+# todo-md (GNOME Shell Extension)
 
 A minimal, fast todo list for the GNOME Shell panel, backed by a plain
 **markdown checkbox** file (`~/todo.md`) — no database, no proprietary format,
@@ -51,7 +51,7 @@ it simple: one markdown file, live panel menu, nothing else.
 Point the extension at any markdown file via the preferences window:
 
 ```bash
-gnome-extensions prefs gnome-todo-md@ertugrulsefal.github.com
+gnome-extensions prefs todo-md@ertugrulsefal.github.com
 ```
 
 (Or: Extensions app → Todo MD → the gear icon.)
@@ -103,10 +103,10 @@ Windows editor does not produce a whole-file diff.
 
 | Path | Purpose |
 |---|---|
-| `gnome-todo-md@ertugrulsefal.github.com/extension.js` | UI layer: panel, menu, entry, rows |
-| `gnome-todo-md@ertugrulsefal.github.com/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
-| `gnome-todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version: 46) |
-| `gnome-todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
+| `todo-md@ertugrulsefal.github.com/extension.js` | UI layer: panel, menu, entry, rows |
+| `todo-md@ertugrulsefal.github.com/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
+| `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version: 46) |
+| `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `tests/run_tests.mjs` | Unit/integration tests for `storage.js` (run with `gjs`) |
 | `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
 | `docs/verified-apis.md` | VERIFY-BEFORE-WRITE evidence log (API → source → verdict) |
@@ -117,14 +117,14 @@ Windows editor does not produce a whole-file diff.
 git clone https://github.com/ErtugrulSefaL/gnome-todo-md
 cd gnome-todo-md
 mkdir -p ~/.local/share/gnome-shell/extensions
-ln -s "$(pwd)/gnome-todo-md@ertugrulsefal.github.com" \
-      ~/.local/share/gnome-shell/extensions/gnome-todo-md@ertugrulsefal.github.com
+ln -s "$(pwd)/todo-md@ertugrulsefal.github.com" \
+      ~/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com
 ```
 
 Then reload GNOME Shell:
 
 - X11: press `Alt+F2`, type `r`, Enter (or log out/in on Wayland)
-- Enable: `gnome-extensions enable gnome-todo-md@ertugrulsefal.github.com`
+- Enable: `gnome-extensions enable todo-md@ertugrulsefal.github.com`
 
 ## Test
 
