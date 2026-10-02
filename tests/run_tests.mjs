@@ -423,14 +423,20 @@ function testStaticChecks() {
         })),
         'a docstring drifted away from the code it documents');
 
-    // Audit D1: the storage tests pin renderSections(); this pins the UI half —
-    // which list the prune is handed. Pruning against doc.categories ([] for an
-    // empty file) deleted the whole color map through set_value, permanently.
-    record('static: color pruning uses the rendered sections, not doc.categories',
-        /pruneCategoryColors\(\s*colors,\s*sections\.map\(/.test(ui)
-        && !/pruneCategoryColors\([^)]*doc\.categories/.test(ui),
-        'prune against `sections` — an empty file still renders the implicit '
-        + 'General header, so the raw document list is not what is on screen');
+    // Audits D1 and N1: the UI must NOT decide the pruning itself — it must call
+    // Storage.prunedColorsForDocument(colors, doc). A decision made in
+    // extension.js cannot be unit-tested, and that untested decision deleted
+    // the whole category-colour map twice (2026-10-01: pruned against the raw
+    // doc.categories, [] for an empty file; 2026-10-02: pruned against the
+    // rendered sections, which a file that lost every '##' heading renders as
+    // one implicit 'General' — 6 colours → 0).
+    record('static: the colour-pruning decision lives in storage.js, not the UI',
+        /Storage\.prunedColorsForDocument\(\s*colors,\s*doc\s*\)/.test(ui)
+        && !/Storage\.pruneCategoryColors\(/.test(ui)
+        && !/pruneCategoryColors\([^)]*doc\.categories/.test(ui)
+        && /export function prunedColorsForDocument/.test(store),
+        'extension.js must delegate: which list is authoritative AND when not '
+        + 'to prune at all are both only testable in storage.js');
     record('static: scroll-mode tab labels use EllipsizeMode.NONE',
         /EllipsizeMode\.NONE/.test(ui),
         'St.Label defaults to END (st-label.c :336); an ellipsized label has '
@@ -553,7 +559,7 @@ function testStaticChecks() {
         'ok:false means "could not read", not "the file is empty"');
 
     record('color prune: a failed read must not be treated as "no categories"',
-        /todo\.ok\s*\?\s*Storage\.pruneCategoryColors/.test(ui)
+        /todo\.ok\s*\?\s*Storage\.prunedColorsForDocument/.test(ui)
         && /if \(todo\.ok && prunedColors !== colors\)/.test(ui),
         'an unreadable file (editor atomic save, rename window) produced an '
         + 'empty document, which pruned every category color away for good');
@@ -1168,20 +1174,59 @@ function testCategoryColors() {
         && Storage.renderSections(populatedDoc)[0].tasks.length === 1
         && Storage.renderSections(populatedDoc)[1].tasks.length === 0, '');
 
-    record('D1 regression: empty file keeps General, still prunes dead keys',
-        JSON.stringify(Storage.pruneCategoryColors(
-            {'General': '#e01b24', 'Cyber': '#3584e4'},
-            emptySections.map(section => section.name)))
-            === JSON.stringify({'General': '#e01b24'}),
-        'a whole-file wipe (someone truncates ~/todo.md, the file monitor '
-        + 'fires) used to delete every category color permanently');
-
-    record('D1 regression: pruning still removes genuinely dead categories',
+    record('pruneCategoryColors: the pure function still drops dead keys',
         JSON.stringify(Storage.pruneCategoryColors(
             {'İş': '#e01b24', 'Silinmiş': '#3584e4'},
             Storage.renderSections(populatedDoc).map(s => s.name)))
             === JSON.stringify({'İş': '#e01b24'}),
-        'the fix must not disable dead-key pruning');
+        'named for what it proves: the PRUNER works. When it may run at all is '
+        + 'prunedColorsForDocument()\'s decision — see the N1 cases below. The '
+        + 'old "D1 regression" case here was tautological: it keyed the colour '
+        + 'under General, the one key the sentinel protects.');
+
+    // --- Audit N1 (2026-10-02): the acceptance criterion D1 never met ------
+    // The handoff recorded it as "an empty file + a populated colour map → the
+    // map survives a refresh". The 2026-10-01 fix did NOT satisfy it: a file
+    // with no '##' heading renders the single implicit 'General' section, so
+    // every real category looked dead and the whole map was dropped (measured:
+    // 6 colours → 0). The test above could not see it because its fixture
+    // keyed the colour under 'General' — the one key the fix protected.
+    //
+    // These cases use a POPULATED map with no key named 'General' at all, which
+    // is the state the user is actually in.
+    const USER_COLORS = {Cyber: '#3584e4', Python: '#33d17a', Todo: '#f6d32d'};
+    const HEADING_LESS = ['', 'just a note\n', '- [ ] a task with no heading\n'];
+    const wiped = HEADING_LESS.filter(raw => {
+        const kept = Storage.prunedColorsForDocument(
+            USER_COLORS, Storage.parseDocument(raw));
+        return Object.keys(kept).length !== Object.keys(USER_COLORS).length;
+    });
+    record('N1: a file that lost every ## heading keeps the whole colour map',
+        wiped.length === 0,
+        wiped.length
+            ? 'map shrunk for raw=' + JSON.stringify(wiped) + ' — the categories '
+              + 'have COLLAPSED, they have not changed; pruning here deletes '
+              + 'the colours permanently through set_value'
+            : JSON.stringify(USER_COLORS));
+
+    record('N1: the same map survives an unreadable file (no prune at all)',
+        Storage.prunedColorsForDocument(USER_COLORS, Storage.parseDocument(''))
+            === USER_COLORS,
+        'identity return lets the caller skip the settings write entirely');
+
+    record('N1: pruning resumes as soon as one ## heading is left',
+        JSON.stringify(Storage.prunedColorsForDocument(
+            {'İş': '#e01b24', 'Silinmiş': '#3584e4'}, populatedDoc))
+            === JSON.stringify({'İş': '#e01b24'}),
+        'the guard must not disable dead-key pruning in the normal case');
+
+    record('N1: an explicit ## General counts as a heading',
+        JSON.stringify(Object.keys(
+            Storage.prunedColorsForDocument(
+                {General: '#e01b24', 'Silinmiş': '#3584e4'},
+                Storage.parseDocument('- [ ] a\n## General\n- [ ] b\n'))))
+            === JSON.stringify(['General']),
+        'parseDocument marks the taken-over bucket implicit:false, so it prunes');
 
     record('rgbToHex: 8-bit RGB values become #rrggbb',
         Storage.rgbToHex(224, 27, 36) === '#e01b24'

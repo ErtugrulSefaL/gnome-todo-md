@@ -334,10 +334,14 @@ export default class TodoExtension extends Extension {
         // only when the prune actually removed something, so the
         // changed:: signal does not cause a refresh loop.
         //
-        // Pruned against `sections`, never against `doc.categories`: an empty
-        // file still renders the implicit 'General' header, and pruning
-        // against the raw document treated it as dead — which deleted the
-        // whole color map and rendered the header uncolored (audit D1).
+        // The whole decision — which list is authoritative, and WHEN not to
+        // prune at all — lives in Storage.prunedColorsForDocument() so it can
+        // be unit-tested; it used to sit here, untested, and twice wrong
+        // (audit D1: pruning against `doc.categories` dropped the whole map
+        // for an empty file; then pruning against the rendered sections still
+        // dropped it, because a file that lost every '##' heading renders one
+        // implicit 'General' section and all six real colours looked dead —
+        // 6 → 0, written permanently through set_value).
         //
         // A failed read is skipped entirely. `readTodo` reports it via `ok`,
         // and a transient failure (editor atomic save, rename window) would
@@ -346,8 +350,7 @@ export default class TodoExtension extends Extension {
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
         const prunedColors = todo.ok
-            ? Storage.pruneCategoryColors(colors,
-                sections.map(section => section.name))
+            ? Storage.prunedColorsForDocument(colors, doc)
             : colors;
         if (todo.ok && prunedColors !== colors) {
             this._settings.set_value('category-colors',

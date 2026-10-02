@@ -376,6 +376,39 @@ export function renderSections(doc) {
 }
 
 /**
+ * The color map as it should be STORED after reading `doc`.
+ *
+ * Both halves of the decision live here rather than in the UI, because a
+ * decision made in `extension.js` cannot be unit-tested and the first one was
+ * wrong (audit D1, re-measured 2026-10-02: 6 colours → 0):
+ *
+ * 1. Pruning runs against `renderSections(doc)` — the same list the menu rows
+ *    are built from, never the raw `doc.categories` (which is `[]` for an empty
+ *    file, so an empty file used to look category-less).
+ * 2. A document with NO '##' heading at all has not changed its category list,
+ *    it has LOST it. Every real category then looks dead, so pruning would drop
+ *    the whole map and write it away for good through `set_value`. A file that
+ *    lost its headings may well get them back — and the colours come back with
+ *    them, which is what the user wants. Genuinely deleted categories are still
+ *    pruned as soon as at least one '##' heading remains, so a stale colour
+ *    cannot silently follow a name that is reused later.
+ *
+ * @param {Object<string, string>} colors - Category → color map.
+ * @param {{categories: Array<{name: string, implicit: boolean}>}} doc - Parsed
+ *   document. `implicit: true` marks the fallback bucket, i.e. content that
+ *   appeared before the first '##' heading.
+ * @returns {Object<string, string>} The map to store, or the SAME object when
+ *   nothing changed (identity lets the caller skip a settings write).
+ */
+export function prunedColorsForDocument(colors, doc) {
+    const hasHeading = doc.categories.some(category => !category.implicit);
+    if (!hasHeading) {
+        return colors;
+    }
+    return pruneCategoryColors(colors, renderSections(doc).map(s => s.name));
+}
+
+/**
  * Serialize a Document model back to markdown content.
  *
  * Round-trip rules (locked, see plan.md):

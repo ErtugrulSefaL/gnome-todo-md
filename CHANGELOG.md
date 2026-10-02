@@ -4,6 +4,36 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.13 - 2026-10-02
+
+### Fixed
+- **Emptying the todo file no longer deletes your category colours.** The
+  0.11.2 fix pruned dead colour keys against the list of categories the menu
+  renders — but a file that has lost every `##` heading renders exactly one
+  entry (the implicit `General`), so all six real colours looked dead and the
+  whole map was written away through `set_value`. Reproduced with the actual
+  six-category file: 6 colours → 0. Triggered by truncating the file, by a
+  stray `:dgg` / `> todo.md`, or by a script that rewrites it.
+
+  A document with **no `##` heading at all** has not changed its categories,
+  it has lost them, so nothing is pruned now: the colours come back with the
+  headings. Genuinely deleted categories are still pruned as soon as one
+  heading remains, so a stale colour cannot follow a reused name.
+
+### Changed
+- **The pruning decision moved from `extension.js` into `storage.js`**
+  (`prunedColorsForDocument`), where it can be unit-tested. Both halves of
+  the decision — which category list is authoritative, and when not to prune
+  at all — were previously untested code in the UI layer, and that is where
+  this bug lived.
+
+### Tests
+- New cases use a populated colour map with **no key named `General`**,
+  which is the state the bug actually occurred in; the old "D1 regression"
+  case was tautological (it keyed the colour under `General`, the one key the
+  sentinel protected) and was replaced. Both new cases fail against the
+  pre-fix code and pass after it. 169 → 172.
+
 ## 0.11.12 - 2026-10-02
 
 ### Fixed
