@@ -435,6 +435,70 @@ function testStaticChecks() {
     // invariant, not the old code shape: nothing in tabBar.js may be a
     // PopupMenu item, and it must attach as a raw actor child of menu.box.
     const tabBarSrc = readFileText('todo-md@ertugrulsefal.github.com/tabBar.js');
+    // Unused imports: the A1 split added three modules and one of them shipped
+    // with a dead `PopupMenu` import (the tab-bar guard flagged it by accident).
+    // Dead imports are noise a reviewer sees immediately, so check them here.
+    const unusedImports = [];
+    for (const rel of SOURCE_FILES) {
+        const src = stripComments(readFileText(rel));
+        // Strip ALL import statements first, module path included. Leaving the
+        // `'gi://Meta'` specifier in place satisfied the word-boundary test by
+        // itself, so the first version of this guard passed while an unused
+        // import sat in the file — caught by mutation, not by reading.
+        const bodyWithoutImports = src.replace(/^import[^;]+;$/gm, '');
+        const importRe = /^import\s+(?:\*\s+as\s+(\w+)|(\w+)|\{([^}]*)\})\s+from/gm;
+        let m;
+        while ((m = importRe.exec(src)) !== null) {
+            const names = m[1] ? [m[1]] : m[2] ? [m[2]]
+                : m[3].split(',').map(n => n.trim().split(/\s+as\s+/).pop());
+            for (const name of names.filter(Boolean)) {
+                if (!new RegExp(`\\b${name}\\b`).test(bodyWithoutImports)) {
+                    unusedImports.push(`${rel.split('/').pop()}:${name}`);
+                }
+            }
+        }
+    }
+    // The inverse, and the one that actually bit: a module that USES a binding
+    // it never imported. `rowFactory.js` shipped that way during the A1 split
+    // (`Storage is not defined` at runtime — invisible to every other guard,
+    // and the menu came up empty). Only a real `Alt+F2 -> r` showed it.
+    const KNOWN_BINDINGS = ['St', 'Clutter', 'GLib', 'Gio', 'Pango', 'Atk',
+        'Meta', 'Shell', 'Main', 'PanelMenu', 'PopupMenu', 'Storage',
+        'TabBar', 'RowFactory'];
+    const unimported = [];
+    for (const rel of SOURCE_FILES) {
+        const src = stripComments(readFileText(rel));
+        const body = src.replace(/^import[^;]+;$/gm, '');
+        const imported = new Set();
+        const importRe = /^import\s+(?:\*\s+as\s+(\w+)|(\w+)|\{([^}]*)\})\s+from/gm;
+        let m;
+        while ((m = importRe.exec(src)) !== null) {
+            if (m[1]) imported.add(m[1]);
+            if (m[2]) imported.add(m[2]);
+            if (m[3]) {
+                for (const part of m[3].split(',')) {
+                    const name = part.trim().split(/\s+as\s+/).pop();
+                    if (name) imported.add(name);
+                }
+            }
+        }
+        for (const name of KNOWN_BINDINGS) {
+            if (imported.has(name)) {
+                continue;
+            }
+            if (new RegExp(`(?<![\\w$.])${name}\\.`).test(body)) {
+                unimported.push(`${rel.split('/').pop()}:${name}`);
+            }
+        }
+    }
+    record('static: no module uses a binding it did not import',
+        unimported.length === 0,
+        unimported.join(', ') || 'every namespace used is imported');
+
+    record('static: no unused imports in any source file',
+        unusedImports.length === 0,
+        unusedImports.join(', ') || 'every import is referenced');
+
     record('static: the persistent tab bar is a plain actor (NO PopupBaseMenuItem)',
         // NOTE the namespace dot: the real syntax is
         // `PopupMenu.PopupBaseMenuItem`. A first version searched for

@@ -4,6 +4,31 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.14.0 - 2026-10-03
+
+### Added
+- **`rowFactory.js`**: task rows moved out of `extension.js` into a `RowFactory`
+  class. The menu width and the five row actions are injected, so the module
+  holds no state of its own. This is where roadmap features #1 (a colour control
+  on the category header) and #2 (drag-and-drop reordering) land.
+
+  `extension.js`: 890 → 738 lines. The row body was moved verbatim; only the six
+  `this.<action>(…)` calls were repointed at injected callbacks.
+
+### Fixed
+- `rowFactory.js` shipped for one test cycle without `import * as Storage` —
+  `ReferenceError: Storage is not defined` at the first row, which emptied the
+  menu (no tasks, no category headers, unstyled leftover actors). Caught by
+  `Alt+F2 → r`, not by the suite.
+
+### Tests
+- New static guard: **no module may use a binding it did not import**. The
+  suite had the inverse (unused imports) and nothing for the failure that
+  actually happened.
+- Mutation-tested: the missing-import case and the missing-`Atk` case both fail
+  now, which they did not before.
+- 177 → 179 tests.
+
 ## 0.13.0 - 2026-10-03
 
 ### Added
