@@ -22,9 +22,19 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   README were renamed with it. The GitHub repository name is unchanged.
 
 ### Migration (for anyone installing the development version)
-Settings live under `/org/gnome/shell/extensions/<uuid>/` in dconf, so they do
-not follow a rename automatically. Copy the old keys to the new path:
-`todo-file-path`, `category-colors`, `menu-width`, `max-menu-height`.
+Two things move with the UUID and neither follows a rename automatically:
+
+1. **Settings** live under `/org/gnome/shell/extensions/<uuid>/` in dconf. Copy
+   the old keys to the new path: `todo-file-path`, `category-colors`,
+   `menu-width`, `max-menu-height`.
+2. **The enabled-extensions list** (`org.gnome.shell`) still names the old UUID.
+   With the directory gone, the new one starts in state `INITIALIZED` — loaded
+   but not active, so the panel icon simply does not appear. Fix:
+
+   ```bash
+   gnome-extensions enable todo-md@ertugrulsefal.github.com
+   gsettings set org.gnome.shell enabled-extensions "[…]"   # drop the old uuid
+   ```
 
 ## 0.11.14 - 2026-10-03
 
