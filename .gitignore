@@ -6,3 +6,10 @@ test.md
 # Build artifact: GNOME 45+ compiles the schema at install time. Committing it
 # is the most common extensions.gnome.org rejection reason.
 *.compiled
+
+# Audit tooling: project-scoped skill definition (local-only, not shipped).
+.agents/
+
+# Audit report archive: one dated file per audit plus the cross-audit ledger.
+# Already covered by .goose/ above; listed explicitly so the intent survives.
+.goose/audits/
