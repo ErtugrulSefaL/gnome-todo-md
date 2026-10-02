@@ -321,7 +321,8 @@ export default class TodoExtension extends Extension {
         }
         this._contentSection.removeAll();
 
-        const doc = Storage.parseDocument(Storage.readTodo(this._todoPath()).raw);
+        const todo = Storage.readTodo(this._todoPath());
+        const doc = Storage.parseDocument(todo.raw);
 
         // Every category renders as a non-clickable header row (with a '+'
         // button) followed by its task rows — task-less categories are
@@ -337,11 +338,18 @@ export default class TodoExtension extends Extension {
         // file still renders the implicit 'General' header, and pruning
         // against the raw document treated it as dead — which deleted the
         // whole color map and rendered the header uncolored (audit D1).
+        //
+        // A failed read is skipped entirely. `readTodo` reports it via `ok`,
+        // and a transient failure (editor atomic save, rename window) would
+        // otherwise look exactly like "the user deleted every category" and
+        // wipe the map for good.
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
-        const prunedColors = Storage.pruneCategoryColors(colors,
-            sections.map(section => section.name));
-        if (prunedColors !== colors) {
+        const prunedColors = todo.ok
+            ? Storage.pruneCategoryColors(colors,
+                sections.map(section => section.name))
+            : colors;
+        if (todo.ok && prunedColors !== colors) {
             this._settings.set_value('category-colors',
                 GLib.Variant.new('a{ss}', prunedColors));
         }

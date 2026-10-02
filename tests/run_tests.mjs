@@ -2,10 +2,14 @@
  * Phase 1 unit + integration tests for the todo extension.
  * Runs against the real storage.js module.
  *
- * SAFETY: the suite snapshots ~/todo.md once at start (ORIGINAL_RAW) and
- * restores it with the tested Storage.writeTodo() API after every write
- * test and again on teardown. This guarantees the user's file is intact
- * regardless of whether individual tests pass or fail.
+ * SAFETY: the file-level tests write to a TEMPORARY file, never to
+ * ~/todo.md. They used to snapshot the user's file, write over it and
+ * restore it afterwards — which was destructive in a way the restore could
+ * not undo: a live extension is watching ~/todo.md, so a fixture write
+ * fired its file monitor, the refresh saw a document with no categories,
+ * and it pruned the entire category-colors map through set_value. Silently,
+ * permanently, on every single test run. The teardown check below now
+ * proves the suite leaves the real file untouched.
  *
  * Each function is exercised individually; results print as:
  *   [PASS] <name> — detail
@@ -19,7 +23,11 @@ import Gio from 'gi://Gio';
 
 import * as Storage from '../gnome-todo-md@ertugrulsefal.github.com/storage.js';
 
-const TODO = GLib.get_home_dir() + '/todo.md';
+// Where the file-level tests write.
+const TODO = GLib.dir_make_tmp(null) + '/todo.md';
+// The user's real file: read-only for this suite, verified at teardown.
+const USER_TODO = GLib.get_home_dir() + '/todo.md';
+const USER_RAW_AT_START = Storage.readTodo(USER_TODO).raw;
 
 const results = []; // {name, ok, detail}
 let ORIGINAL_RAW = '';
@@ -28,9 +36,9 @@ function record(name, ok, detail) {
     results.push({name, ok, detail: detail || ''});
 }
 
-// Snapshot original content once.
+// Snapshot the temporary test file once.
 function snapshotOriginal() {
-    ORIGINAL_RAW = Storage.readTodo().raw;
+    ORIGINAL_RAW = Storage.readTodo(TODO).raw;
 }
 
 // Restore the original file using the (tested) write API.
@@ -90,7 +98,7 @@ function testReadTodo() {
     const f = Gio.File.new_for_path(TODO);
     const enc = new TextEncoder();
     f.replace_contents(enc.encode('- [ ] A\n- [x] B\n'), null, false, Gio.FileCreateFlags.NONE, null);
-    const p = Storage.readTodo();
+    const p = Storage.readTodo(TODO);
     record('readTodo: reads current file, returns raw+parsed',
         p.raw === '- [ ] A\n- [x] B\n'
         && p.tasks.length === 2 && p.other.length === 0,
@@ -233,7 +241,7 @@ function testAddTaskCategorized() {
 
 function testWriteRead() {
     Storage.writeTodo(TODO, '- [ ] persisted\n');
-    const p = Storage.readTodo();
+    const p = Storage.readTodo(TODO);
     record('writeTodo -> readTodo: round-trip persists',
         p.raw === '- [ ] persisted\n' && p.tasks.length === 1
         && p.tasks[0].text === 'persisted' && p.tasks[0].done === false,
@@ -529,6 +537,26 @@ function testStaticChecks() {
         && /disable\(\)\s*\{[\s\S]{0,900}?GLib\.Source\.remove\(this\._openIdleId\)/.test(ui),
         'store the GLib.idle_add source id and remove it in disable() — every '
         + 'main loop source must be removable when the extension is turned off');
+
+    // The color map is the only record of a category's color, and pruning it
+    // writes the pruned result back through set_value. A failed read used to
+    // look like "every category was deleted" and wiped it permanently.
+    record('readTodo: reports whether the read actually succeeded',
+        Storage.readTodo('/nonexistent/todo.md').ok === false
+        && Storage.readTodo('/nonexistent/todo.md').raw === ''
+        && (() => {
+            Storage.writeTodo(TODO, '- [ ] ok probe\n');
+            const read = Storage.readTodo(TODO);
+            restoreOriginal();
+            return read.ok === true && read.raw === '- [ ] ok probe\n';
+        })(),
+        'ok:false means "could not read", not "the file is empty"');
+
+    record('color prune: a failed read must not be treated as "no categories"',
+        /todo\.ok\s*\?\s*Storage\.pruneCategoryColors/.test(ui)
+        && /if \(todo\.ok && prunedColors !== colors\)/.test(ui),
+        'an unreadable file (editor atomic save, rename window) produced an '
+        + 'empty document, which pruned every category color away for good');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
@@ -991,7 +1019,7 @@ function testAtomicWritePath() {
     const CONTENT = '# My TODOs\n\n## General\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
     Storage.writeTodo(TODO, CONTENT);
     record('atomicWrite: write → read back is byte-identical (complete file)',
-        Storage.readTodo().raw === CONTENT, JSON.stringify(Storage.readTodo().raw));
+        Storage.readTodo(TODO).raw === CONTENT, JSON.stringify(Storage.readTodo(TODO).raw));
 
     // The Document pipeline connects to the real write path: mutate the model
     // → serialize → writeTodo → read back must equal the serialized string.
@@ -1001,11 +1029,11 @@ function testAtomicWritePath() {
     const rewritten = Storage.serializeDocument(doc);
     Storage.writeTodo(TODO, rewritten);
     record('atomicWrite: Document mutation → serialize → write → read is consistent',
-        Storage.readTodo().raw === rewritten, '');
+        Storage.readTodo(TODO).raw === rewritten, '');
 
     restoreOriginal();
     record('atomicWrite: file restored to the original content after write tests',
-        Storage.readTodo().raw === ORIGINAL_RAW, '');
+        Storage.readTodo(TODO).raw === ORIGINAL_RAW, '');
 }
 
 // ---- explicit path support (Faz 3 step 2) --------------------------------
@@ -1186,7 +1214,6 @@ testParseDocument();
 testSerializeDocument();
 testCategoryNameHygiene();
 testPreambleFidelity();
-testPreambleFidelity();
 testAtomicWritePath();
 testPathParams();
 testResolveTodoPath();
@@ -1194,9 +1221,16 @@ testCategoryColors();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
-const finalRead = Storage.readTodo();
-record('teardown: ~/todo.md byte-identical to pre-test content',
+const finalRead = Storage.readTodo(TODO);
+record('teardown: the temporary test file is back to its pre-test state',
     finalRead.raw === ORIGINAL_RAW, '');
+record('teardown: the suite writes to a temp file, never to ~/todo.md',
+    TODO !== USER_TODO,
+    'writing fixtures to the real file fires the running extension\'s '
+    + 'monitor; its refresh then pruned the whole category-colors map');
+record('teardown: ~/todo.md is untouched by the test suite',
+    Storage.readTodo(USER_TODO).raw === USER_RAW_AT_START,
+    'the file must survive the suite byte-for-byte');
 
 // ---- output --------------------------------------------------------------
 let pass = 0, fail = 0;

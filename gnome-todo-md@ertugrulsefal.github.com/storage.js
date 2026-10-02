@@ -457,12 +457,17 @@ export function readTodo(path = TODO_PATH) {
             content = '';
         }
     } catch (err) {
-        // Missing/unreadable file is not an error: yield an empty list.
-        content = '';
+        // Missing/unreadable file is not an error for rendering, but the
+        // caller MUST be able to tell "the file is empty" from "we could not
+        // read it". The two are very different: pruning the color map on a
+        // failed read deleted every category color permanently, and a failed
+        // read is transient (an editor's atomic save, a rename window, a
+        // permission blip) — not the user removing their categories.
+        return {tasks: [], other: [], raw: '', ok: false};
     }
 
     const {tasks, other} = splitLines(content);
-    return {tasks, other, raw: content};
+    return {tasks, other, raw: content, ok: true};
 }
 
 /**

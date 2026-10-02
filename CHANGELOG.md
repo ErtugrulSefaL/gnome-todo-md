@@ -4,6 +4,33 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.11.12 - 2026-10-02
+
+### Fixed
+- **The test suite was silently deleting your category colours.** The
+  file-level tests wrote fixtures to `~/todo.md` and restored the file
+  afterwards — but a running extension watches that file, so the fixture
+  write fired its monitor, the refresh saw a document with no categories,
+  and it pruned the entire `category-colors` map through `set_value`.
+  Permanent, invisible, on every single test run. The tests now write to a
+  temporary file, and a teardown check proves the real file is left alone.
+
+### Fixed
+- **A failed read no longer erases the colour map.** `readTodo` swallowed
+  read errors and returned an empty document, which looked exactly like "the
+  user deleted every category". A transient failure — an editor's atomic
+  save, a rename window, a permission blip — was enough to lose every colour.
+  `readTodo` now reports `ok`, and pruning is skipped when the read failed.
+
+  A genuinely empty file is still treated as empty (the automatic dead-key
+  pruning from the colours feature is unchanged).
+
+### Added
+- Guards for both, each verified by re-introducing the defect. Also fixed a
+  duplicated test registration that counted 13 tests twice.
+
+  Tests: 180 → 169 (the difference is the duplicate registration).
+
 ## 0.11.11 - 2026-10-02
 
 ### Fixed
