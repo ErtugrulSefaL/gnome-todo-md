@@ -491,6 +491,42 @@ function testStaticChecks() {
             }
         }
     }
+    // Named imports must resolve to a real export in the target module.
+    // Dropping the `export` keyword while the importer still lists the name
+    // survives every other check here and fails only at runtime (import error),
+    // so the linkage is verified from both ends.
+    const missingExports = [];
+    for (const rel of SOURCE_FILES) {
+        const src = stripComments(readFileText(rel));
+        const importRe = /import\s+\{([^}]*)\}\s+from\s+'\.\/([\w.]+)'/g;
+        let m;
+        while ((m = importRe.exec(src)) !== null) {
+            const target = `${rel.split('/')[0]}/${m[2]}`;
+            let targetSrc = '';
+            try {
+                targetSrc = readFileText(target);
+            } catch (e) {
+                missingExports.push(`${rel.split('/').pop()} -> ${m[2]} (no such module)`);
+                continue;
+            }
+            for (const part of m[1].split(',')) {
+                const name = part.trim().split(/\s+as\s+/)[0].trim();
+                if (!name) {
+                    continue;
+                }
+                const exported = new RegExp(
+                    `export\\s+(?:default\\s+)?(?:async\\s+)?(?:function|class|const|let|var)\\s+${name}\\b`
+                    + `|export\\s*\\{[^}]*\\b${name}\\b`).test(targetSrc);
+                if (!exported) {
+                    missingExports.push(`${rel.split('/').pop()} -> ${m[2]}:${name}`);
+                }
+            }
+        }
+    }
+    record('static: every named import resolves to a real export',
+        missingExports.length === 0,
+        missingExports.join(', ') || 'each imported name is exported by its module');
+
     record('static: no module uses a binding it did not import',
         unimported.length === 0,
         unimported.join(', ') || 'every namespace used is imported');

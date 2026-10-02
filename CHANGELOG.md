@@ -4,6 +4,36 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.15.0 - 2026-10-03
+
+### Changed
+- **A1 complete: the entry point is now lifecycle + state + assembly.**
+  `extension.js` 998 → **668** lines across three steps:
+  - `tabBar.js` (0.13.0) — the persistent category strip
+  - `rowFactory.js` (0.14.0, extended here) — task rows, the inline add/edit
+    entries and the menu-width cap
+
+  `_makeNewCategoryRow` deliberately stayed put: it is a workflow (validate the
+  name, write the file, assign the auto-colour, switch tab), not a row builder,
+  and it carries the audit D5 (rejected names) and N4 (failed write) logic —
+  moving it would have scattered the most heavily guarded code in the project.
+
+  EGO's best practices ask for small entry points but do not require them; the
+  remaining 668 lines are the enable/disable lifecycle, the edit-state fields and
+  `_refreshTodoMenu`, which owns the persistent-actor ordering (that ordering is
+  what stops `menu.removeAll()` from destroying the tab bar — shell SEGV,
+  2026-09-26).
+
+### Tests
+- Two new static guards, both aimed at failure modes the A1 split kept producing:
+  - **every named import resolves to a real export** — a dropped `export` or a
+    typo'd imported name is an import *runtime* error that nothing else caught.
+  - **no module uses a binding it did not import** — the `Storage is not defined`
+    class, which emptied the entire menu and was visible only after
+    `Alt+F2 → r`.
+- 179 → 180 tests; three new mutants killed (dropped `export` on `capWidth`,
+  dropped `export` on `TabBar`, typo'd import name).
+
 ## 0.14.0 - 2026-10-03
 
 ### Added

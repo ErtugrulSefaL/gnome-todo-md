@@ -11,7 +11,7 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 
 import * as Storage from './storage.js';
 import {TabBar} from './tabBar.js';
-import {RowFactory} from './rowFactory.js';
+import {RowFactory, capWidth} from './rowFactory.js';
 
 export default class TodoExtension extends Extension {
     enable() {
@@ -114,6 +114,8 @@ export default class TodoExtension extends Extension {
             onEdit: index => this._startEditing(index),
             onDelete: index => this._deleteTask(index),
             onMove: (index, direction) => this._moveTask(index, direction),
+            onAddTask: (text, categoryName) => this._addTask(text, categoryName),
+            onFinishEditing: text => this._finishEditing(text),
         });
 
         // Add the indicator to the panel.
@@ -215,7 +217,7 @@ export default class TodoExtension extends Extension {
             style_class: 'todo-edit-entry',
         });
         entry.set_x_expand(true);
-        this._capWidth(entry);
+        capWidth(entry, this._settings.get_int('menu-width'));
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 const name = e.get_text().trim();
@@ -486,7 +488,7 @@ export default class TodoExtension extends Extension {
             // header; render derives solely from _addingCategory, so two
             // open adders can never coexist (single-add invariant).
             if (this._addingCategory === categoryName) {
-                const addRow = this._makeAddRow(categoryName);
+                const addRow = this._rowFactory.makeAddRow(categoryName);
                 addRow.row.set_x_expand(true);
                 contentSection.addMenuItem(addRow.row);
                 // Grab focus only after the row is on stage.
@@ -500,7 +502,7 @@ export default class TodoExtension extends Extension {
                 // the usual label + buttons. Render derives solely from
                 // _editingIndex, so two open editors can never coexist.
                 if (task.index === this._editingIndex) {
-                    const editRow = this._makeEditRow(task);
+                    const editRow = this._rowFactory.makeEditRow(task);
                     editRow.row.set_x_expand(true);
                     contentSection.addMenuItem(editRow.row);
                     // Grab focus only after the row is on stage; an actor that
@@ -519,18 +521,6 @@ export default class TodoExtension extends Extension {
 
         // (The scroll position is never reset: the persistent wrapper keeps
         // it across tab switches — Faz 6.6 decision.)
-    }
-
-    /**
-     * Constrain an actor's width to the GSettings menu-width cap
-     * (fixed default + user-adjustable). Used by the inline add/edit/
-     * new-category entries so a long text being typed cannot widen the
-     * menu (user test: 'not ekleme sırasında ... büyüyor').
-     * @param {Clutter.Actor} actor - The actor to cap.
-     */
-    _capWidth(actor) {
-        actor.set_style(
-            `max-width: ${this._settings.get_int('menu-width')}px;`);
     }
 
 
@@ -585,37 +575,6 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Build the inline edit row: an entry prefilled with the current text.
-     * Enter commits, Escape cancels. Note: Escape is actually intercepted by
-     * the shell's MenuManager in the capture phase (popupMenu.js
-     * _onCapturedEvent), so it closes the menu; the edit is then discarded by
-     * the open-state-changed invariant instead.
-     *
-     * @param {object} task - Document task item ({index, raw, text, done, tags}).
-     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
-     *   and its entry, so the caller can grab focus after adding to the menu.
-     */
-    _makeEditRow(task) {
-        const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
-        const entry = new St.Entry({style_class: 'todo-edit-entry'});
-        // Prefill with `raw` (tags inline), NOT the tag-stripped display text:
-        // committing the edit rewrites the whole line, and raw keeps the tags.
-        entry.set_text(task.raw);
-        entry.set_x_expand(true);
-        this._capWidth(entry);
-        entry.connect('key-release-event', (e, event) => {
-            const symbol = event.get_key_symbol();
-            if (symbol === Clutter.KEY_Return) {
-                this._finishEditing(e.get_text());
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
-        row.add_child(entry);
-        return {row, entry};
-    }
-
-    /**
      * Add a task to the given category, persist and refresh.
      *
      * @param {string} text - Task text (may contain @tag(value) pairs).
@@ -659,34 +618,6 @@ export default class TodoExtension extends Extension {
         this._addingCategory = categoryName;
         this._addingNewCategory = false;
         this._refreshTodoMenu();
-    }
-
-    /**
-     * Build the inline add row for a category: an empty entry with a
-     * per-category hint. Enter commits via Storage.addTask(text, category).
-     *
-     * @param {string} categoryName - Target category for the new task.
-     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
-     *   and its entry, so the caller can grab focus after adding to the menu.
-     */
-    _makeAddRow(categoryName) {
-        const row = new PopupMenu.PopupBaseMenuItem(
-            {activate: false, can_focus: false});
-        const entry = new St.Entry({
-            hint_text: `Add to "${categoryName}"…`,
-            style_class: 'todo-edit-entry',
-        });
-        entry.set_x_expand(true);
-        this._capWidth(entry);
-        entry.connect('key-release-event', (e, event) => {
-            if (event.get_key_symbol() === Clutter.KEY_Return) {
-                this._addTask(e.get_text(), categoryName);
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
-        row.add_child(entry);
-        return {row, entry};
     }
 
     /**

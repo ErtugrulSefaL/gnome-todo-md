@@ -8,18 +8,37 @@ import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
 import * as Storage from './storage.js';
 
 /**
- * Task rows: the label plus its move / edit / delete controls.
+ * Cap an actor's width to the `menu-width` setting.
+ *
+ * Exported as a plain function as well as used through the factory: the
+ * new-category entry lives in extension.js (it is a workflow — validate, write,
+ * colour, switch tab — not a row builder) and needs the same cap.
+ *
+ * @param {Clutter.Actor} actor - The actor to cap.
+ * @param {number} menuWidth - `menu-width` setting, in px.
+ */
+export function capWidth(actor, menuWidth) {
+    actor.set_style(`max-width: ${menuWidth}px;`);
+}
+
+/**
+ * Row builders: task rows, the inline add/edit entries, and the width cap.
  *
  * WHY A SEPARATE MODULE (audit A1, EGO best practices "Modules are Better Than
  * a Single File"): a row is one actor tree with no state of its own, and it is
  * where roadmap features #1 (a colour control in the category header) and #2
  * (drag-and-drop reordering) land.
  *
- * The factory holds no state of its own: the menu width and the five actions
- * are injected by extension.js, so this module stays free of the extension's
- * private fields. Everything inside the class was moved verbatim from
- * `_makeTaskRow()`; only the six `this.<action>(…)` calls were repointed at the
- * injected callbacks and the method lost its leading underscore.
+ * The factory holds no state of its own: the menu width and the actions are
+ * injected by extension.js, so this module stays free of the extension's
+ * private fields. Every method body was moved verbatim; only the `this.<action>(…)`
+ * calls were repointed at injected callbacks and the methods lost their leading
+ * underscores.
+ *
+ * NOT here, on purpose: `_makeNewCategoryRow`. That entry is a workflow, not a
+ * row — validate the name, write the file, assign the auto-colour, switch tab —
+ * and it carries the audit D5 (rejected names) and N4 (failed-write) logic.
+ * Moving it here would scatter the most heavily guarded code in the project.
  */
 export class RowFactory {
     /**
@@ -30,13 +49,20 @@ export class RowFactory {
      * @param {Function} options.onEdit - Called with the task index.
      * @param {Function} options.onDelete - Called with the task index.
      * @param {Function} options.onMove - Called with (index, 'up'|'down').
+     * @param {Function} options.onAddTask - Called with (text, categoryName)
+     *   when an inline add entry commits.
+     * @param {Function} options.onFinishEditing - Called with the new text
+     *   when an inline edit commits.
      */
-    constructor({menuWidth, onToggle, onEdit, onDelete, onMove}) {
+    constructor({menuWidth, onToggle, onEdit, onDelete, onMove,
+        onAddTask, onFinishEditing}) {
         this._menuWidth = menuWidth;
         this._onToggle = onToggle;
         this._onEdit = onEdit;
         this._onDelete = onDelete;
         this._onMove = onMove;
+        this._onAddTask = onAddTask;
+        this._onFinishEditing = onFinishEditing;
     }
 
     /**
@@ -201,5 +227,75 @@ export class RowFactory {
             this._onToggle(index);
         });
         return row;
+    }
+
+    /**
+     * Constrain an actor's width to the GSettings menu-width cap
+     * (fixed default + user-adjustable). Used by the inline add/edit/
+     * new-category entries so a long text being typed cannot widen the
+     * menu (user test: 'not ekleme sırasında ... büyüyor').
+     * @param {Clutter.Actor} actor - The actor to cap.
+     */
+    capWidth(actor) {
+        capWidth(actor, this._menuWidth);
+    }
+
+    /**
+     * Build the inline edit row: an entry prefilled with the current text.
+     * Enter commits, Escape cancels. Note: Escape is actually intercepted by
+     * the shell's MenuManager in the capture phase (popupMenu.js
+     * _onCapturedEvent), so it closes the menu; the edit is then discarded by
+     * the open-state-changed invariant instead.
+     *
+     * @param {object} task - Document task item ({index, raw, text, done, tags}).
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
+     */
+    makeEditRow(task) {
+        const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
+        const entry = new St.Entry({style_class: 'todo-edit-entry'});
+        // Prefill with `raw` (tags inline), NOT the tag-stripped display text:
+        // committing the edit rewrites the whole line, and raw keeps the tags.
+        entry.set_text(task.raw);
+        entry.set_x_expand(true);
+        this.capWidth(entry);
+        entry.connect('key-release-event', (e, event) => {
+            const symbol = event.get_key_symbol();
+            if (symbol === Clutter.KEY_Return) {
+                this._onFinishEditing(e.get_text());
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.add_child(entry);
+        return {row, entry};
+    }
+
+    /**
+     * Build the inline add row for a category: an empty entry with a
+     * per-category hint. Enter commits via Storage.addTask(text, category).
+     *
+     * @param {string} categoryName - Target category for the new task.
+     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
+     *   and its entry, so the caller can grab focus after adding to the menu.
+     */
+    makeAddRow(categoryName) {
+        const row = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        const entry = new St.Entry({
+            hint_text: `Add to "${categoryName}"…`,
+            style_class: 'todo-edit-entry',
+        });
+        entry.set_x_expand(true);
+        this.capWidth(entry);
+        entry.connect('key-release-event', (e, event) => {
+            if (event.get_key_symbol() === Clutter.KEY_Return) {
+                this._onAddTask(e.get_text(), categoryName);
+                return Clutter.EVENT_STOP;
+            }
+            return Clutter.EVENT_PROPAGATE;
+        });
+        row.add_child(entry);
+        return {row, entry};
     }
 }
