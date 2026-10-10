@@ -4,6 +4,41 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.16.0 - 2026-10-10
+
+### Added
+- **Faz 7 — category delete / rename + a per-category action menu.** The `+`
+  button in every category header became a `...` action button; it expands the
+  shell's own inline submenu (`PopupSubMenu`) directly below that header:
+  - **Add task** — the inline add entry (the old `+` behaviour)
+  - **Change color** — visible but inactive (Faz 8 turns it on)
+  - **Rename** — a prefilled entry; the stored colour follows the new name
+  - **Delete** — red, two-step: the first click asks "Confirm delete?" and the
+    second removes the category with its tasks and drops its colour
+- Three triggers for the same panel: the `...` button, right-click on the
+  category tab, right-click on the category name row.
+
+### Changed
+- `storage.js` gains the pure `deleteCategory`, `renameCategory`,
+  `moveCategoryColor` and `removeCategoryColor` — every rejection path returns
+  the content byte-identically.
+- The single-interaction invariant grew from three fields to five (task edit,
+  category add, new-category entry, category rename, action panel) and is reset
+  in ONE helper, so two inline interactions can never be open together.
+
+### Fixed
+- Renaming from a category tab no longer falls back to `All`: `set_value` fires
+  `changed::` synchronously and that refresh dropped a category the file no
+  longer had (L-040).
+- Renaming the explicit `## General` that carries the pre-heading preamble no
+  longer produces an unstable round-trip (L-038).
+- A deliberate delete now drops the colour even when the deleted category was
+  the file's last heading (the accidental-heading-loss rule used to keep it).
+
+### Tests
+- 221 unit tests (15 new), 12 new static guards, all mutation-tested (12/12),
+  plus a 147-assert contract probe against `parseDocument`/`serializeDocument`.
+
 ## 0.15.0 - 2026-10-03
 
 ### Changed
