@@ -143,6 +143,34 @@ export function pruneCategoryColors(colors, validNames) {
 }
 
 /**
+ * Move a stored color from one category name to another (Faz 7 rename flow:
+ * the rename rewrites the FILE first, then the color map — L-018). Pure: the
+ * input map is never mutated.
+ *
+ * No-op (input returned unchanged) when there is no entry for `fromName` or
+ * the names are identical. If `toName` somehow already has an entry, the
+ * moved color overwrites it — the rename flow only runs this after a rename
+ * the category layer accepted, so a pre-existing target entry would be a
+ * stale leftover anyway.
+ *
+ */
+export function moveCategoryColor(colors, fromName, toName) {
+    if (!colors
+        || !Object.prototype.hasOwnProperty.call(colors, fromName)
+        || fromName === toName) {
+        return colors;
+    }
+    const moved = {};
+    for (const key of Object.keys(colors)) {
+        if (key !== fromName) {
+            moved[key] = colors[key];
+        }
+    }
+    moved[toName] = colors[fromName];
+    return moved;
+}
+
+/**
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *
@@ -640,6 +668,62 @@ export function addCategory(content, name) {
         return content;
     }
     doc.categories.push({name: trimmed, items: [], implicit: false});
+    return serializeDocument(doc);
+}
+
+/**
+ * Delete a category with EVERYTHING in it — heading, tasks, extras (Faz 7,
+ * approved semantics A: the user confirmed the destructive behaviour; the
+ * two-step confirmation lives in the UI, not here).
+ *
+ * No-op when no category of that name exists or the category is the implicit
+ * 'General' fallback bucket (it has no heading of its own to delete; it only
+ * becomes real through an explicit '## General' heading, which IS deletable).
+ * Note: when the explicit 'General' carries the pre-file-heading preamble
+ * (see parseDocument), deleting it removes that preamble too — under this
+ * model those items belong to the 'General' bucket.
+ *
+ */
+export function deleteCategory(content, name) {
+    const doc = parseDocument(content);
+    const idx = doc.categories.findIndex(category => category.name === name);
+    if (idx === -1 || doc.categories[idx].implicit) {
+        return content;
+    }
+    doc.categories.splice(idx, 1);
+    return serializeDocument(doc);
+}
+
+/**
+ * Rename a category by rewriting its `## <name>` heading in place; the tasks,
+ * extras and their order under it are untouched.
+ *
+ * No-op when: the new name is unusable (see isUsableCategoryName), no category
+ * of `oldName` exists, the category is the implicit 'General' fallback bucket
+ * (no heading to rewrite — the UI hides the tab menu for it), the new name
+ * equals the old one, or another category already uses the new name
+ * (case-sensitive file semantics; an implicit 'General' counts as existing,
+ * matching the addCategory rule). Rejections return the content
+ * byte-identically.
+ *
+ */
+export function renameCategory(content, oldName, newName) {
+    const trimmed = newName.trim();
+    if (!isUsableCategoryName(trimmed)) {
+        return content;
+    }
+    const doc = parseDocument(content);
+    const category = doc.categories.find(item => item.name === oldName);
+    if (!category || category.implicit) {
+        return content;
+    }
+    if (trimmed === oldName) {
+        return content;
+    }
+    if (doc.categories.some(item => item !== category && item.name === trimmed)) {
+        return content;
+    }
+    category.name = trimmed;
     return serializeDocument(doc);
 }
 

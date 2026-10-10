@@ -1092,6 +1092,109 @@ function testCategoryNameHygiene() {
         && Storage.isUsableCategoryName('a\rb') === false, '');
 }
 
+// ---- category delete / rename (Faz 7) ------------------------------------
+
+// deleteCategory / renameCategory / moveCategoryColor: the pure layer of the
+// tab action menu. Destructive semantics are deliberate (approved Faz 7
+// decision A: heading + tasks + extras all go); the two-step confirmation
+// lives in the UI. Every rejection returns the content byte-identically.
+function testCategoryDeleteRename() {
+    const BASE = '# TODO\n## A\n- [ ] a1\nnote\n- [x] a2\n## B\n- [ ] b1\n';
+
+    record('deleteCategory: removes heading, tasks and extras of that category only',
+        Storage.deleteCategory(BASE, 'A')
+            === '# TODO\n## B\n- [ ] b1\n'
+        && Storage.deleteCategory(BASE, 'B')
+            === '# TODO\n## A\n- [ ] a1\nnote\n- [x] a2\n',
+        JSON.stringify(Storage.deleteCategory(BASE, 'A')));
+
+    record('deleteCategory: an unknown name is a byte-identical no-op',
+        Storage.deleteCategory(BASE, 'Nope') === BASE, '');
+
+    record('deleteCategory: the implicit General bucket is refused',
+        Storage.deleteCategory('Note\n- [ ] t\n', 'General') === 'Note\n- [ ] t\n', '');
+
+    record('deleteCategory: an explicit General heading IS deletable',
+        Storage.deleteCategory('# TODO\n## General\n- [ ] g\n', 'General')
+            === '# TODO\n', '');
+
+    record('deleteCategory: deleting the last category leaves a title-only file',
+        Storage.deleteCategory('# TODO\n## A\n- [ ] a\n', 'A') === '# TODO\n', '');
+
+    record('deleteCategory: the explicit General with preamble loses the preamble too',
+        Storage.deleteCategory('- [ ] pre\n## General\n- [ ] post\n', 'General')
+            === '# TODO\n',
+        JSON.stringify(Storage.deleteCategory('- [ ] pre\n## General\n- [ ] post\n', 'General')));
+
+    record('deleteCategory: the result round-trips stably',
+        (() => {
+            const once = Storage.deleteCategory(BASE, 'A');
+            return Storage.serializeDocument(Storage.parseDocument(once)) === once;
+        })(), '');
+
+    const RENAMED = Storage.renameCategory(BASE, 'A', 'Work');
+    record('renameCategory: rewrites the heading in place, tasks untouched',
+        RENAMED === '# TODO\n## Work\n- [ ] a1\nnote\n- [x] a2\n## B\n- [ ] b1\n',
+        JSON.stringify(RENAMED));
+
+    record('renameCategory: the new name is trimmed',
+        Storage.renameCategory(BASE, 'A', '  Work  ') === RENAMED, '');
+
+    record('renameCategory: unusable names are rejected byte-identically',
+        Storage.renameCategory(BASE, 'A', 'a\nb') === BASE
+        && Storage.renameCategory(BASE, 'A', '## Injected') === BASE
+        && Storage.renameCategory(BASE, 'A', '') === BASE
+        && Storage.renameCategory(BASE, 'A', '  ') === BASE, '');
+
+    record('renameCategory: an existing name (case-sensitive) is rejected',
+        Storage.renameCategory(BASE, 'A', 'B') === BASE
+        && Storage.renameCategory('# TODO\n## A\n- [ ] a\n## a\n- [ ] b\n',
+            'a', 'A') === '# TODO\n## A\n- [ ] a\n## a\n- [ ] b\n', '');
+
+    record('renameCategory: the identical name is a no-op',
+        Storage.renameCategory(BASE, 'A', 'A') === BASE
+        && Storage.renameCategory(BASE, 'A', ' A ') === BASE, '');
+
+    record('renameCategory: an unknown source name is a no-op',
+        Storage.renameCategory(BASE, 'Nope', 'X') === BASE, '');
+
+    record('renameCategory: the implicit General bucket is refused',
+        Storage.renameCategory('Note\n- [ ] t\n', 'General', 'X')
+            === 'Note\n- [ ] t\n', '');
+
+    record('renameCategory: an implicit General counts as existing for duplicates',
+        Storage.renameCategory('note\n## X\n- [ ] a\n', 'X', 'General')
+            === 'note\n## X\n- [ ] a\n', '');
+
+    record('renameCategory: extras and blank lines survive under the new name',
+        Storage.renameCategory('# TODO\n## A\n\nextra\n- [ ] a1\n', 'A', 'W')
+            === '# TODO\n## W\n\nextra\n- [ ] a1\n', '');
+
+    record('renameCategory: the result round-trips stably',
+        Storage.serializeDocument(Storage.parseDocument(RENAMED)) === RENAMED, '');
+
+    const COLORS = {A: '#111111', B: '#222222'};
+    const MOVED = Storage.moveCategoryColor(COLORS, 'A', 'C');
+    record('moveCategoryColor: the entry moves, others survive, input is not mutated',
+        MOVED.B === '#222222' && MOVED.C === '#111111' && !('A' in MOVED)
+        && COLORS.A === '#111111' && COLORS.B === '#222222',
+        JSON.stringify(MOVED));
+
+    record('moveCategoryColor: no entry to move is returned unchanged',
+        Storage.moveCategoryColor(COLORS, 'Nope', 'C') === COLORS, '');
+
+    record('moveCategoryColor: identical names are a no-op',
+        Storage.moveCategoryColor(COLORS, 'A', 'A') === COLORS, '');
+
+    record('moveCategoryColor: a stale target entry is overwritten',
+        JSON.stringify(Storage.moveCategoryColor({A: '#111111', C: '#999999'}, 'A', 'C'))
+            === '{"C":"#111111"}', '');
+
+    record('moveCategoryColor: a missing map is returned unchanged',
+        Storage.moveCategoryColor(null, 'A', 'C') === null
+        && Storage.moveCategoryColor(undefined, 'A', 'C') === undefined, '');
+}
+
 // ---- preamble fidelity (audit D2 + D4, one model change) ---------------
 
 // The region of a file before its first explicit '## Name' heading used to be
@@ -1525,6 +1628,7 @@ restoreOriginal();
 testParseDocument();
 testSerializeDocument();
 testCategoryNameHygiene();
+testCategoryDeleteRename();
 testPreambleFidelity();
 testAtomicWritePath();
 testPathParams();
