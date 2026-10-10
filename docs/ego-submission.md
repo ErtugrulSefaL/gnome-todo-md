@@ -55,6 +55,12 @@ while open. This session's proven procedure (GNOME 46, **Wayland** session):
 1. **Back up first:** `cp ~/todo.md ~/.todo-backup/todo.md.<ts>` (record md5)
    and `dconf read /org/gnome/shell/extensions/todo-md/category-colors` into a
    backup file. Restore byte-identically afterwards and verify by md5.
+   ⚠️ RACE (hit 2026-10-10): the file monitor fires on the restore `cp`, and a
+   refresh that runs while the demo colour map is still set prunes ALL demo
+   keys and writes `{}` — its commit can land AFTER your `dconf write` (two
+   separate dconf clients, no cross-client commit ordering). So after
+   restoring the map, WAIT a few seconds, READ IT BACK, and re-write if it was
+   wiped. Verify stability before calling the restore done.
 2. **Demo content:** write an attractive English markdown todo file (varied
    done/undone states) and set demo category colors via
    `dconf write /org/gnome/shell/extensions/todo-md/category-colors "{...}"`.
