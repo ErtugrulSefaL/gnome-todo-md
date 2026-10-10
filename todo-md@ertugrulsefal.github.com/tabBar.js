@@ -119,7 +119,7 @@ export class TabBar {
      * Build the buttons for the current sections.
      *
      */
-    refill(sections, colors, activeCategory, onSelect) {
+    refill(sections, colors, activeCategory, onSelect, onActions) {
         this.tabsBox.remove_all_children();
         if (sections.length > 1) {
             const tabs = [{name: null, label: 'All'}]
@@ -130,6 +130,7 @@ export class TabBar {
                 button.connect('clicked', () => {
                     onSelect(tab.name);
                 });
+                this._connectActions(button, tab.name, onActions);
                 this.tabsBox.add_child(button);
             }
             return;
@@ -139,7 +140,29 @@ export class TabBar {
             {name: sections[0].name, label: sections[0].name},
             colors, activeCategory);
         button.set_checked(true);
+        this._connectActions(button, sections[0].name, onActions);
         this.tabsBox.add_child(button);
+    }
+
+    /**
+     * Right-click on a category tab opens the SAME action panel the header's
+     * ⋮ button opens (Faz 7) — the practical trigger next to the
+     * discoverable one. St.Button's default button-mask is BUTTON1, so a
+     * right-click never fires 'clicked' (no accidental tab switch), and the
+     * handler returns EVENT_STOP so the press stops there.
+     *
+     */
+    _connectActions(button, categoryName, onActions) {
+        if (categoryName === null) {
+            return; // the 'All' tab is not a category
+        }
+        button.connect('button-press-event', (actor, event) => {
+            if (event.get_button() !== 3) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+            onActions(categoryName);
+            return Clutter.EVENT_STOP;
+        });
     }
 
     /**

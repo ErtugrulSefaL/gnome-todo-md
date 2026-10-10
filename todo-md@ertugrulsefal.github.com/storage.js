@@ -178,6 +178,33 @@ export function moveCategoryColor(colors, fromName, toName) {
 }
 
 /**
+ * Drop the stored colour of ONE category (Faz 7 delete flow). Pure: the input
+ * map is never mutated, and it is returned unchanged when it has no entry for
+ * `name`.
+ *
+ * Why the delete flow does this explicitly instead of leaving it to the
+ * refresh prune: an explicit delete must drop the colour even when the deleted
+ * category was the file's LAST heading. `prunedColorsForDocument` deliberately
+ * keeps the whole map in that case ("the headings may come back"), which is
+ * right for a file that lost its headings by accident but wrong here — a later
+ * category reusing the name would silently inherit the old colour, against the
+ * locked no-inheritance decision.
+ *
+ */
+export function removeCategoryColor(colors, name) {
+    if (!colors || !Object.prototype.hasOwnProperty.call(colors, name)) {
+        return colors;
+    }
+    const kept = {};
+    for (const key of Object.keys(colors)) {
+        if (key !== name) {
+            kept[key] = colors[key];
+        }
+    }
+    return kept;
+}
+
+/**
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *

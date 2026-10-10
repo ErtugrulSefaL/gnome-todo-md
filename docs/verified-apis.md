@@ -131,6 +131,49 @@ Shexli result on our zip: 0 errors, 3 warnings —
   `disable()` destroys the tab bar (`this._tabBar.bar.destroy()`,
   extension.js:163-166), which destroys the button and its handlers.
 
+## Faz 7 (2026-10-10) — category action panel (design H)
+
+Source of truth: gnome-shell **46.0** `js/ui/popupMenu.js` and `js/ui/panelMenu.js`
+(raw files at the `46.0` tag), plus the offline mirror for Clutter/St.
+
+### The menu machinery (why a floating popup is not an option)
+
+| Fact | Evidence |
+|---|---|
+| The panel menu lives in `Main.uiGroup`; its modal grab is pushed by `PopupMenuManager` | panelMenu.js :132; popupMenu.js :1379 `Main.pushModal(menu.actor, …)` |
+| Opening a managed menu **closes the previously active one** | popupMenu.js :1381 `oldMenu?.close(FADE)` |
+| A `PopupMenu` **closes itself when its `sourceActor` unmaps** | popupMenu.js :889-892 (`notify::mapped`) |
+| Outside click closes a menu only when the event target is **not contained** in the menu actor (`contains` is recursive) | popupMenu.js :1345, :1440 |
+| `removeAll()` destroys only box children whose `_delegate` is a `PopupBaseMenuItem` **or** a `PopupMenuSection` | popupMenu.js :827-850 |
+| `addMenuItem()` wires `activate` → `itemActivated()` → `_getTopMenu().close()` | popupMenu.js :694-701, :646-651 |
+| `_setParent()` is only called by `addMenuItem` → a directly-added actor keeps `_parent === null` | popupMenu.js :611-616, :834 |
+
+Consequence: the action panel is an **inline** expander inside the menu
+(GNOME's own idiom), never a second top-level popup.
+
+### APIs used (verified)
+
+| API | Evidence | Use |
+|---|---|---|
+| `PopupMenu.PopupSubMenu(sourceActor, arrow)` — `popup-sub-menu` styled `St.ScrollView`, hidden initially, `open/close` animate the height | popupMenu.js :1053-1192 | The panel |
+| `sourceActor` / `focusActor` are plain properties set in the constructor | :552-553 | Re-targeting the shared panel per header |
+| `PopupSubMenu._onKeyPressEvent` dereferences `sourceActor._delegate.active` on Left | :1160-1164 | Why `sourceActor` is set to the **header row** (a menu item), not to an `St.Button` |
+| `_needsScrollbar()` reads the TOP menu's CSS `max-height`; `.popup-sub-menu` has none | :1084-1090; `data/theme/.../_popovers.scss` :74-82 | No stray scrollbar |
+| `PopupMenuItem.label` is an `St.Label` | :285-300 | Two-step delete ("Confirm delete?") |
+| `PopupBaseMenuItem.sensitive` + `setSensitive`/`syncSensitive` | :73-74, :224-250 | The passive "Change color" entry |
+| `PopupBaseMenuItem` is itself an `St.BoxLayout` with a `Clutter.ClickAction`; `get actor()` returns `this` | :67-131 | Items can be added with `box.add_child(item.actor)` |
+| `Clutter.Event.get_button()`, `Actor::button-press-event`, `CLUTTER_EVENT_STOP` stops scene-graph propagation | mirror: clutter.event / clutter.actor | Right-click on a tab; the press never reaches the tab's click action |
+| `Clutter.Actor.get_parent()`, `remove_child()`, `St.Entry.text`, `Clutter.Text.set_selection()` | mirror: clutter.actor / st.entry / clutter.text | Detach per refresh; prefilled rename entry |
+
+### Not used on purpose
+
+- `PopupSubMenuMenuItem`: it is a `PopupBaseMenuItem` — on the menu box it is
+  destroyed by `removeAll()` (the 2026-09-26 SEGV shape).
+- `Main.uiGroup` + `Main.panel.menuManager` for a second popup: it would close
+  the open menu and then close itself (two facts in the table above).
+- `PopupSubMenu._arrow` (private): the arrow actor is kept invisible instead of
+  being re-pointed per open.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - Gio/GLib class pages may be missing (e.g. no `gio.file-monitor` page; only

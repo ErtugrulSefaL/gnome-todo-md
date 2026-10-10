@@ -629,18 +629,23 @@ function testStaticChecks() {
     record('static: every _editingIndex = -1 reset pairs _addingCategory',
         !/this\._editingIndex = -1;\n(?![ ]*this\._addingCategory)/.test(ui),
         'reset both fields together (single-interaction rule)');
-    record('static: opening an edit closes the add entry (_startEditing)',
-        /_editingIndex = index;\n\s*this\._addingCategory = null;/.test(ui),
-        'an edit replaces any open category add entry');
+    record('static: opening an edit closes the other interactions (_startEditing)',
+        /_startEditing\(index\) \{\n\s*this\._closeInteractions\(\);\n\s*this\._editingIndex = index;/.test(ui),
+        'an edit replaces any open add entry, rename row or action panel');
 
-    // Audit D3: those two guards above only ever looked at two of the three
-    // fields, so _addingNewCategory could be left open next to an edit or a
-    // category add entry — two focusable entries at once. Opening any of the
-    // three must close the other two, directly or via _cancelEditing().
+    // Audit D3 + Faz 7: the guards above only ever looked at two of the
+    // fields, so _addingNewCategory could be left open next to an edit — two
+    // focusable entries at once. There are FIVE inline interactions now (task
+    // edit, category add entry, new-category entry, category rename, action
+    // panel), and opening any of them must close the other four. Every opening
+    // path goes through _closeInteractions(), which is also the ONLY place the
+    // fields are reset, so they cannot drift apart.
     const EDIT_STATE = [
         {field: 'this._editingIndex', closed: '-1'},
         {field: 'this._addingCategory', closed: 'null'},
         {field: 'this._addingNewCategory', closed: 'false'},
+        {field: 'this._renamingCategory', closed: 'null'},
+        {field: 'this._actionsCategory', closed: 'null'},
     ];
     const uiLines = ui.split('\n');
     const unpaired = [];
@@ -649,25 +654,32 @@ function testStaticChecks() {
             const match = line.match(
                 new RegExp(`^\\s*${field.replace('.', '\\.')} = (.+);$`));
             if (!match || match[1].trim() === closed) continue;
-            // A reset is a compact three-line block, so the neighbouring
-            // assignments can sit on either side of the one being checked.
-            const around = uiLines.slice(i - 3, i).join('\n')
-                + '\n' + uiLines.slice(i + 1, i + 4).join('\n');
+            // The helper closes all five; _cancelEditing() delegates to it.
             const before = uiLines.slice(i - 2, i).join('\n');
-            const others = EDIT_STATE.filter(other => other.field !== field);
-            const allClosed = others.every(
-                other => around.includes(`${other.field} = ${other.closed};`));
-            if (!allClosed && !before.includes('this._cancelEditing();')) {
-                unpaired.push(`line ${i + 1} opens ${field} without closing `
-                    + others.map(other => other.field).join(' + '));
+            if (before.includes('this._closeInteractions();')
+                || before.includes('this._cancelEditing();')) {
+                continue;
             }
+            unpaired.push(`line ${i + 1} opens ${field} without closing the others`);
         }
     });
-    record('static: the three edit-state fields are opened and closed together',
+    record('static: the five interaction fields are opened and closed together',
         unpaired.length === 0,
         unpaired.length ? unpaired.join(' | ')
-            : 'at most one inline interaction may be open: opening the edit, '
-            + 'the category add or the new-category entry closes the other two');
+            : 'at most one inline interaction may be open: every opening path '
+            + 'closes the other four through _closeInteractions()');
+    record('static: one helper resets all five interaction fields',
+        /_closeInteractions\(\) \{\n(\s*this\._(?:editingIndex|addingCategory|addingNewCategory|renamingCategory|actionsCategory) = [^\n]*\n){5}/.test(ui),
+        'the single-interaction invariant is structural: five fields, one reset');
+    record('static: the interaction fields are reset ONLY in that helper',
+        (ui.match(/this\._editingIndex = -1;/g) || []).length === 1
+        && (ui.match(/this\._addingCategory = null;/g) || []).length === 1
+        && (ui.match(/this\._addingNewCategory = false;/g) || []).length === 2
+        && (ui.match(/this\._renamingCategory = null;/g) || []).length === 1
+        && (ui.match(/this\._actionsCategory = null;/g) || []).length === 1,
+        'a partial reset elsewhere is how two interactions end up open at once; '
+        + 'the one extra _addingNewCategory reset is the D5/N4-guarded success '
+        + 'path of the new-category row');
 
     // Audit D5: addCategory rejects a name it cannot write as a heading. The UI
     // must then keep the entry open — closing it first turned Enter into a
@@ -723,16 +735,108 @@ function testStaticChecks() {
     record('static: _addTask keeps the typed task when the write fails',
         addBody !== null && /if \(!Storage\.writeTodo\(/.test(addBody)
         && addBody.indexOf('if (!Storage.writeTodo(')
-            < addBody.indexOf('this._addingCategory = null;'),
+            < addBody.indexOf('this._closeInteractions();'),
         'a failed write must return BEFORE the inline entry closes, or the '
         + 'text the user typed is gone with no message');
 
     record('static: _finishEditing keeps the edited text when the write fails',
         editBody !== null && /if \(!Storage\.writeTodo\(/.test(editBody)
         && editBody.indexOf('if (!Storage.writeTodo(')
-            < editBody.indexOf('this._editingIndex = -1;'),
+            < editBody.indexOf('this._closeInteractions();'),
         'same rule for the edit commit: the old text stays on disk, the new one '
         + 'stays on screen');
+
+    // ---- Faz 7: category action panel (approved design H) ----------------
+    //
+    // The panel is a PopupSubMenu — the shell's own inline expander — attached
+    // to the content flow as a PLAIN actor. A PopupBaseMenuItem there would be
+    // destroyed by contentSection.removeAll() (popupMenu.js :827-850), the
+    // exact shape of the 2026-09-26 SEGV.
+    record('static: the action panel is a PopupSubMenu, never a menu item',
+        /new PopupMenu\.PopupSubMenu\(/.test(ui)
+        && /this\._actions\.box\.add_child\(item\.actor\)/.test(ui)
+        && !/PopupSubMenuMenuItem/.test(ui)
+        && !/this\._actions\.addMenuItem\(/.test(ui),
+        'addMenuItem() also wires activate -> itemActivated(), which closes the '
+        + 'menu on the FIRST click (popupMenu.js :694-701) — the two-step delete '
+        + 'needs the panel to survive it, so the items are added directly');
+
+    record('static: the header actions button replaced the per-category +',
+        /accessible_name: `Actions for \$\{categoryName\}`/.test(ui)
+        && /view-more-symbolic/.test(ui)
+        && !/accessible_name: `Add task to/.test(ui),
+        'Faz 7: one entry point per category — adding a task is the panel\'s '
+        + 'first entry, not a second button next to it');
+
+    // Windowed on the handler body: /return Clutter\.EVENT_STOP;/ alone also
+    // matches every inline-entry handler in the file, so the mutation that
+    // turned this one into EVENT_PROPAGATE stayed green (mutation-tested).
+    const tabActionsBody = handlerBody('_connectActions(button, categoryName, onActions) {');
+    record('static: right-click on a tab opens the same panel (practical trigger)',
+        /event\.get_button\(\) !== 3/.test(ui)
+        && /onActions\(categoryName\);/.test(ui)
+        && tabActionsBody !== null
+        && /return Clutter\.EVENT_STOP;/.test(tabActionsBody),
+        'the tab keeps its left-click selection (St.Button default mask is '
+        + 'BUTTON1) and the press stops at the tab (EVENT_STOP halts the '
+        + 'scene-graph propagation, Clutter.Actor docs)');
+
+    record('static: the panel sourceActor is a menu item (Left-key path)',
+        /this\._actions\.sourceActor = header;/.test(ui),
+        'PopupSubMenu\'s own Left-key handler dereferences '
+        + 'sourceActor._delegate.active (popupMenu.js :1160-1164)');
+
+    // L-018: the file is the source of truth, the colour map follows it. Both
+    // Faz 7 mutations must write the file BEFORE touching the settings map.
+    const deleteWrite = uiLines.findIndex(l => l.includes('Storage.deleteCategory('));
+    const deleteFile = uiLines.findIndex((l, i) => i > deleteWrite
+        && l.includes('Storage.writeTodo(this._todoPath(), updated)'));
+    const deleteColour = uiLines.findIndex((l, i) => i > deleteFile
+        && l.includes("set_value('category-colors'"));
+    record('static: deleting writes the file before dropping the colour (L-018)',
+        deleteWrite !== -1 && deleteFile > deleteWrite && deleteColour > deleteFile,
+        'changed::category-colors fires synchronously; the map must follow the '
+        + 'file, never lead it');
+
+    const renameWrite = uiLines.findIndex(l => l.includes('Storage.renameCategory('));
+    const renameFile = uiLines.findIndex((l, i) => i > renameWrite
+        && l.includes('Storage.writeTodo(this._todoPath(), updated)'));
+    const renameColour = uiLines.findIndex((l, i) => i > renameFile
+        && l.includes('moveCategoryColor('));
+    record('static: renaming writes the file before moving the colour (L-018)',
+        renameWrite !== -1 && renameFile > renameWrite && renameColour > renameFile,
+        'same order as the new-category flow: file first, then the map');
+
+    // Found by the user in the first manual test of this panel: renaming from
+    // a category tab threw them back to 'All'. set_value fires
+    // changed::category-colors SYNCHRONOUSLY (L-018), and that refresh drops an
+    // active category the file no longer has — so the new name has to be in
+    // place BEFORE the colour write.
+    const renameActive = uiLines.findIndex((l, i) => i > renameWrite
+        && l.includes('this._activeCategory = name;'));
+    const renameSet = uiLines.findIndex((l, i) => i > renameFile
+        && l.includes("set_value('category-colors'"));
+    record('static: renaming keeps the active tab (order vs the sync signal)',
+        renameActive !== -1 && renameSet !== -1 && renameActive < renameSet,
+        'the active category must be renamed before the colour write, or the '
+        + 'synchronous refresh drops it and the menu falls back to All');
+
+    record('static: right-click on a category header row opens the panel',
+        /header\.connect\('button-press-event', \(actor, event\) => \{\n\s*if \(event\.get_button\(\) !== 3\) \{\n\s*return Clutter\.EVENT_PROPAGATE;\n\s*\}\n\s*this\._toggleActions\(categoryName\);\n\s*return Clutter\.EVENT_STOP;/.test(ui),
+        'the category NAME row is the practical trigger inside the menu, '
+        + 'matching the tab right-click');
+
+    // Both conditions are matched WITH their `if`, so disabling either check
+    // (`if (false && ...)`) is caught — mutation-tested: the call alone stayed
+    // green while the guard was effectively off.
+    record('static: the panel actor is detached on every refresh',
+        /if \(this\._actions\.actor\.get_parent\(\)\) \{\n\s*this\._actions\.actor\.get_parent\(\)\.remove_child\(this\._actions\.actor\);\n\s*\}/.test(ui),
+        'the panel is untracked by removeAll(): without an unconditional detach '
+        + 'a stale copy would stack up on every refresh');
+    record('static: the panel is destroyed in disable()',
+        /if \(this\._actions\) \{\n\s*this\._actions\.destroy\(\);/.test(ui),
+        'its Main.sessionMode connection must be dropped when the extension is '
+        + 'disabled (guidelines: remove what you added)');
 
     // Audit D8: an icon-only button with no accessible_name is announced as
     // just "button". The tab buttons carry visible text, so they are exempt.
@@ -1207,6 +1311,25 @@ function testCategoryDeleteRename() {
     record('moveCategoryColor: a missing map is returned unchanged',
         Storage.moveCategoryColor(null, 'A', 'C') === null
         && Storage.moveCategoryColor(undefined, 'A', 'C') === undefined, '');
+
+    record('removeCategoryColor: drops one entry, keeps the rest, input untouched',
+        (() => {
+            const c = {A: '#111111', B: '#222222'};
+            const out = Storage.removeCategoryColor(c, 'A');
+            return !('A' in out) && out.B === '#222222'
+                && c.A === '#111111' && c.B === '#222222';
+        })(), '');
+
+    record('removeCategoryColor: an absent name returns the same map',
+        (() => {
+            const c = {A: '#111111'};
+            return Storage.removeCategoryColor(c, 'Nope') === c;
+        })(), '');
+
+    record('removeCategoryColor: a missing map is returned unchanged',
+        Storage.removeCategoryColor(null, 'A') === null
+        && Storage.removeCategoryColor(undefined, 'A') === undefined, '');
+
 
     // A category literally named '__proto__' is an edge the settings layer
     // cannot represent: GJS packs the key into a{ss} but deep_unpack drops it,

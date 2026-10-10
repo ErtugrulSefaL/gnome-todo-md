@@ -17,9 +17,7 @@ export default class TodoExtension extends Extension {
     enable() {
         // Single-edit invariant: at most one row is being edited at any time.
         // Reset on enable — the Extension instance survives disable/enable.
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         this._openIdleId = 0;
 
         // GSettings backend (schema id: metadata.json settings-schema).
@@ -28,9 +26,7 @@ export default class TodoExtension extends Extension {
         // `changed::<key>` detail syntax per gjs.guide preferences.md.
         this._settingsSignal = this._settings.connect('changed::todo-file-path',
             () => {
-                this._editingIndex = -1;
-                this._addingCategory = null;
-                this._addingNewCategory = false;
+                this._closeInteractions();
                 this._unwatchTodoFile();
                 this._watchTodoFile();
                 this._refreshTodoMenu();
@@ -99,10 +95,9 @@ export default class TodoExtension extends Extension {
                         return GLib.SOURCE_REMOVE;
                     });
                 } else {
-                    // Menu closed: an uncommitted edit must not survive.
-                    this._editingIndex = -1;
-                    this._addingCategory = null;
-                    this._addingNewCategory = false;
+                    // Menu closed: neither an uncommitted edit nor an open
+                    // action panel may survive into the next open.
+                    this._closeInteractions();
                 }
             });
 
@@ -155,6 +150,15 @@ export default class TodoExtension extends Extension {
             this._settings.disconnect(this._widthSignal);
             this._widthSignal = null;
         }
+        // The panel's actor lives inside the content section, but the
+        // PopupSubMenu object itself owns shell-side state (a
+        // Main.sessionMode connection) — destroy it before its actor's
+        // parent goes away.
+        if (this._actions) {
+            this._actions.destroy();
+            this._actions = null;
+            this._actionsDeleteItem = null;
+        }
         if (this._scrollWrapper) {
             this._scrollWrapper.destroy();
             this._scrollWrapper = null;
@@ -184,11 +188,40 @@ export default class TodoExtension extends Extension {
             // Any file write (external or our own) may shift line indexes, so
             // an in-progress edit cannot be trusted: close it (single-edit
             // rule) and rebuild.
-            this._editingIndex = -1;
-            this._addingCategory = null;
-            this._addingNewCategory = false;
+            this._closeInteractions();
             this._refreshTodoMenu();
         });
+    }
+
+    /**
+     * Close every inline interaction at once: at most ONE may be open at a
+     * time — a task edit, a category add entry, the new-category entry, a
+     * category rename or a category action panel. The five fields are reset
+     * ONLY here (the static guard asserts exactly that), so they cannot
+     * drift apart and two interactions can never be open together.
+     */
+    _closeInteractions() {
+        this._editingIndex = -1;
+        this._addingCategory = null;
+        this._addingNewCategory = false;
+        this._renamingCategory = null;
+        this._actionsCategory = null;
+        this._hideActionsPanel();
+    }
+
+    /**
+     * Hide the category action panel (Faz 7) and forget a pending delete
+     * confirmation, so the next open always starts from 'Delete'.
+     */
+    _hideActionsPanel() {
+        if (this._deleteConfirming && this._actionsDeleteItem) {
+            this._deleteConfirming = false;
+            this._actionsDeleteItem.label.text = 'Delete';
+            this._actionsDeleteItem.remove_style_class_name('todo-action-confirm');
+        }
+        if (this._actions && this._actions.isOpen) {
+            this._actions.close(false);
+        }
     }
 
     /**
@@ -256,6 +289,195 @@ export default class TodoExtension extends Extension {
         });
         row.add_child(entry);
         return {row, entry};
+    }
+
+    /**
+     * Build the inline category RENAME row (Faz 7): the same row shape as the
+     * new-category entry, prefilled with the current name and preselected, so
+     * typing replaces it. Enter commits through Storage.renameCategory.
+     *
+     */
+    _makeRenameRow(categoryName) {
+        const row = new PopupMenu.PopupBaseMenuItem(
+            {activate: false, can_focus: false});
+        const entry = new St.Entry({
+            text: categoryName,
+            style_class: 'todo-edit-entry',
+        });
+        entry.set_x_expand(true);
+        capWidth(entry, this._settings.get_int('menu-width'));
+        // Preselect: typing a new name replaces the old one instead of
+        // appending to it.
+        entry.clutter_text.set_selection(0, categoryName.length);
+        entry.connect('key-release-event', (e, event) => {
+            if (event.get_key_symbol() !== Clutter.KEY_Return) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+            const name = e.get_text().trim();
+            const parsed = Storage.readTodo(this._todoPath());
+            const updated = Storage.renameCategory(parsed.raw, categoryName, name);
+            if (updated === parsed.raw) {
+                // Rejected: an unusable name, the unchanged name, or a name
+                // already taken. Keep the entry open with the typed text (D5).
+                return Clutter.EVENT_STOP;
+            }
+            if (!Storage.writeTodo(this._todoPath(), updated)) {
+                // Audit N4: a failed write changes NOTHING — the text stays.
+                return Clutter.EVENT_STOP;
+            }
+            this._closeInteractions();
+            // The active tab follows the rename BEFORE the colour write:
+            // set_value fires changed::category-colors SYNCHRONOUSLY (L-018),
+            // and that refresh drops an active category the file no longer has
+            // — which is what threw the user back to 'All' (reported
+            // 2026-10-10, right after the first manual test of this panel).
+            if (this._activeCategory === categoryName) {
+                this._activeCategory = name;
+            }
+            // File first, then colour (L-018): the stored colour follows the
+            // new name, so a rename never silently loses a colour.
+            const colors = this._settings.get_value('category-colors')
+                .recursiveUnpack();
+            const moved = Storage.moveCategoryColor(colors, categoryName, name);
+            if (moved !== colors) {
+                this._settings.set_value('category-colors',
+                    GLib.Variant.new('a{ss}', moved));
+            }
+            this._refreshTodoMenu();
+            return Clutter.EVENT_STOP;
+        });
+        row.add_child(entry);
+        return {row, entry};
+    }
+
+    /**
+     * Build the category ACTION PANEL (Faz 7, approved design H) ONCE.
+     *
+     * It is a PopupSubMenu — the shell's own inline expander (popupMenu.js
+     * :1053-1192) — so it looks and animates like a native submenu while
+     * living in the content flow, right below the header that opened it.
+     *
+     * Its items are added to the submenu box DIRECTLY, not through
+     * addMenuItem(): that call wires 'activate' to itemActivated(), which
+     * closes the menu on the FIRST click (:694-701) — and the two-step delete
+     * needs the panel to survive that first click. Every item therefore closes
+     * the panel itself, explicitly.
+     *
+     */
+    _makeActionsPanel() {
+        // The header's ⋮ button is the affordance; the submenu arrow exists
+        // only because open()/close() animate it (:1128-1136). It is kept
+        // invisible rather than borrowing the button's icon, which would mean
+        // reaching into the submenu's private _arrow.
+        const arrow = new St.Icon({icon_name: 'pan-down-symbolic'});
+        arrow.visible = false;
+        this._actions = new PopupMenu.PopupSubMenu(null, arrow);
+
+        const addItem = new PopupMenu.PopupMenuItem('Add task');
+        addItem.connect('activate', () => {
+            const target = this._actionsCategory;
+            this._hideActionsPanel();
+            this._toggleAdd(target);
+        });
+
+        // Faz 8 turns this entry on (it will open the colour chooser); until
+        // then it is visible but insensitive, so the menu shape is final.
+        const colorItem = new PopupMenu.PopupMenuItem('Change color');
+        colorItem.setSensitive(false);
+
+        const renameItem = new PopupMenu.PopupMenuItem('Rename');
+        renameItem.connect('activate', () => {
+            const target = this._actionsCategory;
+            this._hideActionsPanel();
+            this._closeInteractions();
+            this._renamingCategory = target;
+            this._refreshTodoMenu();
+        });
+
+        const deleteItem = new PopupMenu.PopupMenuItem('Delete');
+        deleteItem.add_style_class_name('todo-action-danger');
+        deleteItem.connect('activate', () => {
+            const target = this._actionsCategory;
+            if (!this._deleteConfirming) {
+                // First click arms the confirmation and the panel stays open
+                // (see the docstring: that is why the items bypass
+                // addMenuItem).
+                this._deleteConfirming = true;
+                deleteItem.label.text = 'Confirm delete?';
+                deleteItem.add_style_class_name('todo-action-confirm');
+                return;
+            }
+            this._deleteConfirming = false;
+            deleteItem.label.text = 'Delete';
+            deleteItem.remove_style_class_name('todo-action-confirm');
+            this._hideActionsPanel();
+            this._deleteCategory(target);
+        });
+        this._actionsDeleteItem = deleteItem;
+
+        for (const item of [addItem, colorItem, renameItem, deleteItem]) {
+            this._actions.box.add_child(item.actor);
+        }
+        this._actions.actor.hide();
+    }
+
+    /**
+     * Toggle the action panel of one category (the header's ⋮ button).
+     *
+     */
+    _toggleActions(categoryName) {
+        if (this._actionsCategory === categoryName) {
+            this._closeInteractions();
+            this._refreshTodoMenu();
+            return;
+        }
+        this._closeInteractions();
+        this._actionsCategory = categoryName;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Right-click on a tab: switch to that category and show its action panel
+     * under its header (one panel, one place to render it).
+     *
+     */
+    _openActionsFor(categoryName) {
+        this._closeInteractions();
+        this._activeCategory = categoryName;
+        this._actionsCategory = categoryName;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Delete a category with everything in it (approved semantics A), persist
+     * and refresh. The two-step confirmation happens in the panel, not here.
+     *
+     */
+    _deleteCategory(categoryName) {
+        const parsed = Storage.readTodo(this._todoPath());
+        const updated = Storage.deleteCategory(parsed.raw, categoryName);
+        if (updated === parsed.raw) {
+            this._cancelEditing();
+            return;
+        }
+        if (!Storage.writeTodo(this._todoPath(), updated)) {
+            // Audit N4: a failed write changes NOTHING — no colour is dropped
+            // for a category the file still contains.
+            this._cancelEditing();
+            return;
+        }
+        this._closeInteractions();
+        // File first, then colour (L-018): drop the deleted category's colour
+        // explicitly. The refresh prune keeps the whole map when the deleted
+        // category was the file's last heading (see removeCategoryColor).
+        const colors = this._settings.get_value('category-colors')
+            .recursiveUnpack();
+        const kept = Storage.removeCategoryColor(colors, categoryName);
+        if (kept !== colors) {
+            this._settings.set_value('category-colors',
+                GLib.Variant.new('a{ss}', kept));
+        }
+        this._refreshTodoMenu();
     }
 
     /**
@@ -331,6 +553,17 @@ export default class TodoExtension extends Extension {
         }
         this._contentSection.removeAll();
 
+        if (!this._actions) {
+            this._makeActionsPanel();
+        }
+
+        // The panel actor is UNTRACKED by removeAll() (its delegate is a
+        // PopupSubMenu, not a menu item) — detach it here so the render
+        // step below can place it under the right header, or drop it.
+        if (this._actions.actor.get_parent()) {
+            this._actions.actor.get_parent().remove_child(this._actions.actor);
+        }
+
         const todo = Storage.readTodo(this._todoPath());
         const doc = Storage.parseDocument(todo.raw);
 
@@ -382,6 +615,14 @@ export default class TodoExtension extends Extension {
             && !sections.some(section => section.name === this._activeCategory)) {
             this._activeCategory = ALL_TAB;
         }
+        // Same rule for the two Faz 7 states: a target that vanished (an
+        // external edit) must not leave a panel armed for a dead name.
+        const knownCategory = name => name === null
+            || sections.some(section => section.name === name);
+        if (!knownCategory(this._actionsCategory)
+            || !knownCategory(this._renamingCategory)) {
+            this._closeInteractions();
+        }
 
         // The tab bar is PERSISTENT (created once, like the
         // content scroll wrapper) and ALWAYS horizontally scrollable —
@@ -413,7 +654,8 @@ export default class TodoExtension extends Extension {
         // scroller's hadjustment — horizontal scroll — survives).
         this._tabBar.attach(menu.box);
         this._tabBar.refill(sections, prunedColors, this._activeCategory,
-            name => this._switchTo(name));
+            name => this._switchTo(name),
+            name => this._openActionsFor(name));
 
         // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {
@@ -459,26 +701,65 @@ export default class TodoExtension extends Extension {
             label.set_x_expand(true);
             header.add_child(label);
 
-            const addBtn = new St.Button({
+            // Faz 7: the category action menu replaced the per-header '+'
+            // button. The panel itself renders right below this header
+            // (see the render step further down), so the button only
+            // toggles it; adding a task is now the panel's first entry.
+            const categoryName = section.name;
+            const actionsBtn = new St.Button({
                 style_class: 'todo-icon-button button',
-                accessible_name: `Add task to ${section.name}`,
+                accessible_name: `Actions for ${categoryName}`,
                 child: new St.Icon({
-                    icon_name: 'list-add-symbolic',
+                    icon_name: 'view-more-symbolic',
                     style_class: 'system-status-icon',
                 }),
             });
-            addBtn.set_x_align(Clutter.ActorAlign.END);
-            const categoryName = section.name;
-            addBtn.connect('clicked', () => {
-                this._toggleAdd(categoryName);
+            actionsBtn.set_x_align(Clutter.ActorAlign.END);
+            actionsBtn.connect('clicked', () => {
+                this._toggleActions(categoryName);
             });
-            header.add_child(addBtn);
+            header.add_child(actionsBtn);
+            // Right-click anywhere on the row — the category NAME included —
+            // opens the same panel. The row is reactive with activate disabled,
+            // so the press reaches this handler and stops there (it never
+            // counts as choosing a menu item).
+            header.connect('button-press-event', (actor, event) => {
+                if (event.get_button() !== 3) {
+                    return Clutter.EVENT_PROPAGATE;
+                }
+                this._toggleActions(categoryName);
+                return Clutter.EVENT_STOP;
+            });
             // Every content row fills the FIXED wrapper width — without
             // x_expand a short category's rows keep their natural width and
             // the right side collapses (the menu 'shrinks' on switch — user
             // test 5).
             header.set_x_expand(true);
             contentSection.addMenuItem(header);
+
+            // Faz 7: the action panel renders as an untracked row directly
+            // below its header — a PopupSubMenu actor, NOT a menu item, so
+            // contentSection.removeAll() never destroys it (popupMenu.js
+            // :827-850).
+            if (this._actionsCategory === categoryName) {
+                contentSection.box.add_child(this._actions.actor);
+                // sourceActor must be a menu item: the submenu's own
+                // Left-key handler dereferences sourceActor._delegate.active
+                // (popupMenu.js :1160-1164), and this header is the item
+                // the panel belongs to.
+                this._actions.sourceActor = header;
+                this._actions.focusActor = actionsBtn;
+                this._actions.open(true);
+            }
+
+            // The rename entry takes the panel's slot when Rename was
+            // chosen (the single-interaction rule keeps them apart).
+            if (this._renamingCategory === categoryName) {
+                const renameRow = this._makeRenameRow(categoryName);
+                renameRow.row.set_x_expand(true);
+                contentSection.addMenuItem(renameRow.row);
+                renameRow.entry.grab_key_focus();
+            }
 
             // The active add entry renders directly under its category
             // header; render derives solely from _addingCategory, so two
@@ -527,9 +808,8 @@ export default class TodoExtension extends Extension {
      *
      */
     _startEditing(index) {
+        this._closeInteractions();
         this._editingIndex = index;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 
@@ -538,9 +818,7 @@ export default class TodoExtension extends Extension {
      * entry) without writing anything.
      */
     _cancelEditing() {
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         this._refreshTodoMenu();
     }
 
@@ -562,9 +840,7 @@ export default class TodoExtension extends Extension {
         if (!Storage.writeTodo(this._todoPath(), updated)) {
             return;
         }
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         this._refreshTodoMenu();
     }
 
@@ -589,9 +865,7 @@ export default class TodoExtension extends Extension {
         if (!Storage.writeTodo(this._todoPath(), updated)) {
             return;
         }
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         this._refreshTodoMenu();
     }
 
@@ -605,9 +879,8 @@ export default class TodoExtension extends Extension {
             this._cancelEditing();
             return;
         }
-        this._editingIndex = -1;
+        this._closeInteractions();
         this._addingCategory = categoryName;
-        this._addingNewCategory = false;
         this._refreshTodoMenu();
     }
 
@@ -616,9 +889,7 @@ export default class TodoExtension extends Extension {
      *
      */
     _toggleTask(index) {
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.toggleTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -630,9 +901,7 @@ export default class TodoExtension extends Extension {
      *
      */
     _deleteTask(index) {
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.deleteTask(parsed.raw, index);
         Storage.writeTodo(this._todoPath(), updated);
@@ -645,9 +914,7 @@ export default class TodoExtension extends Extension {
      *
      */
     _moveTask(index, direction) {
-        this._editingIndex = -1;
-        this._addingCategory = null;
-        this._addingNewCategory = false;
+        this._closeInteractions();
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.moveTask(parsed.raw, index, direction);
         Storage.writeTodo(this._todoPath(), updated);

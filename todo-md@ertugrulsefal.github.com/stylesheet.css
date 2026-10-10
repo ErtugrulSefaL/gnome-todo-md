@@ -66,3 +66,13 @@
 .todo-tab:checked {
     font-weight: bold;
 }
+/* Faz 7: category action panel entries (a PopupSubMenu inside the menu).
+ * Delete is the destructive entry; its first click turns it into the
+ * confirmation, which is why the armed state is bold. */
+.todo-action-danger {
+    color: #e01b24;
+}
+
+.todo-action-danger.todo-action-confirm {
+    font-weight: bold;
+}
