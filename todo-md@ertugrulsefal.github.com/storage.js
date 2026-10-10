@@ -11,7 +11,7 @@ import Gio from 'gi://Gio';
  *     text:  string,   // task text without the checkbox marker
  *     done:  boolean } // true for '- [x]', false for '- [ ]'
  *
- * Faz 2 Document model (parseDocument) — categorized file format:
+ * Document model (parseDocument) — categorized file format:
  *   Document { title: string|null,          // raw first '# ' line (round-trip)
  *              categories: [{ name: string, // trimmed '##' heading text
  *                             items: Array }] }
@@ -30,21 +30,18 @@ const TODO_PATH = GLib.get_home_dir() + '/todo.md';
 
 /**
  * Absolute path of the todo file.
- * @returns {string}
  */
 export function todoPath() {
     return TODO_PATH;
 }
 
 /**
- * Resolve a user-configured todo file path (Faz 3).
+ * Resolve a user-configured todo file path.
  *
  * Pure path resolution: an empty/whitespace value falls back to the default
  * ~/todo.md, a leading '~' is expanded to the home directory, and anything
  * else is used verbatim (expected to be an absolute path).
  *
- * @param {string|null} configured - Raw value of the todo-file-path setting.
- * @returns {string} Absolute file path to use.
  */
 export function resolveTodoPath(configured) {
     const trimmed = configured ? configured.trim() : '';
@@ -61,16 +58,13 @@ export function resolveTodoPath(configured) {
 }
 
 /**
- * Inline CSS that colors a category header text (Faz 5). Returns '' when the
+ * Inline CSS that colors a category header text. Returns '' when the
  * category has no color assigned.
  *
  * The color value comes from user preferences, so it is validated against a
  * strict hex pattern before ever reaching an inline style string — anything
  * else is dropped rather than injected into CSS.
  *
- * @param {string} name - Category name.
- * @param {Object<string, string>|null} colors - Category → color map.
- * @returns {string} Inline CSS ('color: …;') or ''.
  */
 export function categoryColorCss(name, colors) {
     const color = colors ? colors[name] : null;
@@ -82,7 +76,7 @@ export function categoryColorCss(name, colors) {
 
 /**
  * The validated hex color of a category (or null when it has none). Pure;
- * used where the raw hex is needed (e.g. the task checkbox fill, Faz 6.6:
+ * used where the raw hex is needed (e.g. the task checkbox fill:
  * the done checkbox is filled with the category color).
  */
 export function categoryColorHex(name, colors) {
@@ -93,13 +87,9 @@ export function categoryColorHex(name, colors) {
 }
 
 /**
- * Convert 8-bit RGB values to a '#rrggbb' string (Faz 5; used by prefs when
+ * Convert 8-bit RGB values to a '#rrggbb' string (used by prefs when
  * a Gdk.RGBA changes).
  *
- * @param {number} r - Red 0-255.
- * @param {number} g - Green 0-255.
- * @param {number} b - Blue 0-255.
- * @returns {string} Hex color string.
  */
 export function rgbToHex(r, g, b) {
     const hex = value => value.toString(16).padStart(2, '0');
@@ -108,7 +98,7 @@ export function rgbToHex(r, g, b) {
 
 /**
  * GNOME HIG palette shared by the prefs quick palette and the automatic
- * color assignment for newly created categories (Faz 6).
+ * color assignment for newly created categories.
  */
 export const CATEGORY_PALETTE = [
     '#3584e4', // blue
@@ -123,11 +113,8 @@ export const CATEGORY_PALETTE = [
 
 /**
  * Pick the palette color for a newly created category: palette entries are
- * assigned in order and wrap around after the last one (Faz 6).
+ * assigned in order and wrap around after the last one.
  *
- * @param {number} existingCategoryCount - How many categories existed before
- *   the new one.
- * @returns {string} A hex color from CATEGORY_PALETTE.
  */
 export function nextCategoryColor(existingCategoryCount) {
     return CATEGORY_PALETTE[
@@ -137,13 +124,9 @@ export function nextCategoryColor(existingCategoryCount) {
 
 /**
  * Remove color entries for categories that no longer exist in the file
- * (Faz 5). Locked decision: dead keys are pruned automatically so a later
- * category reusing the name does not silently inherit the old color.
+ * Locked decision: dead keys are pruned automatically so a later category
+ * reusing the name does not silently inherit the old color.
  *
- * @param {Object<string, string>} colors - Category → color map.
- * @param {Array<string>} validNames - Category names currently in the file.
- * @returns {Object<string, string>} The pruned map, or the SAME object when
- *   nothing was removed (identity lets the caller skip a settings write).
  */
 export function pruneCategoryColors(colors, validNames) {
     const keys = Object.keys(colors || {});
@@ -163,8 +146,6 @@ export function pruneCategoryColors(colors, validNames) {
  * Split the file content into lines, detecting checkbox tasks.
  * Non-checkbox lines (headings, notes, blank) are kept verbatim in `other`.
  *
- * @param {string} content - Raw file content.
- * @returns {{tasks: Array<Object>, other: Array<{index: number, line: string}>}}
  */
 export function splitLines(content) {
     const tasks = [];
@@ -205,8 +186,6 @@ export const FALLBACK_CATEGORY = 'General';
  * [key, value] pair list. Locked rule: no whitelist — every match is kept,
  * unknown keys are preserved and written back verbatim.
  *
- * @param {string} raw - Raw task text (tags still inline).
- * @returns {Array<[string, string]>} Ordered tag pairs.
  */
 const extractTags = raw => {
     const tagRe = /@(\w+)\(([^)]+)\)/g;
@@ -223,8 +202,6 @@ const extractTags = raw => {
  * trimmed. Only used for display/editing; `raw` stays the authoritative
  * verbatim form for byte-identical round-trip.
  *
- * @param {string} raw - Raw task text (tags still inline).
- * @returns {string} Text without tags.
  */
 const deriveText = raw =>
     raw.replace(/@(\w+)\(([^)]+)\)/g, '').replace(/\s+/g, ' ').trim();
@@ -232,9 +209,6 @@ const deriveText = raw =>
 /**
  * Build a task item from raw text and checkbox state.
  *
- * @param {string} raw - Raw task text after the checkbox (tags inline).
- * @param {boolean} done - Checkbox state.
- * @returns {{type: 'task', raw: string, done: boolean, tags: Array, text: string}}
  */
 const makeTaskItem = (raw, done) => ({
     type: 'task',
@@ -245,9 +219,9 @@ const makeTaskItem = (raw, done) => ({
 });
 
 /**
- * Parse raw markdown content into the Faz 2 Document model.
+ * Parse raw markdown content into the Document model.
  *
- * Rules (locked, see plan.md):
+ * Rules (locked):
  * - The first '# ' line is the document title; its content is ignored but the
  *   raw line is kept for round-trip. Any further '# ' line is an extra.
  * - Every '##' heading starts a category ('###' or deeper is NOT a category).
@@ -258,8 +232,6 @@ const makeTaskItem = (raw, done) => ({
  *   verbatim, in original order.
  * - Lines before the first '##' land in the FALLBACK_CATEGORY ('General').
  *
- * @param {string} content - Raw file content.
- * @returns {{title: string|null, categories: Array<{name: string, items: Array}>}}
  */
 export function parseDocument(content) {
     // Line endings are the file's, not ours. addTask/addCategory rewrite the
@@ -342,8 +314,6 @@ export function parseDocument(content) {
 /**
  * Flat task view of a category (the `tasks` the UI and mutations work on).
  *
- * @param {{name: string, items: Array}} category
- * @returns {Array<{type: 'task', raw: string, done: boolean, tags: Array, text: string}>}
  */
 export function categoryTasks(category) {
     return category.items.filter(item => item.type === 'task');
@@ -359,10 +329,6 @@ export function categoryTasks(category) {
  * the menu was rendering the implicit 'General' header — permanently, through
  * `set_value`. Do not re-derive the list from `doc.categories` elsewhere.
  *
- * @param {{categories: Array<{name: string, items: Array}>}} doc
- * @returns {Array<{name: string, tasks: Array}>} One entry per rendered
- *   category; an empty document yields the implicit 'General' section so a
- *   first task can be added to an empty file.
  */
 export function renderSections(doc) {
     const sections = doc.categories.map(category => ({
@@ -378,27 +344,18 @@ export function renderSections(doc) {
 /**
  * The color map as it should be STORED after reading `doc`.
  *
- * Both halves of the decision live here rather than in the UI, because a
- * decision made in `extension.js` cannot be unit-tested and the first one was
- * wrong (audit D1, re-measured 2026-10-02: 6 colours → 0):
+ * The decision lives here (not in the UI) so it is unit-testable — the UI
+ * version of it was wrong once (audit D1: an empty file silently wiped the
+ * whole colour map):
  *
  * 1. Pruning runs against `renderSections(doc)` — the same list the menu rows
- *    are built from, never the raw `doc.categories` (which is `[]` for an empty
- *    file, so an empty file used to look category-less).
- * 2. A document with NO '##' heading at all has not changed its category list,
- *    it has LOST it. Every real category then looks dead, so pruning would drop
- *    the whole map and write it away for good through `set_value`. A file that
- *    lost its headings may well get them back — and the colours come back with
- *    them, which is what the user wants. Genuinely deleted categories are still
- *    pruned as soon as at least one '##' heading remains, so a stale colour
- *    cannot silently follow a name that is reused later.
+ *    are built from, never the raw `doc.categories` (which is `[]` for an
+ *    empty file).
+ * 2. A document with NO '##' heading has LOST its category list, not changed
+ *    it — the headings may come back, so pruning would write the colours away
+ *    for good. With at least one heading left, genuinely deleted categories
+ *    are still pruned (a stale colour can never follow a reused name).
  *
- * @param {Object<string, string>} colors - Category → color map.
- * @param {{categories: Array<{name: string, implicit: boolean}>}} doc - Parsed
- *   document. `implicit: true` marks the fallback bucket, i.e. content that
- *   appeared before the first '##' heading.
- * @returns {Object<string, string>} The map to store, or the SAME object when
- *   nothing changed (identity lets the caller skip a settings write).
  */
 export function prunedColorsForDocument(colors, doc) {
     const hasHeading = doc.categories.some(category => !category.implicit);
@@ -411,7 +368,7 @@ export function prunedColorsForDocument(colors, doc) {
 /**
  * Serialize a Document model back to markdown content.
  *
- * Round-trip rules (locked, see plan.md):
+ * Round-trip rules (locked):
  * - Task lines are rebuilt from `raw` verbatim (raw is authoritative; it
  *   keeps the original tag positions/spacing). Mutations that change text or
  *   tags are responsible for keeping `raw` in sync.
@@ -429,8 +386,6 @@ export function prunedColorsForDocument(colors, doc) {
  *   "Deliberate normalizations"): '[X]' → '[x]', '##Name' → '## Name',
  *   canonical '- [ ] ' task prefix, and exactly one trailing newline.
  *
- * @param {{title: string|null, categories: Array}} doc - Document model.
- * @returns {string} Markdown content.
  */
 export function serializeDocument(doc) {
     const lines = [];
@@ -470,11 +425,6 @@ export function serializeDocument(doc) {
 /**
  * Read and parse the todo file at `path`.
  *
- * @param {string} [path] - Absolute file path; defaults to todoPath()
- *                          (~/todo.md).
- * @returns {{tasks: Array<Object>, other: Array<{index, line}>, raw: string}}
- *          Parsed content plus the raw file text. Returns an empty file model
- *          if the file is missing or unreadable.
  */
 export function readTodo(path = TODO_PATH) {
     const file = Gio.File.new_for_path(path);
@@ -507,9 +457,6 @@ export function readTodo(path = TODO_PATH) {
  * Toggle the checkbox state of the line at `index`.
  * Lines that are not checkboxes are left untouched.
  *
- * @param {string} content - Raw file content.
- * @param {number} index - 0-based line index.
- * @returns {string} Updated content.
  */
 export function toggleTask(content, index) {
     const lines = content.split('\n');
@@ -537,10 +484,6 @@ export function toggleTask(content, index) {
  * Replace the text of the task line at `index`, keeping its checkbox state.
  * Non-checkbox lines are replaced verbatim (kept as their own line text).
  *
- * @param {string} content - Raw file content.
- * @param {number} index - 0-based line index.
- * @param {string} text - New task text (checkbox marker is not included).
- * @returns {string} Updated content.
  */
 export function editTask(content, index, text) {
     const lines = content.split('\n');
@@ -568,9 +511,6 @@ export function editTask(content, index, text) {
 /**
  * Delete the line at `index`.
  *
- * @param {string} content - Raw file content.
- * @param {number} index - 0-based line index.
- * @returns {string} Updated content.
  */
 export function deleteTask(content, index) {
     const lines = content.split('\n');
@@ -588,13 +528,9 @@ export function deleteTask(content, index) {
  * there). Inserted after the last existing task of the category so trailing
  * blank/note lines stay at the end of the block. A missing category is
  * created at the end of the document: 'General' as implicit (heading appears
- * once it holds tasks), others as explicit categories. Since Faz 2 this is
- * Document-based (parse → mutate → serialize); string-in/string-out.
+ * once it holds tasks), others as explicit categories. Document-based
+ * (parse → mutate → serialize); string-in/string-out.
  *
- * @param {string} content - Raw file content.
- * @param {string} text - Task text (may contain @tag(value) pairs).
- * @param {string} [categoryName] - Target category; defaults to "General".
- * @returns {string} Updated content.
  */
 export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     const doc = parseDocument(content);
@@ -631,10 +567,6 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
  * above an explicit '## General' heading in the file; moving one across that
  * boundary moves the boundary with it (decision A: allowed).
  *
- * @param {string} content - Raw file content.
- * @param {number} index - 0-based line index of the task to move.
- * @param {string} direction - 'up' or 'down'.
- * @returns {string} Updated content (unchanged when the move is impossible).
  */
 export function moveTask(content, index, direction) {
     const doc = parseDocument(content);
@@ -682,26 +614,21 @@ export function moveTask(content, index, direction) {
  * than silently rewritten — the user typed something, and quietly storing a
  * different name would hide it.
  *
- * @param {string} name - Trimmed candidate name.
- * @returns {boolean} True when the name can be written as a category heading.
  */
 export function isUsableCategoryName(name) {
     return name.length > 0 && !/[\r\n]/.test(name) && !name.startsWith('#');
 }
 
 /**
- * Append a new empty, explicit category at the end of the document (Faz 2
- * extensibility skeleton — no UI calls this yet; a future "+" button only
- * needs to wire this in).
+ * Append a new empty, explicit category at the end of the document. Called by
+ * the in-menu "+" flow (extension.js), which assigns the auto palette colour
+ * and switches to the new tab.
  *
  * No-op when the name is unusable (see isUsableCategoryName) or a category of
- * that name already
- * exists (case-sensitive file semantics; an implicit 'General' counts as
- * existing, so no second 'General' section can ever be created).
+ * that name already exists (case-sensitive file semantics; an implicit
+ * 'General' counts as existing, so no second 'General' section can ever be
+ * created).
  *
- * @param {string} content - Raw file content.
- * @param {string} name - Category name (trimmed before use).
- * @returns {string} Updated content (unchanged when the call is a no-op).
  */
 export function addCategory(content, name) {
     const trimmed = name.trim();
@@ -717,20 +644,15 @@ export function addCategory(content, name) {
 }
 
 /**
- * Append an `@key(value)` tag to the task at line `index` (Faz 2
- * extensibility skeleton — no UI calls this yet; a future "add tag" form
- * only needs to wire this in). The ordered tags list gains the new pair and
- * `raw` is kept in sync (raw is the authoritative serialized form).
+ * Append an `@key(value)` tag to the task at line `index`. Reserved
+ * infrastructure for a future tag-adding UI (no UI calls this yet; the
+ * behaviour is pinned by tests). The ordered tags list gains the new pair
+ * and `raw` is kept in sync (raw is the authoritative serialized form).
  *
  * No-op when: no task owns the index, `key` does not match /^\w+$/ (such a
  * tag could not be parsed back), or `value` is empty / contains ')' or a
  * newline (it would break the `@key(value)` pattern).
  *
- * @param {string} content - Raw file content.
- * @param {number} index - 0-based line index of the task.
- * @param {string} key - Tag key (must match /^\w+$/).
- * @param {string} value - Tag value (no ')' or newlines).
- * @returns {string} Updated content (unchanged when the call is a no-op).
  */
 export function addTaskTag(content, index, key, value) {
     if (!/^\w+$/.test(key) || value.length === 0 || /[)\n\r]/.test(value)) {
@@ -753,13 +675,6 @@ export function addTaskTag(content, index, key, value) {
 /**
  * Write content back to the todo file at `path`.
  *
- * @param {string} path - Absolute file path to write to.
- * @param {string} content - Full file content to write.
- * @returns {boolean} True when the file was written, false when the write
- *   failed (disk full, read-only file, missing parent directory). Callers MUST
- *   check it: reporting success anyway made the UI close its inline entry and
- *   refresh from the unchanged file, so whatever the user had just typed
- *   vanished with no message (audit N4).
  */
 export function writeTodo(path, content) {
     // Loud failure instead of silently encoding `undefined` into an empty

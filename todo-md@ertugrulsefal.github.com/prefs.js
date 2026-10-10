@@ -79,7 +79,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         group.add(heightRow);
 
         // Fixed menu content width (single adjustable value, no min/max
-        // split — Faz 6.6 decision). Long task texts truncate with an
+        // split). Long task texts truncate with an
         // ellipsis at this width; the tab bar scrolls horizontally.
         const widthRow = new Adw.SpinRow({
             title: 'Menu width',

@@ -8,22 +8,18 @@ import * as Storage from './storage.js';
  * The persistent category tab strip: the `All` tab, one tab per category and
  * the far-right "new category" button, on a horizontally scrollable rail.
  *
- * WHY THIS IS A SEPARATE MODULE (audit A1, EGO best practices "Modules are
- * Better Than a Single File" / "Keep the Default Entry Point as Small as
- * Possible"): it is one self-contained actor tree with one lifecycle, and it
- * is where feature #3 (drag-and-drop reordering of categories) will land.
+ * WHY A SEPARATE MODULE (EGO best practices): one self-contained actor tree
+ * with one lifecycle; drag-and-drop reordering of categories will land here.
  *
  * 🔴 THE ONE INVARIANT THAT MUST NOT CHANGE — the shell SEGVs otherwise:
  * the strip is added to `menu.box` as a PLAIN actor. `menu.removeAll()`
  * destroys every `menu.box` child whose `_delegate` is a PopupBaseMenuItem
- * (popupMenu.js 46.0 :827-850 → `_getMenuItems` → `destroy()`), and this cost
- * a real shell crash on 2026-09-26 21:26. So: no PopupMenuItem, no
- * PopupBaseMenuItem, no `menu.addMenuItem` in this file. Pinned by a test.
+ * (popupMenu.js 46.0 :827-850). So: no PopupMenuItem, no PopupBaseMenuItem,
+ * no `menu.addMenuItem` in this file. Pinned by a test.
  *
  * Persistent by design: the actors are built once in `attach()` and only the
- * buttons inside `tabsBox` are refilled by `refill()`. That is what keeps the
- * horizontal scroll position (`hadjustment`) across rebuilds, including when
- * the user switches category (user test 4).
+ * buttons inside `tabsBox` are refilled by `refill()`, which keeps the
+ * horizontal scroll position (`hadjustment`) across rebuilds.
  */
 export class TabBar {
     /**
@@ -98,9 +94,6 @@ export class TabBar {
      * Put the strip on the menu as its FIRST row. Refill-only: the scroller and
      * its adjustments survive, so the horizontal scroll position does too.
      *
-     * @param {St.BoxLayout} menuBox - The popup menu's box (NOT the menu
-     *   object: children added here are invisible to `menu.removeAll()`'s
-     *   bookkeeping, which is exactly what keeps the strip alive).
      */
     attach(menuBox) {
         menuBox.add_child(this.bar);
@@ -110,7 +103,6 @@ export class TabBar {
      * Take the strip off the menu without destroying it (called before a
      * rebuild; the actor is re-attached by `attach`).
      *
-     * @param {St.BoxLayout} menuBox - The menu box to remove the child from.
      */
     detach(menuBox) {
         menuBox.remove_child(this.bar);
@@ -126,13 +118,6 @@ export class TabBar {
     /**
      * Build the buttons for the current sections.
      *
-     * @param {Array<{name: string, tasks: Array}>} sections - From
-     *   Storage.renderSections().
-     * @param {Object<string, string>} colors - Pruned category → colour map.
-     * @param {string|null} activeCategory - Currently shown category, `null`
-     *   for the `All` tab.
-     * @param {Function} onSelect - Called with the category name (or `null`
-     *   for `All`) when a tab is activated.
      */
     refill(sections, colors, activeCategory, onSelect) {
         this.tabsBox.remove_all_children();
@@ -165,10 +150,6 @@ export class TabBar {
      * squeezed instead of scrolling (St.Label defaults to END, st-label.c
      * :336 — user-tested).
      *
-     * @param {{name: string|null, label: string}} tab - Tab to build.
-     * @param {Object<string, string>} colors - Category → colour map.
-     * @param {string|null} activeCategory - Currently shown category.
-     * @returns {St.Button} The button (not yet added to the strip).
      */
     _makeButton(tab, colors, activeCategory) {
         const button = new St.Button({

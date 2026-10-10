@@ -206,8 +206,6 @@ export default class TodoExtension extends Extension {
      * Build the inline "new category" row: an empty entry. Enter commits via
      * Storage.addCategory; the new category becomes the active tab.
      *
-     * @returns {{row: PopupMenu.PopupBaseMenuItem, entry: St.Entry}} The row
-     *   and its entry, so the caller can grab focus after adding to the menu.
      */
     _makeNewCategoryRow() {
         const row = new PopupMenu.PopupBaseMenuItem(
@@ -241,7 +239,7 @@ export default class TodoExtension extends Extension {
                 this._addingNewCategory = false;
 
                 // Auto-color: the next palette entry in order,
-                // wrapping around after the last (Faz 6 request).
+                // wrapping around after the last.
                 const existingCount =
                     Storage.parseDocument(parsed.raw).categories.length;
                 const colors = this._settings.get_value('category-colors')
@@ -262,17 +260,16 @@ export default class TodoExtension extends Extension {
 
     /**
      * Switch the active category tab. Closes any open inline interaction
-     * (locked Faz 6 decision: a tab switch must not leave an edit or add
-     * entry open). Remembered for the session (Q2=EVET); an unknown
+     * (locked decision: a tab switch must not leave an edit or add
+     * entry open). Remembered for the session; an unknown
      * category falls back to 'All' at render time.
      *
-     * @param {string|null} categoryName - Category to show, or null for 'All'.
      */
     _switchTo(categoryName) {
         this._cancelEditing();
         this._activeCategory = categoryName;
         // NOTE: the scroll position is deliberately NOT reset here
-        // (Faz 6.6: selecting a category must not jump to the top — the
+        // (selecting a category must not jump to the top — the
         // persistent wrapper keeps both scroll offsets across refreshes).
         this._refreshTodoMenu();
     }
@@ -281,7 +278,6 @@ export default class TodoExtension extends Extension {
      * Resolve the todo file path from the GSettings value (empty value and
      * '~' forms fall back / expand — see Storage.resolveTodoPath).
      *
-     * @returns {string} Absolute path of the todo file to use.
      */
     _todoPath() {
         return Storage.resolveTodoPath(
@@ -294,7 +290,7 @@ export default class TodoExtension extends Extension {
     _refreshTodoMenu() {
         const menu = this._indicator.menu;
         menu.removeAll();
-        // FIXED menu width (Faz 6.6): the BoxPointer takes its size from
+        // FIXED menu width: the BoxPointer takes its size from
         // the menu's NATURAL width; min-width alone only raises the
         // minimum (st-theme-node.c :3936) and never widens the natural
         // (:3943), so short content still shrank the menu (user test 5).
@@ -318,7 +314,7 @@ export default class TodoExtension extends Extension {
             });
             // Fixed width (single GSettings value, min == max): the menu
             // must not widen with content nor shrink with short categories
-            // (Faz 6.6: single adjustable width, user decision). The menu
+            // (single adjustable width, user decision). The menu
             // box itself is force-sized in _refreshTodoMenu (width +
             // max-width); this min-width keeps the wrapper filling it.
             const menuWidth = this._settings.get_int('menu-width');
@@ -343,7 +339,7 @@ export default class TodoExtension extends Extension {
         // actionable now that adding is per-category.
         const sections = Storage.renderSections(doc);
 
-        // Faz 5: category colors from the settings map. Dead keys (categories
+        // Category colors from the settings map. Dead keys (categories
         // that no longer exist) are pruned automatically; the write happens
         // only when the prune actually removed something, so the
         // changed:: signal does not cause a refresh loop.
@@ -371,7 +367,7 @@ export default class TodoExtension extends Extension {
                 GLib.Variant.new('a{ss}', prunedColors));
         }
 
-        // Faz 6: tab bar, ALWAYS rendered ('All' shows every category — default;
+        // Tab bar, ALWAYS rendered ('All' shows every category — default;
         // other tabs filter the content to one category). The content model
         // is unchanged — a tab only picks what gets rendered. A '+' button at
         // the far right opens the new-category inline entry (design change:
@@ -387,7 +383,7 @@ export default class TodoExtension extends Extension {
             this._activeCategory = ALL_TAB;
         }
 
-        // Faz 6.6: the tab bar is PERSISTENT (created once, like the
+        // The tab bar is PERSISTENT (created once, like the
         // content scroll wrapper) and ALWAYS horizontally scrollable —
         // only the tab buttons are refilled per refresh, so the
         // hadjustment (horizontal scroll position) survives every
@@ -431,7 +427,7 @@ export default class TodoExtension extends Extension {
         // vadjustment, so the scroll position survives.
         menu.box.add_child(this._scrollWrapper);
 
-        // Faz 6.5: scrollable content area (the shell's own PopupSubMenu
+        // Scrollable content area (the shell's own PopupSubMenu
         // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
         // clip_to_allocation + CSS max-height — the scrollbar only engages
         // once a max-height is set). The tab bar stays fixed above it and
@@ -477,7 +473,7 @@ export default class TodoExtension extends Extension {
                 this._toggleAdd(categoryName);
             });
             header.add_child(addBtn);
-            // Faz 6.6: every content row fills the FIXED wrapper width — without
+            // Every content row fills the FIXED wrapper width — without
             // x_expand a short category's rows keep their natural width and
             // the right side collapses (the menu 'shrinks' on switch — user
             // test 5).
@@ -520,7 +516,7 @@ export default class TodoExtension extends Extension {
         }
 
         // (The scroll position is never reset: the persistent wrapper keeps
-        // it across tab switches — Faz 6.6 decision.)
+        // it across tab switches.)
     }
 
 
@@ -529,7 +525,6 @@ export default class TodoExtension extends Extension {
      * interaction (single-edit rule: render derives solely from
      * _editingIndex; the add entry is closed together with the edit).
      *
-     * @param {number} index - 0-based line index of the task to edit.
      */
     _startEditing(index) {
         this._editingIndex = index;
@@ -552,7 +547,6 @@ export default class TodoExtension extends Extension {
     /**
      * Commit the inline edit via Storage.editTask and close it.
      *
-     * @param {string} text - New task text (empty/whitespace cancels the edit).
      */
     _finishEditing(text) {
         const trimmed = text ? text.trim() : '';
@@ -577,8 +571,6 @@ export default class TodoExtension extends Extension {
     /**
      * Add a task to the given category, persist and refresh.
      *
-     * @param {string} text - Task text (may contain @tag(value) pairs).
-     * @param {string} category - Target category name.
      */
     _addTask(text, category) {
         const trimmed = text ? text.trim() : '';
@@ -607,7 +599,6 @@ export default class TodoExtension extends Extension {
      * Open (or toggle closed) the inline add entry of a category. Opening
      * replaces any open inline interaction (single-interaction rule).
      *
-     * @param {string} categoryName - Category whose add entry to toggle.
      */
     _toggleAdd(categoryName) {
         if (this._addingCategory === categoryName) {
@@ -623,7 +614,6 @@ export default class TodoExtension extends Extension {
     /**
      * Toggle a task's checkbox state, persist and refresh.
      *
-     * @param {number} index - 0-based line index of the task.
      */
     _toggleTask(index) {
         this._editingIndex = -1;
@@ -638,7 +628,6 @@ export default class TodoExtension extends Extension {
     /**
      * Delete a task line and refresh the menu.
      *
-     * @param {number} index - 0-based line index of the task.
      */
     _deleteTask(index) {
         this._editingIndex = -1;
@@ -654,8 +643,6 @@ export default class TodoExtension extends Extension {
      * Move a task up/down within its category, persist and refresh.
      * Closing any open edit first keeps the single-edit invariant.
      *
-     * @param {number} index - 0-based line index of the task.
-     * @param {string} direction - 'up' or 'down'.
      */
     _moveTask(index, direction) {
         this._editingIndex = -1;
