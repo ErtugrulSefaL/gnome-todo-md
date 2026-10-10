@@ -13,3 +13,6 @@ test.md
 # Audit report archive: one dated file per audit plus the cross-audit ledger.
 # Already covered by .goose/ above; listed explicitly so the intent survives.
 .goose/audits/
+
+# Packaging output: the EGO zip is reproducible via tools/make-package.sh.
+dist/
