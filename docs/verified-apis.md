@@ -85,6 +85,52 @@ Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
 | `overlay_scrollbars` mechanics (VERIFIED IN SOURCE, MEASURED AS A FAILURE) — `true` sets `account_for_hscrollbar/vscrollbar = FALSE` and zeroes the reserved size (`st-scroll-view.c` 46.0 :451, :458, :652), so an overlay bar overlaps the content instead of sitting beside it. Measured 2026-10-03 with `overlay_scrollbars: true` on both menu scrollers: the **vertical** bar drew OVER the task rows and took no pointer events (the user: "it moved on top of the task", "cannot be touched, as if it were behind"), and the **horizontal** bar on the tab strip never appeared at all. Visibility of an overlay bar is left to the theme: GNOME 46's `data/stylesheet.css` has no scrollbar rules (the appearance ships inside the theme's gresource). Conclusion: overlay is the wrong tool for this menu; `St.PolicyType.AUTOMATIC` with the theme's own styling is the working baseline | scrollbar appearance | gnome-shell `46.0` `src/st/st-scroll-view.c` (read) + user testing on this machine — the code behaved as documented and still failed the requirement | REJECTED (2026-10-03) |
 | `GLib.idle_add` returns a **source id**; store it and cancel with `GLib.Source.remove(id)` in `disable()` (and before re-arming the same source). A callback returning `GLib.SOURCE_REMOVE` frees itself but the guidelines still require the teardown path, and a pending idle would otherwise call back into a destroyed menu | audit S6 | GLib docs (`g_source_remove`); review-guidelines "Remove main loop sources"; runtime-proven in the running shell after `Alt+F2 → r` | OK (2026-10-02) |
 
+## External static analyzers (EGO-side evidence, 2026-10-10)
+
+Run on `dist/todo-md@ertugrulsefal.github.com-0.15.0.zip` (built by `tools/make-package.sh`).
+
+### ego-lint (`.goose/tools/gnome-extension-reviewer/ego-lint`)
+
+0 FAILED, 190 passed, 25 warnings. Dispositions:
+- `resource-tracking/no-destroy-method` ×20 (advisory) — row actors are destroyed
+  with the menu tree on every rebuild (`menu.removeAll()` / `remove_all_children()`);
+  long-lived actors are explicitly destroyed in `disable()` (extension.js:157-168).
+- `lifecycle/signal-balance` (8 connects / 6 disconnects) — verified clean by hand:
+  the 6 disconnects are exactly the signals on LONG-LIVED objects (4× `_settings`,
+  `_indicator.menu`, `_todoMonitor`); every remaining `.connect()` is on an actor
+  owned by the menu/prefs tree, whose handlers die with the actor.
+- `metadata/shell-version-current` — deliberate: 46-only (owner decision 2026-10-10).
+- `quality/private-api` (`Main.panel.addToStatusArea`, extension.js:122) — known,
+  disclosed in the EGO submission notes.
+- `license` (repo dir lint only) — LICENSE lives at the repo root; the zip root
+  gets it via `make-package.sh`. Verified present in the zip.
+
+### Shexli (EGO's own recommended analyzer, PyPI `shexli` 0.2.1)
+
+Install pin (durable): `pip install shexli tree-sitter==0.25.0` — pip otherwise
+pulls `tree-sitter 0.26.0` while `tree_sitter_javascript 0.25.0` is compiled
+against the 0.25 ABI → **segfault** on multi-file packages (reproduced twice,
+exit 139; fixed by the pin, 3× stability re-run all clean).
+
+⚠️ **The tool is version-gated and fails SILENT**: if `metadata.json`'s
+`shell-version` does not parse, `target_versions: []` and NO rule fires — it
+reports "clean (0 findings)" on anything. Verified with a deliberately broken
+fixture (eval, `spawn_command_line_async`, `gschemas.compiled`): with
+`shell-version: ["3.2"]` → silent clean; with `["46"]` → the fixture is caught
+(EGO-P-006). Never trust a Shexli pass without a self-test fixture.
+
+Shexli result on our zip: 0 errors, 3 warnings —
+- `EGO-X-004` sync file IO (`Gio.File.load_contents`, storage.js:434): REAL,
+  known design decision. Disclosed to the reviewer: small user file, read once
+  per menu refresh, atomic `replace_contents` for writes. (An async refactor
+  would be a major structural change; deferred.)
+- `EGO-L-002` (`_contentSection` not destroyed): FALSE POSITIVE —
+  `disable()` destroys the persistent wrapper that owns the section
+  (`this._scrollWrapper.destroy()`, extension.js:157-161) and nulls the field.
+- `EGO-L-003` (`newCategoryButton.connect` never disconnected): FALSE POSITIVE —
+  `disable()` destroys the tab bar (`this._tabBar.bar.destroy()`,
+  extension.js:163-166), which destroys the button and its handlers.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - Gio/GLib class pages may be missing (e.g. no `gio.file-monitor` page; only
