@@ -1,6 +1,11 @@
 .goose/
-.goosehints
-plan.md
+# Local agent instructions (internal workflow references; not for the public repo).
+AGENTS.md
+
+# Local project state (working docs; public docs live in README/CHANGELOG/docs/).
+docs/roadmap.md
+
+# Local test journal.
 test.md
 
 # Build artifact: GNOME 45+ compiles the schema at install time. Committing it
