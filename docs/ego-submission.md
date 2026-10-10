@@ -47,6 +47,29 @@ pass included).
 
 ---
 
+## Screenshot procedure (per upload)
+
+EGO wants a screenshot; the extension menu closes on focus loss, so capture it
+while open. This session's proven procedure (GNOME 46, **Wayland** session):
+
+1. **Back up first:** `cp ~/todo.md ~/.todo-backup/todo.md.<ts>` (record md5)
+   and `dconf read /org/gnome/shell/extensions/todo-md/category-colors` into a
+   backup file. Restore byte-identically afterwards and verify by md5.
+2. **Demo content:** write an attractive English markdown todo file (varied
+   done/undone states) and set demo category colors via
+   `dconf write /org/gnome/shell/extensions/todo-md/category-colors "{...}"`.
+   NOTE: no blank line between the `# title` and the first `##` heading — a
+   blank line there becomes an implicit empty 'General' section in the menu.
+3. **Capture on Wayland:** X11 grabbers (`import`, `xwd`, `ffmpeg x11grab`)
+   CANNOT see the Wayland compositor (xwd fails BadMatch @ X_GetImage), and
+   calling `org.gnome.Shell.Screenshot` via gdbus is denied — gnome-shell 46.0
+   `js/ui/screenshot.js:2433-2455` allow-lists only a few well-known names,
+   including `org.gnome.Screenshot`. Install `gnome-screenshot` (uses that
+   allow-listed name) and run `gnome-screenshot -f file.png` while the menu is
+   open — works headless, no focus steal, no dialog.
+4. **Crop to the menu only** (privacy: the full screen contains personal
+   content). The agent can read and judge the crop via image reading.
+
 ## Upload checklist (pre-flight)
 
 - [ ] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
