@@ -153,11 +153,18 @@ export function pruneCategoryColors(colors, validNames) {
  * the category layer accepted, so a pre-existing target entry would be a
  * stale leftover anyway.
  *
+ * A `toName` of '__proto__' is refused as well: `moved['__proto__'] = ...` is
+ * a prototype assignment in JS, so the entry would vanish silently. Such a
+ * key could never be read back from GSettings either — GJS packs it into
+ * a{ss} but drops it on deep_unpack (verified; pinned by tests) — so a
+ * category named '__proto__' simply never carries a colour.
+ *
  */
 export function moveCategoryColor(colors, fromName, toName) {
     if (!colors
         || !Object.prototype.hasOwnProperty.call(colors, fromName)
-        || fromName === toName) {
+        || fromName === toName
+        || toName === '__proto__') {
         return colors;
     }
     const moved = {};
@@ -706,6 +713,12 @@ export function deleteCategory(content, name) {
  * matching the addCategory rule). Rejections return the content
  * byte-identically.
  *
+ * A category carrying the pre-heading preamble (the explicit '## General'
+ * takeover of the fallback bucket, see parseDocument) is renamed WITH its
+ * items: they move below the new heading, because the takeover relationship
+ * cannot survive a different name (leaving them above would orphan them into
+ * a fresh implicit 'General' bucket on the next read — unstable round-trip).
+ *
  */
 export function renameCategory(content, oldName, newName) {
     const trimmed = newName.trim();
@@ -724,6 +737,14 @@ export function renameCategory(content, oldName, newName) {
         return content;
     }
     category.name = trimmed;
+    // A category that carried the pre-heading preamble (the explicit
+    // '## General' takeover of the fallback bucket, see parseDocument) keeps
+    // its items, but they must now sit BELOW the renamed heading: the takeover
+    // relationship that placed them above it no longer exists, and leaving
+    // them there would orphan them into a fresh implicit 'General' bucket on
+    // the next read — an unstable round-trip (proven by the Faz 7
+    // verification probe).
+    delete category.preCount;
     return serializeDocument(doc);
 }
 

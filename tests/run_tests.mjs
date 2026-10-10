@@ -1170,6 +1170,20 @@ function testCategoryDeleteRename() {
         Storage.renameCategory('# TODO\n## A\n\nextra\n- [ ] a1\n', 'A', 'W')
             === '# TODO\n## W\n\nextra\n- [ ] a1\n', '');
 
+    // Faz 7 verification probe: renaming the explicit '## General' that took
+    // over the pre-heading preamble used to leave those items ABOVE the new
+    // heading, so the next read orphaned them into a fresh implicit 'General'
+    // bucket — the serialized form was not stable. The items now follow the
+    // renamed heading (they belong to that category either way).
+    const PREAMBLE = 'no title\n- [ ] pre\n## General\n- [ ] post\n## Other\nextra\n';
+    const PRE_RENAMED = Storage.renameCategory(PREAMBLE, 'General', 'Work');
+    record('renameCategory: a preamble-carrying General takes its items along',
+        PRE_RENAMED === '# TODO\n## Work\nno title\n- [ ] pre\n- [ ] post\n## Other\nextra\n',
+        JSON.stringify(PRE_RENAMED));
+    record('renameCategory: the preamble rename round-trips stably',
+        Storage.serializeDocument(Storage.parseDocument(PRE_RENAMED)) === PRE_RENAMED,
+        JSON.stringify(Storage.serializeDocument(Storage.parseDocument(PRE_RENAMED))));
+
     record('renameCategory: the result round-trips stably',
         Storage.serializeDocument(Storage.parseDocument(RENAMED)) === RENAMED, '');
 
@@ -1193,6 +1207,35 @@ function testCategoryDeleteRename() {
     record('moveCategoryColor: a missing map is returned unchanged',
         Storage.moveCategoryColor(null, 'A', 'C') === null
         && Storage.moveCategoryColor(undefined, 'A', 'C') === undefined, '');
+
+    // A category literally named '__proto__' is an edge the settings layer
+    // cannot represent: GJS packs the key into a{ss} but deep_unpack drops it,
+    // so no colour can ever be stored/read for it. Both facts are pinned here
+    // — if a future GJS changes the unpack behaviour, these tests tell us.
+    const protoMap = () => {
+        const m = {B: '#222222'};
+        Object.defineProperty(m, '__proto__',
+            {value: '#111111', enumerable: true, writable: true, configurable: true});
+        return m;
+    };
+    record('moveCategoryColor: a __proto__ target is refused, not silently dropped',
+        (() => {
+            const m = protoMap();
+            const out = Storage.moveCategoryColor(m, 'B', '__proto__');
+            return out === m && out.B === '#222222';
+        })(), '');
+
+    record('GJS a{ss}: a __proto__ key packs but is dropped by deep_unpack',
+        (() => {
+            const dict = protoMap();
+            const variant = new GLib.Variant('a{ss}', dict);
+            const unpacked = variant.deep_unpack();
+            return variant.print(true).includes('__proto__')
+                && Object.keys(unpacked).length === 1
+                && unpacked.B === '#222222'
+                && !Object.prototype.hasOwnProperty.call(unpacked, '__proto__');
+        })(),
+        'a category named __proto__ can never carry a colour (settings limitation)');
 }
 
 // ---- preamble fidelity (audit D2 + D4, one model change) ---------------
