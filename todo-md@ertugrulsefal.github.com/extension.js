@@ -758,10 +758,10 @@ export default class TodoExtension extends Extension {
         // hadjustment (horizontal scroll position) survives every
         // rebuild, including category switches (user test 4).
         // CRITICAL: it must be a PLAIN actor, NOT a PopupBaseMenuItem —
-        // menu.box children with a PopupBaseMenuItem _delegate are
-        // destroyed by menu.removeAll() (popupMenu.js 46.0 :827-850
-        // _getMenuItems + destroy), which crashed the shell (SEGV,
-        // journal 2026-09-26 21:26).
+        // menu.box children with a PopupBaseMenuItem _delegate are destroyed
+        // by menu.removeAll() (_getMenuItems + destroy), which crashed the
+        // shell (SEGV, journal 2026-09-26 21:26).
+        // Per-version shell line numbers for every API claim: docs/verified-apis.md.
         if (!this._tabBar) {
             // The strip itself lives in tabBar.js; this file only decides WHEN
             // it exists, where it sits and what fills it.
@@ -797,11 +797,11 @@ export default class TodoExtension extends Extension {
         // vadjustment, so the scroll position survives.
         menu.box.add_child(this._scrollWrapper);
 
-        // Scrollable content area (the shell's own PopupSubMenu
-        // pattern, popupMenu.js 46.0 :1060-1071: St.ScrollView +
-        // clip_to_allocation + CSS max-height — the scrollbar only engages
-        // once a max-height is set). The tab bar stays fixed above it and
-        // the wrapper persists, keeping the scroll offset stable.
+        // Scrollable content area (the shell's own PopupSubMenu pattern:
+        // St.ScrollView + clip_to_allocation + CSS max-height — the
+        // scrollbar only engages once a max-height is set). The tab bar stays
+        // fixed above it and the wrapper persists, keeping the scroll offset
+        // stable. (Shell line numbers: docs/verified-apis.md.)
         const contentSection = this._contentSection;
 
         const visibleSections = this._activeCategory === ALL_TAB

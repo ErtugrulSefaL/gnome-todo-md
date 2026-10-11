@@ -14,8 +14,9 @@ import * as Storage from './storage.js';
  * 🔴 THE ONE INVARIANT THAT MUST NOT CHANGE — the shell SEGVs otherwise:
  * the strip is added to `menu.box` as a PLAIN actor. `menu.removeAll()`
  * destroys every `menu.box` child whose `_delegate` is a PopupBaseMenuItem
- * (popupMenu.js 46.0 :827-850). So: no PopupMenuItem, no PopupBaseMenuItem,
- * no `menu.addMenuItem` in this file. Pinned by a test.
+ * (`PopupMenuBase._getMenuItems()` + `destroy()`). So: no PopupMenuItem, no
+ * PopupBaseMenuItem, no `menu.addMenuItem` in this file. Pinned by a test.
+ * Per-version shell line numbers live in docs/verified-apis.md.
  *
  * Persistent by design: the actors are built once in `attach()` and only the
  * buttons inside `tabsBox` are refilled by `refill()`, which keeps the
