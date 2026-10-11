@@ -4,6 +4,35 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.17.0 - 2026-10-11
+
+### Added
+- **Faz 8 — the in-menu colour picker.** 'Change color' in the category action
+  panel now opens a row of eight palette swatches plus a "remove colour" button,
+  inside the same panel. The swatch matching the category's current colour is
+  ringed (and the ring is also the screen-reader state), so the picker shows the
+  truth instead of only offering choices.
+
+### Changed
+- The palette's two HIG neutrals are replaced: brown `#986a44` → **teal
+  `#2190a4`**, gray `#9a9996` → **pink `#d56199`** (user decision: both read
+  poorly as category-header TEXT on the dark menu). The replacements come from
+  the modern Adwaita accent palette (libadwaita 1.7). The prefs quick palette
+  shares the same source, so it follows automatically.
+- `storage.js` gains `CATEGORY_PALETTE_NAMES` (spoken names, index-aligned with
+  the palette) and the pure `setCategoryColor` (hex validation, `__proto__`
+  refusal) — the colour decision stays testable outside the UI.
+
+### Notes
+- Applying a colour writes the settings map and nothing else: a colour lives in
+  GSettings only, so the "file first" rule (L-018) does not apply on this path.
+  A guard pins that, so a later reviewer cannot mistake it for a missing write.
+- The picker is a panel sub-state, not a sixth interaction field: the
+  five-field single-interaction invariant is unchanged.
+
+### Tests
+- 235 unit tests (6 new), 6 new static guards, all mutation-tested (8/8).
+
 ## 0.16.0 - 2026-10-10
 
 ### Added
