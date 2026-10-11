@@ -389,9 +389,12 @@ function testStaticChecks() {
         store, /open_output_stream|create_readwrite|create_sync|append_to|truncate|output_stream_write|write_bytes/,
         'use Gio.File.replace_contents (atomic temp+rename) only');
 
-    // Project rules that must not drift.
-    record('static: metadata shell-version is exactly ["46"]',
-        /"shell-version"\s*:\s*\[\s*"46"\s*\]/.test(meta), 'do not claim untested versions');
+    // Project rules that must not drift. R3 (docs/roadmap.md §C): shell-version
+    // lists ONLY versions verified by a manual regression run — widening it is a
+    // deliberate act that follows a test, never an optimistic edit.
+    record('static: metadata shell-version is exactly ["50"]',
+        /"shell-version"\s*:\s*\[\s*"50"\s*\]/.test(meta),
+        'only verified shell versions may be declared (R3)');
     noMatch('static: no opacity in CSS (actor label.opacity is used instead)',
         css, /opacity\s*:/, 'CSS opacity is unreliable on St.Label; use actor opacity');
 
@@ -410,14 +413,21 @@ function testStaticChecks() {
     // this extension reads and writes a user file, so the description has to
     // say so. Parsed (not regexed) so a key that merely looks like a
     // description cannot satisfy the check.
-    const description = JSON.parse(meta).description;
+    const metaObj = JSON.parse(meta);
+    const description = metaObj.description;
+    const declaredShellVersions = metaObj['shell-version'];
     record('static: metadata description declares file access and compatibility',
         /\b(file|read|writes?|disk|filesystem|storage)/i.test(description)
-        && description.includes('GNOME Shell 46')
+        && /GNOME Shell/.test(description)
+        // Self-maintaining: EVERY declared shell version must be named in the
+        // description, so widening shell-version forces the compatibility line
+        // to be updated in the same change (R3).
+        && declaredShellVersions.every(v => new RegExp(`\\b${v}\\b`).test(description))
         && /\n\*/.test(description)
         && description.length >= 200,
         'EGO expects the description to state what the extension reads/writes, '
-        + 'which shell versions it supports, and to list features as bullets');
+        + 'which shell versions it supports (every declared one), and to list '
+        + 'features as bullets');
     // The schema XML is the only file the review guidelines require; GNOME 45+
     // compiles the binary at install time and shipping gschemas.compiled is the
     // single most frequent extensions.gnome.org rejection reason ("Please
