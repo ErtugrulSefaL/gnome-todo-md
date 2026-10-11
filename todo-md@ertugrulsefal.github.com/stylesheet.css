@@ -76,3 +76,36 @@
 .todo-action-danger.todo-action-confirm {
     font-weight: bold;
 }
+
+/* Faz 8: the in-menu colour picker row, inside the category action panel.
+ * The swatch COLOUR is set inline from Storage.CATEGORY_PALETTE; only the
+ * shape and the selected ring live here. The prefs window has its own GTK
+ * copy of this rule — different process, different stylesheet. */
+.todo-color-row {
+    spacing: 2px;
+    padding: 4px 2px;
+}
+
+.todo-swatch {
+    min-width: 18px;
+    max-width: 18px;
+    min-height: 18px;
+    max-height: 18px;
+    border-radius: 999px;
+    padding: 0;
+    margin: 2px 3px;
+    /* Transparent by default: the selected ring must not reflow the row. */
+    border: 2px solid transparent;
+}
+
+.todo-swatch:checked {
+    border-color: #ffffff;
+}
+
+.todo-swatch-none {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.todo-swatch StIcon {
+    icon-size: 12px;
+}

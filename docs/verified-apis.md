@@ -174,6 +174,22 @@ Consequence: the action panel is an **inline** expander inside the menu
 - `PopupSubMenu._arrow` (private): the arrow actor is kept invisible instead of
   being re-pointed per open.
 
+## Faz 8 (2026-10-10) — in-menu colour picker
+
+- **No new shell API.** `St.Button` (`toggle_mode` + `set_checked`, the tab
+  pattern), inline `background-color` (the checkbox pattern) and an
+  `St.BoxLayout` row added to the `PopupSubMenu` box (already verified in the
+  Faz 7 section).
+- **Palette source (why teal/pink).** The HIG's two neutrals — brown `#986a44`,
+  gray `#9a9996` — were dropped as illegible category-header TEXT on the menu's
+  dark background (user decision 2026-10-10). The replacements come from the
+  modern Adwaita accent palette: libadwaita **1.7** `src/stylesheet/_colors.scss`
+  (`--accent-teal: #2190a4`, `--accent-pink: #d56199`). Version pinned because
+  GTK 4.14's `gtk/theme/Default/_colors-public.scss` and libadwaita 1.5/1.6
+  `_palette.scss` define **no** teal/pink (checked, not assumed).
+- Icon `action-unavailable-symbolic` verified present in the local Adwaita icon
+  theme (`/usr/share/icons/Adwaita/symbolic/actions/`), not guessed.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - Gio/GLib class pages may be missing (e.g. no `gio.file-monitor` page; only

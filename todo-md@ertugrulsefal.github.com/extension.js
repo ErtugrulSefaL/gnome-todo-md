@@ -158,6 +158,10 @@ export default class TodoExtension extends Extension {
             this._actions.destroy();
             this._actions = null;
             this._actionsDeleteItem = null;
+            this._actionsItems = null;
+            this._colorRow = null;
+            this._swatches = null;
+            this._colorPickerOpen = false;
         }
         if (this._scrollWrapper) {
             this._scrollWrapper.destroy();
@@ -210,17 +214,33 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Hide the category action panel (Faz 7) and forget a pending delete
-     * confirmation, so the next open always starts from 'Delete'.
+     * Hide the category action panel (Faz 7) and reset its sub-states: the
+     * pending delete confirmation (the next open starts from 'Delete') and
+     * the colour picker (the next open starts from the four items).
      */
     _hideActionsPanel() {
+        this._resetDeleteConfirm();
+        if (this._colorPickerOpen) {
+            this._colorPickerOpen = false;
+            this._colorRow.hide();
+            for (const item of this._actionsItems) {
+                item.show();
+            }
+        }
+        if (this._actions && this._actions.isOpen) {
+            this._actions.close(false);
+        }
+    }
+
+    /**
+     * Forget a pending delete confirmation — a panel sub-state, dropped both
+     * when the panel closes and when the colour picker takes the panel over.
+     */
+    _resetDeleteConfirm() {
         if (this._deleteConfirming && this._actionsDeleteItem) {
             this._deleteConfirming = false;
             this._actionsDeleteItem.label.text = 'Delete';
             this._actionsDeleteItem.remove_style_class_name('todo-action-confirm');
-        }
-        if (this._actions && this._actions.isOpen) {
-            this._actions.close(false);
         }
     }
 
@@ -380,10 +400,12 @@ export default class TodoExtension extends Extension {
             this._toggleAdd(target);
         });
 
-        // Faz 8 turns this entry on (it will open the colour chooser); until
-        // then it is visible but insensitive, so the menu shape is final.
+        // Faz 8: opens the colour picker row INSIDE the panel (a panel
+        // sub-state, so the five-field invariant does not grow).
         const colorItem = new PopupMenu.PopupMenuItem('Change color');
-        colorItem.setSensitive(false);
+        colorItem.connect('activate', () => {
+            this._openColorPicker();
+        });
 
         const renameItem = new PopupMenu.PopupMenuItem('Rename');
         renameItem.connect('activate', () => {
@@ -415,11 +437,117 @@ export default class TodoExtension extends Extension {
         });
         this._actionsDeleteItem = deleteItem;
 
-        for (const item of [addItem, colorItem, renameItem, deleteItem]) {
+        this._actionsItems = [addItem, colorItem, renameItem, deleteItem];
+        for (const item of this._actionsItems) {
             this._actions.box.add_child(item.actor);
         }
+        this._actions.box.add_child(this._makeColorRow());
         this._actions.actor.hide();
     }
+
+    /**
+     * The colour picker row (Faz 8): one swatch per palette entry plus a
+     * "remove colour" button, hidden until 'Change color' is chosen.
+     *
+     * It lives INSIDE the panel, so the single-interaction invariant does not
+     * grow a sixth field — the picker is a panel sub-state, exactly like the
+     * two-step delete arm, and _hideActionsPanel() resets both.
+     *
+     * The swatch colour is set inline from Storage.CATEGORY_PALETTE (our own
+     * constant, never user input); only the shape and the selected ring live in
+     * stylesheet.css.
+     */
+    _makeColorRow() {
+        const row = new St.BoxLayout({style_class: 'todo-color-row'});
+        this._swatches = [];
+        Storage.CATEGORY_PALETTE.forEach((hex, i) => {
+            const swatch = new St.Button({
+                style_class: 'todo-swatch',
+                toggle_mode: true,
+                accessible_name: 'Set category colour to '
+                    + Storage.CATEGORY_PALETTE_NAMES[i],
+            });
+            swatch.set_style(`background-color: ${hex};`);
+            swatch.connect('clicked', () => {
+                this._applyCategoryColor(hex);
+            });
+            this._swatches.push({button: swatch, hex});
+            row.add_child(swatch);
+        });
+        // The 'none' swatch: a category may carry no colour at all, and a
+        // picker that can only ADD colours could never go back.
+        const none = new St.Button({
+            style_class: 'todo-swatch todo-swatch-none',
+            toggle_mode: true,
+            accessible_name: 'Remove category colour',
+            child: new St.Icon({
+                icon_name: 'action-unavailable-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        none.connect('clicked', () => {
+            this._applyCategoryColor(null);
+        });
+        this._swatches.push({button: none, hex: null});
+        row.add_child(none);
+        this._colorRow = row;
+        row.hide();
+        return row;
+    }
+
+    /**
+     * Swap the panel into its colour-picker state: the four items give the
+     * panel to the swatch row. The two-step delete arm is dropped — the two
+     * sub-states exclude each other.
+     */
+    _openColorPicker() {
+        this._resetDeleteConfirm();
+        this._colorPickerOpen = true;
+        for (const item of this._actionsItems) {
+            item.hide();
+        }
+        this._markSelectedSwatch();
+        this._colorRow.show();
+    }
+
+    /**
+     * Ring the swatch that matches the category's CURRENT colour (and the
+     * 'none' swatch when it has none), so the picker always shows the truth —
+     * the same colour the header and the tab are painted with.
+     */
+    _markSelectedSwatch() {
+        const colors = this._settings.get_value('category-colors')
+            .recursiveUnpack();
+        const current = Storage.categoryColorHex(this._actionsCategory, colors);
+        for (const {button, hex} of this._swatches) {
+            button.set_checked(hex === current);
+        }
+    }
+
+    /**
+     * Apply (or remove) the colour of the panel's target category, then close
+     * the panel and re-render.
+     *
+     * NO file write happens on this path, and that is correct: the colour lives
+     * in GSettings only, so the L-018 "file first, then the map" rule does not
+     * apply here — the map IS the source of truth for colours. (A guard pins
+     * that no writeTodo creeps in.)
+     */
+    _applyCategoryColor(hex) {
+        const target = this._actionsCategory;
+        this._hideActionsPanel();
+        const colors = this._settings.get_value('category-colors')
+            .recursiveUnpack();
+        const next = hex === null
+            ? Storage.removeCategoryColor(colors, target)
+            : Storage.setCategoryColor(colors, target, hex);
+        if (next !== colors) {
+            this._settings.set_value('category-colors',
+                GLib.Variant.new('a{ss}', next));
+        }
+        this._refreshTodoMenu();
+    }
+
 
     /**
      * Toggle the action panel of one category (the header's ⋮ button).

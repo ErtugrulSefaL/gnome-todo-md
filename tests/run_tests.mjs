@@ -838,6 +838,59 @@ function testStaticChecks() {
         'its Main.sessionMode connection must be dropped when the extension is '
         + 'disabled (guidelines: remove what you added)');
 
+    // ---- Faz 8: the in-menu colour picker --------------------------------
+    //
+    // The picker is a panel SUB-STATE (a row inside the PopupSubMenu), not a
+    // sixth interaction field: the five-field invariant stays intact and
+    // _hideActionsPanel() resets it right next to the delete arm.
+    const colorPickerBody = handlerBody('_makeColorRow() {');
+    const applyColorBody = handlerBody('_applyCategoryColor(hex) {');
+    record('static: Change color is active and opens the picker',
+        /const colorItem = new PopupMenu\.PopupMenuItem\('Change color'\);\n\s*colorItem\.connect\('activate', \(\) => \{\n\s*this\._openColorPicker\(\);/.test(ui)
+        && !/colorItem\.setSensitive\(false\)/.test(ui),
+        'Faz 8 turned the placeholder entry on; the picker opens INSIDE the panel');
+
+    record('static: the picker is a panel sub-state, reset with the panel',
+        /_hideActionsPanel\(\) \{\n\s*this\._resetDeleteConfirm\(\);\n\s*if \(this\._colorPickerOpen\) \{/.test(ui),
+        'the picker row and the delete arm are reset in one place, so the '
+        + 'five-field single-interaction invariant does not grow');
+
+    record('static: every swatch is named for a screen reader',
+        colorPickerBody !== null
+        && (colorPickerBody.match(/accessible_name:/g) || []).length === 2
+        && /Storage\.CATEGORY_PALETTE_NAMES\[i\]/.test(colorPickerBody),
+        'an icon-only button without accessible_name is announced as just '
+        + '"button" (audit D8); the palette and its names cannot drift apart');
+
+    // The palette lives in storage.js only: a second copy of those hexes in the
+    // UI layer is exactly how the prefs palette and the menu picker would
+    // diverge. storage.js is excluded from this half on purpose — it is the
+    // source.
+    const uiNoStore = uiNames.filter(name => name !== 'storage.js')
+        .map(name => readFileText(`${EXT_DIR}/${name}`)).join('\n');
+    record('static: the palette hexes live in storage.js only',
+        Storage.CATEGORY_PALETTE.every(hex => !uiNoStore.includes(hex))
+        && /Storage\.CATEGORY_PALETTE\.forEach/.test(ui),
+        'the UI iterates Storage.CATEGORY_PALETTE; hardcoding a hex would let '
+        + 'the picker and the auto-assignment drift apart');
+
+    // L-018 EXCEPTION, pinned so nobody "fixes" it later: a colour lives in
+    // GSettings only, so this path must NOT write the file first — there is
+    // nothing to write, and the map IS the source of truth here.
+    record('static: applying a colour writes the map and never the file',
+        applyColorBody !== null
+        && /set_value\('category-colors'/.test(applyColorBody)
+        && /Storage\.setCategoryColor\(/.test(applyColorBody)
+        && /Storage\.removeCategoryColor\(/.test(applyColorBody)
+        && !/writeTodo/.test(applyColorBody),
+        'the colour map is the source of truth for colours (L-018 covers '
+        + 'file-backed state only)');
+
+    record('static: the picker rings the colour the category actually has',
+        /_markSelectedSwatch\(\) \{[\s\S]{0,400}?Storage\.categoryColorHex\(this\._actionsCategory, colors\)/.test(ui)
+        && /button\.set_checked\(hex === current\)/.test(ui),
+        'the picker must show the current colour, not just offer choices');
+
     // Audit D8: an icon-only button with no accessible_name is announced as
     // just "button". The tab buttons carry visible text, so they are exempt.
     const iconButtons = (ui.match(/new St\.Button\(\{/g) || []).length;
@@ -1663,6 +1716,56 @@ function testCategoryColors() {
         && Storage.categoryColorHex('Yok', map) === null
         && Storage.categoryColorHex('İş', {'İş': 'url(evil)'}) === null
         && Storage.categoryColorHex('İş', null) === null, '');
+
+    // Faz 8: the palette and its spoken names are index-aligned, and every
+    // entry is a plain 6-digit hex (they are pasted straight into an inline
+    // style, so a malformed entry would be an invisible bug).
+    record('CATEGORY_PALETTE: every entry is a plain #rrggbb hex',
+        Storage.CATEGORY_PALETTE.length === 8
+        && Storage.CATEGORY_PALETTE.every(hex => /^#[0-9a-f]{6}$/.test(hex))
+        && new Set(Storage.CATEGORY_PALETTE).size === 8, '');
+
+    record('CATEGORY_PALETTE_NAMES: aligned with the palette, unique, non-empty',
+        Storage.CATEGORY_PALETTE_NAMES.length === Storage.CATEGORY_PALETTE.length
+        && Storage.CATEGORY_PALETTE_NAMES.every(n => typeof n === 'string' && n.length > 0)
+        && new Set(Storage.CATEGORY_PALETTE_NAMES).size
+            === Storage.CATEGORY_PALETTE_NAMES.length, '');
+
+    // The two neutrals that read poorly as header text were replaced (user
+    // decision 2026-10-10) by the modern Adwaita accents; pinned so a future
+    // "cleanup" cannot quietly bring the muddy colours back.
+    record('CATEGORY_PALETTE: brown/gray are gone, teal/pink took their slots',
+        !Storage.CATEGORY_PALETTE.includes('#986a44')
+        && !Storage.CATEGORY_PALETTE.includes('#9a9996')
+        && Storage.CATEGORY_PALETTE[6] === '#2190a4'
+        && Storage.CATEGORY_PALETTE[7] === '#d56199'
+        && Storage.nextCategoryColor(6) === '#2190a4'
+        && Storage.nextCategoryColor(7) === '#d56199', '');
+
+    const colorBase = {A: '#111111'};
+    record('setCategoryColor: sets a new entry without mutating the input',
+        (() => {
+            const out = Storage.setCategoryColor(colorBase, 'B', '#2190a4');
+            return out.B === '#2190a4' && out.A === '#111111'
+                && !('B' in colorBase);
+        })(), '');
+
+    record('setCategoryColor: replaces an existing entry',
+        Storage.setCategoryColor(colorBase, 'A', '#d56199').A === '#d56199', '');
+
+    record('setCategoryColor: an invalid hex is refused (same map back)',
+        Storage.setCategoryColor(colorBase, 'A', 'url(evil)') === colorBase
+        && Storage.setCategoryColor(colorBase, 'A', 'red') === colorBase
+        && Storage.setCategoryColor(colorBase, 'A', '') === colorBase, '');
+
+    record('setCategoryColor: a __proto__ key is refused (prototype write)',
+        Storage.setCategoryColor(colorBase, '__proto__', '#2190a4') === colorBase, '');
+
+    record('setCategoryColor: a missing map is treated as empty',
+        JSON.stringify(Storage.setCategoryColor(null, 'A', '#2190a4'))
+            === '{"A":"#2190a4"}'
+        && JSON.stringify(Storage.setCategoryColor(undefined, 'A', '#2190a4'))
+            === '{"A":"#2190a4"}', '');
 
     record('pruneCategoryColors: dead keys are removed',
         JSON.stringify(Storage.pruneCategoryColors(map, ['İş', 'Notes']))

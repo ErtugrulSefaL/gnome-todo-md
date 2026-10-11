@@ -97,8 +97,19 @@ export function rgbToHex(r, g, b) {
 }
 
 /**
- * GNOME HIG palette shared by the prefs quick palette and the automatic
- * color assignment for newly created categories.
+ * GNOME palette shared by the prefs quick palette, the in-menu colour picker
+ * and the automatic colour assignment for newly created categories.
+ *
+ * The two neutrals of the original HIG set are GONE (user decision
+ * 2026-10-10): brown (#986a44) and gray (#9a9996) read poorly as category
+ * header TEXT on the menu's dark background. They are replaced by the teal
+ * and pink accents of the modern Adwaita palette (libadwaita 1.7
+ * `_colors.scss`: `--accent-teal: #2190a4`, `--accent-pink: #d56199`), which
+ * are as bright as the purple already in the list.
+ *
+ * Order matters: nextCategoryColor() walks this list, so a change here changes
+ * the colour a NEW category gets. Existing colours live in the settings map as
+ * hex strings and are never migrated.
  */
 export const CATEGORY_PALETTE = [
     '#3584e4', // blue
@@ -107,8 +118,19 @@ export const CATEGORY_PALETTE = [
     '#f6d32d', // yellow
     '#c061cb', // purple
     '#ff7800', // orange
-    '#986a44', // brown
-    '#9a9996', // gray
+    '#2190a4', // teal (replaced brown)
+    '#d56199', // pink (replaced gray)
+];
+
+/**
+ * Spoken names for the palette entries, index-aligned with CATEGORY_PALETTE.
+ *
+ * Used for the accessible names of the in-menu colour swatches — an icon-only
+ * button without one is announced as just "button" — and kept HERE so the
+ * palette and its names cannot drift apart (a test pins the alignment).
+ */
+export const CATEGORY_PALETTE_NAMES = [
+    'blue', 'green', 'red', 'yellow', 'purple', 'orange', 'teal', 'pink',
 ];
 
 /**
@@ -202,6 +224,29 @@ export function removeCategoryColor(colors, name) {
         }
     }
     return kept;
+}
+
+/**
+ * Set (or replace) the stored colour of ONE category, returning a NEW map.
+ * Pure: the input map is never mutated.
+ *
+ * Returns the input unchanged when `hex` is not a valid hex colour (defence in
+ * depth — the palette is ours, but this is a public function) or when `name`
+ * is '__proto__': a plain assignment to that key is a prototype write in JS,
+ * so the entry would vanish silently (the same rule moveCategoryColor applies;
+ * such a key could not be read back from GSettings anyway, see lessons L-039).
+ *
+ */
+export function setCategoryColor(colors, name, hex) {
+    if (name === '__proto__' || !/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
+        return colors;
+    }
+    const next = {};
+    for (const key of Object.keys(colors || {})) {
+        next[key] = colors[key];
+    }
+    next[name] = hex;
+    return next;
 }
 
 /**
