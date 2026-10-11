@@ -13,7 +13,7 @@ import * as Storage from './storage.js';
 const PALETTE = Storage.CATEGORY_PALETTE;
 
 /**
- * Preferences for the Todo MD extension (GNOME Shell 46, GTK4 + Adwaita).
+ * Preferences for the Todo MD extension (GTK4 + libadwaita).
  *
  * Pattern verified against gjs.guide `development/preferences.md` (GNOME 45+):
  * `ExtensionPreferences.fillPreferencesWindow(window)` + `this.getSettings()`
@@ -121,7 +121,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         }
 
         // Swatch styling for the quick-palette buttons (load_from_string is
-        // GTK 4.12+; GNOME 46 ships 4.14).
+        // GTK 4.12+; every supported shell is well past that).
         const provider = new Gtk.CssProvider();
         provider.load_from_string(
             PALETTE.map((hex, i) => `.todo-swatch-${i} { background: ${hex}; }`)

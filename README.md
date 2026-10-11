@@ -4,12 +4,12 @@ A minimal, fast todo list for the GNOME Shell panel, backed by a plain
 **markdown checkbox** file (`~/todo.md`) — no database, no proprietary format,
 no cloud. Readable in any editor, on any device.
 
-Target: **GNOME 46** (tested on Ubuntu 24.04, X11). Written in JavaScript
+Target: **GNOME 50** (tested on Ubuntu 26.04, Wayland). Written in JavaScript
 (ESModules, GJS).
 
 ## Why
 
-Existing todo extensions for GNOME 46 were outdated (todo.txt, GNOME ≤45
+Existing todo extensions were outdated (todo.txt, GNOME ≤45
 APIs, broken builds) or lacked even basic categorization. This project keeps
 it simple: one markdown file, live panel menu, nothing else.
 
@@ -105,7 +105,7 @@ Windows editor does not produce a whole-file diff.
 |---|---|
 | `todo-md@ertugrulsefal.github.com/extension.js` | UI layer: panel, menu, entry, rows |
 | `todo-md@ertugrulsefal.github.com/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
-| `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version: 46) |
+| `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version: 50) |
 | `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `tests/run_tests.mjs` | Unit/integration tests for `storage.js` (run with `gjs`) |
 | `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
