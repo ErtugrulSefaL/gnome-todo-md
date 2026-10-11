@@ -4,6 +4,42 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.18.0 - 2026-10-12
+
+### Changed
+- **GNOME 50 support.** `shell-version` is now `["50"]`. The extension had been
+  `OUT_OF_DATE` on GNOME Shell 50.1 — the Shell refuses to load an extension
+  whose `shell-version` does not include the running major, so it was not
+  running at all. No code change was needed: a source comparison of every API
+  this extension touches (gnome-shell 46.0 vs the 50.1 modules extracted from
+  `libshell-18.so`) found them identical, and a full manual regression on 50.1
+  confirmed it.
+- The description no longer advertises the per-header `+` button removed in
+  0.16.0, and its compatibility line now reads GNOME 50 / Ubuntu 26.04 /
+  Wayland instead of GNOME 46 / Ubuntu 24.04 / X11.
+
+### Added
+- `tools/shell-api.sh` — the Shell's own JS (read straight out of the GResource
+  embedded in `libshell-<N>.so`) plus a probe of all 56 APIs this extension
+  uses, checked against the installed typelibs. Version-agnostic; exits
+  non-zero if an API has disappeared. Run it after every GNOME upgrade.
+- `tools/gjs-docs-mirror.sh` — refreshes the offline gjs-docs mirror. It
+  currently fails for every slug: gjs-docs.gnome.org stopped serving the
+  docset JSON and answers with its SPA HTML shell instead.
+
+### Notes
+- The multi-version release policy is now explicit: one code base, one zip, and
+  `shell-version` lists only versions verified by a manual regression run.
+  Older branches (46-49) are added one at a time, after their own test runs.
+- Known issue, not yet fixed: the EGO screenshot procedure is broken on GNOME 50
+  — the Shell narrowed the D-Bus allow-list of `org.gnome.Shell.Screenshot` and
+  dropped `org.gnome.Screenshot`, so `gnome-screenshot` no longer writes a file.
+
+### Tests
+- 235 unit tests green. Manual regression on GNOME Shell 50.1 / Wayland: 18/18
+  checks (menu, tabs, action panel, colour picker, task rows, scrolling, prefs,
+  Orca, theme). `tools/shell-api.sh probe` reports 56/56 present.
+
 ## 0.17.0 - 2026-10-11
 
 ### Added
