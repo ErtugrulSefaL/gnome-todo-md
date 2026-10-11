@@ -7,28 +7,41 @@ re-guess an already-proven API.
 
 ## How to verify (workflow)
 
-1. **Offline first:** `gjsdoc search <pkg> <term>` then `gjsdoc show <pkg> <page>`
-   against the local mirror `~/.local/share/gjs-docs-offline/` (GNOME 46 docs:
-   `st14~14`, `shell14~14`, `clutter14~14`, `meta14~14`, `gio20~2.0`, `glib20~2.0`, `gjs`).
-2. **If missing / ambiguous / version-sensitive: verify online** — gjs.guide,
-   gjs-docs.gnome.org, or GNOME GitLab source at a version tag
-   (`https://gitlab.gnome.org/GNOME/gnome-shell/-/raw/46.0/...`).
-3. Record the outcome here: API → source (file:line) → date → verdict.
+1. **The INSTALLED Shell first** — it is the ground truth and always matches the
+   version under test: `tools/shell-api.sh extract /org/gnome/shell/ui/<file>.js`
+   (the Shell's own JS, out of the GResource in `libshell-<N>.so`) and
+   `tools/shell-api.sh probe` (every API this extension uses, against the
+   installed typelibs; exits non-zero if one is missing).
+2. **Offline mirror** for prose/API pages: `gjsdoc search <pkg> <term>`, then
+   `gjsdoc show <pkg> <page>`. WARNING: FROZEN — see the sources table.
+3. **If still ambiguous: verify online** — gjs.guide (a porting page per release)
+   or GNOME GitLab source at a version tag
+   (`https://gitlab.gnome.org/GNOME/gnome-shell/-/raw/<tag>/js/ui/...`).
+4. Record the outcome here: API → source (file:line) → **version tag** → date →
+   verdict. Citations are ALWAYS version-tagged: `46.0 :827-850` means "proven
+   against gnome-shell 46.0, at those lines". Never read a bare line number as
+   version-independent — that is exactly what policy E=2 keeps out of the
+   source comments.
 
 ## Verification sources (what they are)
 
 | Source | Notes |
 |---|---|
-| `gjsdoc` (offline mirror) | DevDocs static dump of gjs-docs.gnome.org, GNOME 46 tags. Fast, but a snapshot — can be incomplete (e.g. Gio class pages) — re-verify online when unsure. |
-| gjs.guide | Authoritative extension development guide (ESM, topics, upgrade notes). |
-| GNOME Shell source `46.0` tag | `js/ui/*.js` (PopupMenu, PanelMenu, Main) — JS UI modules are NOT in GIR docs; source is the ground truth. |
-| mutter `46.0` tag | `clutter/clutter/*.c|h` — Clutter API ground truth for GNOME 46. |
-| docs.gtk.org | GLib/Gio C reference (current; superset of GNOME 46 era APIs). |
-| Local runtime tests | `tests/run_tests.mjs` proves storage-layer Gio calls work on this machine. |
+| **Installed Shell** (`tools/shell-api.sh`) | PRIMARY since 2026-10-11. The Shell's own JS via GResource (`libshell-<N>.so`), the GI typelibs (`St-<N>`, `Clutter-<N>`) and a 56-API probe. Always matches the version under test; `<N>` is auto-detected so it survives GNOME 51+. |
+| `gjsdoc` (offline mirror) | FROZEN as of 2026-10-11: gjs-docs.gnome.org no longer serves the docset JSON (`/<slug>/index.json` and `/<slug>/db.json` both answer with the SPA HTML shell, for every slug), so the mirror cannot be extended. The `st14~14` set already on disk still works offline. |
+| gjs.guide | Authoritative extension development guide (ESM, topics, a porting page per release). |
+| GNOME Shell source, version tag | `js/ui/*.js` (PopupMenu, PanelMenu, Main) — JS UI modules are NOT in GIR docs; the source is the ground truth. Tags used so far: `46.0`, `50.1`. |
+| mutter source, version tag | `clutter/clutter/*.c|h` — Clutter API ground truth. |
+| docs.gtk.org | GLib/Gio C reference (current; a superset of older-era APIs). |
+| Local runtime tests | `tests/run_tests.mjs` proves storage-layer Gio calls work on this machine; `test.md` §4 records the manual UI runs per shell version. |
 
 ## Verified APIs (as used in this project)
 
 Date: 2026-09-07 (offline mirror downloaded 2026-09-07 from gjs-docs.gnome.org)
+
+Every citation below is version-tagged (`46.0 :NNNN` = proven against
+gnome-shell 46.0). The load-bearing ones were re-verified against GNOME 50.1 in
+the section "GNOME 50 port (2026-10-11)" further down.
 
 | API | Used for | Verified against | Verdict |
 |---|---|---|---|
@@ -99,7 +112,10 @@ Run on `dist/todo-md@ertugrulsefal.github.com-0.15.0.zip` (built by `tools/make-
   the 6 disconnects are exactly the signals on LONG-LIVED objects (4× `_settings`,
   `_indicator.menu`, `_todoMonitor`); every remaining `.connect()` is on an actor
   owned by the menu/prefs tree, whose handlers die with the actor.
-- `metadata/shell-version-current` — deliberate: 46-only (owner decision 2026-10-10).
+- `metadata/shell-version-current` — RESOLVED 2026-10-11: `shell-version` is now
+  `["50"]` (the version this code was regression-tested on). Policy: only
+  verified versions are declared (R3, `AGENTS.md`); 46–49 are added after the VM
+  regression runs, never optimistically.
 - `quality/private-api` (`Main.panel.addToStatusArea`, extension.js:122) — known,
   disclosed in the EGO submission notes.
 - `license` (repo dir lint only) — LICENSE lives at the repo root; the zip root
@@ -130,6 +146,49 @@ Shexli result on our zip: 0 errors, 3 warnings —
 - `EGO-L-003` (`newCategoryButton.connect` never disconnected): FALSE POSITIVE —
   `disable()` destroys the tab bar (`this._tabBar.bar.destroy()`,
   extension.js:163-166), which destroys the button and its handlers.
+
+## GNOME 50 port (2026-10-11) — re-verification, 46.0 vs 50.1
+
+Context: the extension was `OUT_OF_DATE` on GNOME Shell 50.1 purely because
+`metadata.json` still declared `shell-version: ["46"]`. Before widening it, the
+whole API surface was re-checked against the INSTALLED Shell: its own JS out of
+the GResource in `/usr/lib/gnome-shell/libshell-18.so`, plus the `St-18` /
+`Clutter-18` typelibs. Reproduce with `tools/shell-api.sh`.
+
+**Result: no API this extension uses changed between 46.0 and 50.1.**
+
+| Claim (46.0 citation -> 50.1 equivalent) | Verdict |
+|---|---|
+| `_getMenuItems()` filter `instanceof PopupBaseMenuItem \|\| PopupMenuSection` (46.0 :827-831 -> 50.1 :914-919) | identical — the SEGV invariant still holds |
+| `PopupBaseMenuItem._init` params `{reactive, activate, hover, style_class, can_focus}` and `this._delegate = this` (46.0 :82-97 -> 50.1 :66-89) | identical |
+| `PopupSubMenu(sourceActor, sourceArrow)` ctor (46.0 :1054 -> 50.1 :1148) | identical |
+| `PopupSubMenu._onKeyPressEvent` -> `this.sourceActor._delegate.active = true` (46.0 :1176 -> 50.1 :1270) | identical — our panel's `sourceActor` is a PopupBaseMenuItem, which sets `_delegate` |
+| `PopupMenuSection()` -> `this.actor = this.box` (46.0 :1192-1197 -> 50.1 :1286-1291) | identical |
+| `PanelMenu.Button._init(menuAlignment, nameText, dontCreateMenu)` (46.0 :98 -> 50.1 :96) | identical |
+| `Main.panel.addToStatusArea(role, indicator, position, box)` (panel.js) | unchanged |
+| `St.Label.label_actor` | present (now on `St.Widget`; our rows are St-based) |
+| `GLib.idle_add(prio, fn)` / `GLib.Source.remove` | still present (`idle_add_once` added alongside) |
+| prefs: `Gtk.ColorDialogButton`, `CssProvider.load_from_string`, `StyleContext.add_provider_for_display`, `Adw.{EntryRow,SpinRow,ActionRow}` | present on GTK 4.22.4 / libadwaita 1.9.1 |
+
+**Differences that do NOT touch us** (46.0 -> 50.1): `Clutter.ClickAction` ->
+`Clutter.ClickGesture` (internal to PopupBaseMenuItem / PanelMenu); the
+`selected` style class -> `:selected` pseudo-class; St `vertical` ->
+`orientation` (deprecated in 48, removed in 51); `PopupMenu`'s internal ctor
+argument list.
+
+**Runtime confirmation:** full manual regression on GNOME Shell 50.1 / Wayland —
+18/18 checks green (`test.md` §4). The six points static analysis could not prove
+(inline PopupSubMenu rendering, the right-click path, width forcing, horizontal
+wheel scrolling, theme colours, Orca) all passed.
+
+**Tooling added:** `tools/shell-api.sh` — `info` / `list` / `extract` / `probe`.
+`probe` checks 56 APIs against the installed typelibs; run it after every GNOME
+upgrade.
+
+**Known forward breakage (GNOME 51, NOT addressed yet):** `PopupMenu.open()` /
+`close()` take a parameters object; event signals are deprecated in favour of
+controllers; St `vertical` is gone; `St.ButtonMask` members were renamed. See
+`roadmap.md` §D.
 
 ## Faz 7 (2026-10-10) — category action panel (design H)
 
@@ -192,21 +251,27 @@ Consequence: the action panel is an **inline** expander inside the menu
 
 ## Known gaps of the offline mirror (do not trust blindly)
 
+- **FROZEN (2026-10-11):** the mirror can no longer be refreshed. gjs-docs.gnome.org
+  answers every `/<slug>/index.json` and `/<slug>/db.json` with the SPA HTML
+  shell (5941/5938 bytes) instead of the docset JSON, so `tools/gjs-docs-mirror.sh`
+  fails for every slug. The set already on disk still works offline; for anything
+  newer use the installed Shell (`tools/shell-api.sh`).
 - Gio/GLib class pages may be missing (e.g. no `gio.file-monitor` page; only
   `gio.file#method-monitor`) — falls back to docs.gtk.org / GitLab source.
-- Snapshot date: 2026-09-07. Newer GNOME Shell / mutter changes are not included.
+- Snapshot date: 2026-09-07 (GNOME 46 / `st14~14`). Newer GNOME Shell / mutter
+  changes are not included.
 - Shell **JS UI modules** (PopupMenu, PanelMenu, Main, MessageTray) are not GIR
   docs at all — verify in gnome-shell source (`js/ui/*.js`) at the version tag.
 
 ## Pending (verify before writing, when the phase starts)
 
-- Phase 2 (categorization/ordering/tags): parser/serializer are pure `storage.js`
-  logic (no new GNOME API risk); sync `Gio.File.replace_contents` stays (atomic —
-  row above). Before rendering category headers, verify the PopupMenu
-  section-header pattern in gnome-shell `46.0` `js/ui/popupMenu.js`.
-- Phase 3 (notifications): `Main.notify` / MessageTray / Notification — read
-  gjs.guide "Notifications" topic + gnome-shell `46.0` `js/ui/messageTray.js`
-  BEFORE writing any code.
+- Faz 9 (task drag-and-drop): `Clutter.ClickAction`/`TapAction` were REMOVED in
+  GNOME 49 — any dnd design must be built on `Clutter.ClickGesture` /
+  `LongPressGesture` / a `Clutter.DragGesture`, verified against the INSTALLED
+  Shell first (`tools/shell-api.sh extract /org/gnome/shell/ui/...`).
+- Faz 14 (notifications): `Main.notify` / MessageTray / Notification — read the
+  gjs.guide "Notifications" topic + the shell's `js/ui/messageTray.js` at the
+  version tag BEFORE writing any code.
 - Phase 3 (archiving): pure `storage.js` functions + tests first (no new API risk).
   Interaction note: archiving shifts line indexes → must go through the same
   `_editingIndex = -1` invariant used by add/toggle/delete (single-edit rule).

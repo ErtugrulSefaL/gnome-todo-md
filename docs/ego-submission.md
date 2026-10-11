@@ -1,7 +1,9 @@
 # EGO Submission Notes
 
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
-version line before each upload. Last used for: **0.15.0**.
+version line before each upload. Last used for: **0.15.0** (review pending).
+Next upload: **0.18.0** — the GNOME 50 port (do not upload while 0.15.0 is still
+under review).
 
 ---
 
@@ -26,8 +28,10 @@ change it if you consider it a requirement.
 
 **`Main.panel.addToStatusArea`:** The standard indicator pattern from the
 gjs.guide "Getting Started" guide. It lives in GNOME Shell's own JS internals
-(no stability guarantee), so `shell-version` is pinned to `"46"` — the only
-version this was tested on.
+(no stability guarantee), so `shell-version` declares only the versions this
+code has been regression-tested on. It is `["50"]` now (GNOME Shell 50.1 on
+Ubuntu 26.04); older branches (46-49) are added one at a time, after a manual
+regression run in a VM, never optimistically.
 
 **Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
 `disable()` explicitly destroys every long-lived actor — the persistent scroll
@@ -37,10 +41,10 @@ six signals held on long-lived objects (4× GSettings, indicator menu, file
 monitor). The analyzer cannot trace actor ownership; the objects it flags are
 destroyed through their owners.
 
-**Testing:** GNOME Shell 46.0 on Ubuntu 24.04 (X11). 180 unit tests cover the
-storage layer (pure string-in/string-out functions, byte-identical
-round-trip); the UI layer was verified manually per change (Orca accessibility
-pass included).
+**Testing:** GNOME Shell 50.1 on Ubuntu 26.04 (Wayland). 235 unit tests cover
+the storage layer (pure string-in/string-out functions, byte-identical
+round-trip); the UI layer was verified manually per change, against a written
+regression checklist (18 checks) that includes an Orca accessibility pass.
 
 **Static analysis:** ego-lint reports 0 errors; Shexli reports 0 errors /
 3 warnings, addressed above.
@@ -49,8 +53,12 @@ pass included).
 
 ## Screenshot procedure (per upload)
 
-EGO wants a screenshot; the extension menu closes on focus loss, so capture it
-while open. This session's proven procedure (GNOME 46, **Wayland** session):
+🔴 **BROKEN ON GNOME 50 — the capture step must be re-solved before the next
+upload.** The backup/restore discipline (steps 1-2) is unaffected and still
+applies; step 3 is dead. Details after the procedure.
+
+EGO wants a screenshot; the extension menu closes on focus loss, so the capture
+must NOT steal focus. Original procedure (GNOME 46, Wayland):
 
 1. **Back up first:** `cp ~/todo.md ~/.todo-backup/todo.md.<ts>` (record md5)
    and `dconf read /org/gnome/shell/extensions/todo-md/category-colors` into a
@@ -66,15 +74,46 @@ while open. This session's proven procedure (GNOME 46, **Wayland** session):
    `dconf write /org/gnome/shell/extensions/todo-md/category-colors "{...}"`.
    NOTE: no blank line between the `# title` and the first `##` heading — a
    blank line there becomes an implicit empty 'General' section in the menu.
-3. **Capture on Wayland:** X11 grabbers (`import`, `xwd`, `ffmpeg x11grab`)
-   CANNOT see the Wayland compositor (xwd fails BadMatch @ X_GetImage), and
-   calling `org.gnome.Shell.Screenshot` via gdbus is denied — gnome-shell 46.0
-   `js/ui/screenshot.js:2433-2455` allow-lists only a few well-known names,
-   including `org.gnome.Screenshot`. Install `gnome-screenshot` (uses that
-   allow-listed name) and run `gnome-screenshot -f file.png` while the menu is
-   open — works headless, no focus steal, no dialog.
+3. ~~**Capture on Wayland:** install `gnome-screenshot` and run
+   `gnome-screenshot -f file.png` while the menu is open.~~
+   **DEAD on GNOME 50 — see "Why the old capture no longer works" below.**
 4. **Crop to the menu only** (privacy: the full screen contains personal
    content). The agent can read and judge the crop via image reading.
+
+### Why the old capture no longer works (verified 2026-10-11)
+
+`gnome-screenshot` talks to `org.gnome.Shell.Screenshot`, whose
+`DBusSenderChecker` allow-list was NARROWED in GNOME 50:
+
+| GNOME 46.0 (`js/ui/screenshot.js`) | GNOME 50.1 |
+|---|---|
+| `org.gnome.SettingsDaemon.MediaKeys` | `org.gnome.SettingsDaemon.MediaKeys` |
+| `org.freedesktop.impl.portal.desktop.gtk` | *(removed)* |
+| `org.freedesktop.impl.portal.desktop.gnome` | `org.freedesktop.impl.portal.desktop.gnome` |
+| `org.gnome.Screenshot` | **(removed)** |
+
+Runtime proof on this machine (GNOME 50.1, Wayland):
+
+```
+$ gnome-screenshot -f /tmp/shot-test.png
+** Message: Unable to use GNOME Shell's builtin screenshot interface,
+            resorting to fallback X11.
+Gdk-CRITICAL: gdk_pixbuf_get_from_surface: assertion 'width > 0 && height > 0' failed
+$ ls /tmp/shot-test.png   -> no such file
+```
+
+The X11 fallback is gone as well (GNOME 50 removed X11), so no file is written.
+X11 grabbers (`import`, `xwd`, `ffmpeg x11grab`) were already unusable on
+Wayland, and the shell's own screenshot UI (`Print`) is interactive — it grabs
+input, which closes the open menu.
+
+### Candidates to evaluate at upload time
+
+1. `org.freedesktop.portal.Screenshot` — the GNOME portal backend is still
+   allow-listed; check whether it prompts (a dialog would close the menu).
+2. A nested/devkit shell (`dbus-run-session gnome-shell --devkit --wayland`) or
+   `gnome-shell-test-tool --extension <zip>`, capturing from inside that session
+   so the live session is untouched.
 
 ## Upload checklist (pre-flight)
 
