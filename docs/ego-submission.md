@@ -56,12 +56,8 @@ regression checklist (18 checks), which includes an Orca accessibility pass.
 
 ## Screenshot procedure (per upload)
 
-🔴 **BROKEN ON GNOME 50 — the capture step must be re-solved before the next
-upload.** The backup/restore discipline (steps 1-2) is unaffected and still
-applies; step 3 is dead. Details after the procedure.
-
 EGO wants a screenshot; the extension menu closes on focus loss, so the capture
-must NOT steal focus. Original procedure (GNOME 46, Wayland):
+must NOT steal focus. Procedure (GNOME 50, Wayland):
 
 1. **Back up first:** `cp ~/todo.md ~/.todo-backup/todo.md.<ts>` (record md5)
    and `dconf read /org/gnome/shell/extensions/todo-md/category-colors` into a
@@ -77,11 +73,25 @@ must NOT steal focus. Original procedure (GNOME 46, Wayland):
    `dconf write /org/gnome/shell/extensions/todo-md/category-colors "{...}"`.
    NOTE: no blank line between the `# title` and the first `##` heading — a
    blank line there becomes an implicit empty 'General' section in the menu.
-3. ~~**Capture on Wayland:** install `gnome-screenshot` and run
-   `gnome-screenshot -f file.png` while the menu is open.~~
-   **DEAD on GNOME 50 — see "Why the old capture no longer works" below.**
+3. **Capture while the menu is OPEN:**
+   ```
+   tools/ego-screenshot.sh /tmp/ego-full.png
+   ```
+   No dialog, no input grab, no focus change — the menu survives the capture
+   (see "Why the portal does work" below). `gnome-screenshot` is dead here.
 4. **Crop to the menu only** (privacy: the full screen contains personal
-   content). The agent can read and judge the crop via image reading.
+   content). The script crops as its second argument:
+   ```
+   tools/ego-screenshot.sh ~/Pictures/ego-menu.png 700x520+1700+40
+   ```
+   The agent can read and judge the crop via image reading.
+
+   Measured example on this machine (3840x1080, menu at the top-right, panel
+   indicator just above it) — adjust so the menu fills the frame:
+   ```
+   tools/ego-screenshot.sh /tmp/ego-full.png           # 3840x1080
+   magick /tmp/ego-full.png -crop 520x500+3320+30 +repage /tmp/ego-menu.png
+   ```
 
 ### Why the old capture no longer works (verified 2026-10-11)
 
@@ -110,13 +120,50 @@ X11 grabbers (`import`, `xwd`, `ffmpeg x11grab`) were already unusable on
 Wayland, and the shell's own screenshot UI (`Print`) is interactive — it grabs
 input, which closes the open menu.
 
-### Candidates to evaluate at upload time
+### Why the portal does work (verified 2026-10-12)
 
-1. `org.freedesktop.portal.Screenshot` — the GNOME portal backend is still
-   allow-listed; check whether it prompts (a dialog would close the menu).
-2. A nested/devkit shell (`dbus-run-session gnome-shell --devkit --wayland`) or
-   `gnome-shell-test-tool --extension <zip>`, capturing from inside that session
-   so the live session is untouched.
+`org.gnome.Shell.Screenshot`'s `DBusSenderChecker` does not compare names as
+strings: it resolves every allow-listed WELL-KNOWN name to its current unique
+owner with `Gio.DBus.watch_name` (`misc/util.js`). So any caller that reaches
+the Shell THROUGH an allow-listed name passes — and
+`org.freedesktop.impl.portal.desktop.gnome` is still on the list. That makes
+the xdg-desktop-portal route the supported one.
+
+Runtime proof (GNOME 50.1, Wayland):
+
+```
+$ tools/ego-screenshot.sh /tmp/ego-full.png
+saved: /tmp/ego-full.png
+/tmp/ego-full.png PNG 3840x1080 8-bit sRGB 2.48MiB
+```
+
+The portal answered `Response code 0` immediately — **no permission dialog, no
+input grab, no focus change** — and the capture contains the Shell's own UI
+(panel and menus), which is exactly what an EGO screenshot needs. Compare with
+the shell's own `Print` UI, which grabs input and would close the open menu.
+
+End-to-end check (2026-10-12, extension menu left OPEN on the panel):
+
+```
+$ tools/ego-screenshot.sh /tmp/ego-full.png      # 3840x1080, menu still open
+$ magick /tmp/ego-full.png -crop 520x500+3320+30 +repage /tmp/ego-menu.png
+```
+
+The crop shows the tab bar (All / Cyber / Python / … with per-category
+colours), the category headers with their ⋮ action button, the task rows with
+their done/undone state and the drag handle at the end of every row — i.e. the
+menu survived the capture intact.
+
+Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
+
+### Candidates that were evaluated (2026-10-11, kept for the record)
+
+1. `org.freedesktop.portal.Screenshot` — **chosen** (see above).
+2. A nested/devkit shell (`dbus-run-session gnome-shell --devkit --wayland`) —
+   rejected: Ubuntu ships no `/usr/libexec/mutter-devkit`, so `--devkit` opens
+   no window. It remains the right tool for driving a REAL session without
+   touching the live one (used for the Faz 9 spike, headless + a virtual
+   pointer), not for screenshots.
 
 ## Upload checklist (pre-flight)
 
