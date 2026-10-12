@@ -4,6 +4,30 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.19.0 - 2026-10-12
+
+### Added
+- **Support for GNOME Shell 46, 47, 48 and 49.** `shell-version` now reads
+  `["46", "47", "48", "49", "50"]`, so a single zip serves every supported
+  release. Each one was validated the same way — the API probe (58 checks) plus
+  a manual regression run (18 checks) in its own VM: Ubuntu 24.04 (GNOME 46),
+  24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50).
+- No source change was needed for any of those shells: a source comparison had
+  already shown the APIs this extension uses are identical across 46–50, and the
+  regression runs confirmed it in practice.
+
+### Fixed
+- Two defects the runs turned up, both independent of the shell version, are
+  included here: a blank line after the title no longer invents a "General"
+  category (0.18.1), and the checkbox/swatch rings and the extension's own
+  scrollbars now follow the shell's colour scheme, so they are visible on the
+  light theme too (0.18.2).
+
+### Notes
+- The release policy is now exercised end to end: `shell-version` may only name
+  versions that passed a manual regression run, and a static guard pins the
+  exact list — widening it is always a deliberate act that follows a test.
+
 ## 0.18.2 - 2026-10-12
 
 ### Fixed
