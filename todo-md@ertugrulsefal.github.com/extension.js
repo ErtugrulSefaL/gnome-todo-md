@@ -16,15 +16,14 @@ import {RowFactory, capWidth} from './rowFactory.js';
 
 export default class TodoExtension extends Extension {
     enable() {
-        // Single-edit invariant: at most one row is being edited at any time.
-        // Reset on enable — the Extension instance survives disable/enable.
+        // Single-edit invariant: at most one row is edited at a time. Reset on
+        // enable — the Extension instance survives disable/enable.
         this._closeInteractions();
         this._openIdleId = 0;
 
-        // GSettings backend (schema id: metadata.json settings-schema).
+        // GSettings backend (the schema id comes from metadata.json).
         this._settings = this.getSettings();
         // Live-rewire: when the configured path changes, watch the new file.
-        // `changed::<key>` detail syntax per gjs.guide preferences.md.
         this._settingsSignal = this._settings.connect('changed::todo-file-path',
             () => {
                 this._closeInteractions();
@@ -46,9 +45,9 @@ export default class TodoExtension extends Extension {
                         + ` min-width: ${this._settings.get_int('menu-width')}px;`);
                 }
             });
-        // Re-render when the menu width changes: the menu box carries the
-        // forced width, the persistent tab scroller its min/max pair —
-        // both re-applied inline, then the menu rebuilds.
+        // Re-render when the menu width changes: the menu box carries the forced
+        // width and the persistent tab scroller its min/max pair, both applied
+        // inline before the menu rebuilds.
         this._widthSignal = this._settings.connect('changed::menu-width',
             () => {
                 const w = this._settings.get_int('menu-width');
@@ -74,19 +73,16 @@ export default class TodoExtension extends Extension {
         });
         this._indicator.add_child(icon);
 
-        // Refresh the list when the menu opens so external edits show up.
-        // Delay via GLib.idle_add so the menu opens first, then gets filled,
-        // avoiding layout issues from clearing items during the open transition.
+        // Refresh the list when the menu opens, so external edits show up. The
+        // idle lets the menu open first: clearing items during the open
+        // transition breaks the layout.
         this._openSignal = this._indicator.menu.connect('open-state-changed',
             (menu, open) => {
                 if (open) {
-                    // GLib.idle_add takes (priority, func). A single-argument
-                    // call throws and the rebuild silently never runs.
-                    //
-                    // The source id is kept so disable() can cancel it: the
-                    // guidelines require every main loop source to be removed
-                    // there, even one that returns SOURCE_REMOVE, and a
-                    // pending idle would otherwise refresh a torn-down menu.
+                    // GLib.idle_add takes (priority, func); a one-argument call
+                    // throws and the rebuild silently never runs. The id is
+                    // kept so disable() can cancel it — a pending idle would
+                    // otherwise refresh a torn-down menu.
                     if (this._openIdleId) {
                         GLib.Source.remove(this._openIdleId);
                     }
@@ -122,8 +118,8 @@ export default class TodoExtension extends Extension {
         // Add the indicator to the panel.
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
-        // Faz 9: drag-and-drop state and the insertion line. The line has to
-        // exist BEFORE _applyColorScheme() so it gets the scheme class too.
+        // Drag-and-drop state and the insertion line. The line must exist
+        // before _applyColorScheme(), which tags it.
         this._dragging = null;
         this._focusIndex = -1;
         this._lastWritten = null;
@@ -147,15 +143,10 @@ export default class TodoExtension extends Extension {
     /**
      * Follow the shell's colour scheme.
      *
-     * The extension's own CSS cannot read the theme's ink: St's stylesheet
-     * grammar has no `currentColor` (verified against libst — the token does
-     * not exist), so hard-coded colours end up invisible in one of the two
-     * themes. That is exactly what happened: white rings on the light shell
-     * theme, plus scrollbar handles that the theme itself draws at an effective
-     * ~2px (#bdbdbd inside an 8px bar with a 3px transparent border).
-     *
-     * The scheme is read here and the menu box is tagged; stylesheet.css scopes
-     * every theme-dependent colour under `.todo-dark` / `.todo-light`.
+     * St's stylesheet grammar has no `currentColor`, so a hard-coded colour is
+     * invisible in one of the two themes. The scheme is read here and the menu
+     * box is tagged; stylesheet.css scopes every theme-dependent colour under
+     * `.todo-dark` / `.todo-light`.
      */
     _applyColorScheme() {
         if (!this._indicator) {
@@ -167,9 +158,9 @@ export default class TodoExtension extends Extension {
         box.remove_style_class_name('todo-light');
         box.remove_style_class_name('todo-dark');
         box.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
-        // The insertion line is NOT inside menu.box — it lives on Main.uiGroup
-        // so it never joins the menu's layout — so it carries the scheme class
-        // DIRECTLY instead of inheriting it as a descendant.
+        // The insertion line is not inside menu.box (it lives on Main.uiGroup so
+        // it never joins the menu's layout), so it carries the scheme class
+        // directly instead of inheriting it.
         if (this._dropLine) {
             this._dropLine.remove_style_class_name('todo-light');
             this._dropLine.remove_style_class_name('todo-dark');
@@ -180,8 +171,7 @@ export default class TodoExtension extends Extension {
     disable() {
         this._unwatchTodoFile();
         // Every main loop source has to go, even one that already returned
-        // SOURCE_REMOVE — a pending idle would call back into a torn-down
-        // menu (review-guidelines: "Remove main loop sources").
+        // SOURCE_REMOVE: a pending idle would call back into a torn-down menu.
         if (this._openIdleId) {
             GLib.Source.remove(this._openIdleId);
             this._openIdleId = 0;
@@ -208,9 +198,9 @@ export default class TodoExtension extends Extension {
             St.Settings.get().disconnect(this._colorSchemeSignal);
             this._colorSchemeSignal = null;
         }
-        // Faz 9: the drag monitor is a MODULE-GLOBAL list in the Shell, so it
-        // must never outlive the extension; the insertion line is our own actor
-        // on Main.uiGroup and has to go too.
+        // The drag monitor is a module-global list in the Shell, so it must
+        // never outlive the extension; the insertion line is our own actor on
+        // Main.uiGroup.
         if (this._dragMonitor) {
             DND.removeDragMonitor(this._dragMonitor);
             this._dragMonitor = null;
@@ -221,9 +211,8 @@ export default class TodoExtension extends Extension {
             this._dropLine = null;
         }
         // The panel's actor lives inside the content section, but the
-        // PopupSubMenu object itself owns shell-side state (a
-        // Main.sessionMode connection) — destroy it before its actor's
-        // parent goes away.
+        // PopupSubMenu owns shell-side state (a Main.sessionMode connection), so
+        // it is destroyed before its actor's parent goes away.
         if (this._actions) {
             this._actions.destroy();
             this._actions = null;
@@ -251,37 +240,34 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Watch the configured todo file for external changes. Created per
-     * enable(); re-created by the settings-changed handler when the path
-     * setting changes (single monitor at any time).
+     * Watch the configured todo file for external changes. Created per enable();
+     * re-created when the path setting changes, so there is one monitor at a
+     * time.
      */
     _watchTodoFile() {
         this._todoMonitor = Gio.File.new_for_path(this._todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
-            // Our OWN writes fire the monitor too (replace_contents emits
-            // CREATED/CHANGES_DONE_HINT — measured in the Faz 9 fix round). We
-            // already refreshed for them, and refreshing AGAIN throws away what
-            // that refresh just restored — the key focus after a keyboard move.
-            // Identical content is therefore ignored.
+            // Our own writes fire the monitor too, and their refresh already
+            // happened; refreshing again would throw away what that refresh
+            // restored — the key focus after a keyboard move. Identical content
+            // is therefore ignored.
             const current = Storage.readTodo(this._todoPath());
             if (current.ok && current.raw === this._lastWritten) {
                 return;
             }
-            // Any file write (external or our own) may shift line indexes, so
-            // an in-progress edit cannot be trusted: close it (single-edit
-            // rule) and rebuild.
+            // Any write may shift line indexes, so an in-progress edit cannot
+            // be trusted: close it and rebuild.
             this._closeInteractions();
             this._refreshTodoMenu();
         });
     }
 
     /**
-     * Close every inline interaction at once: at most ONE may be open at a
-     * time — a task edit, a category add entry, the new-category entry, a
-     * category rename or a category action panel. The five fields are reset
-     * ONLY here (the static guard asserts exactly that), so they cannot
-     * drift apart and two interactions can never be open together.
+     * Close every inline interaction at once: at most one may be open — a task
+     * edit, a category add entry, the new-category entry, a category rename or a
+     * category action panel. These fields are reset only here, so they cannot
+     * drift apart.
      */
     _closeInteractions() {
         this._editingIndex = -1;
@@ -293,9 +279,8 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Hide the category action panel (Faz 7) and reset its sub-states: the
-     * pending delete confirmation (the next open starts from 'Delete') and
-     * the colour picker (the next open starts from the four items).
+     * Hide the category action panel and reset its sub-states: the pending
+     * delete confirmation and the colour picker.
      */
     _hideActionsPanel() {
         this._resetDeleteConfirm();
@@ -355,23 +340,20 @@ export default class TodoExtension extends Extension {
                 const updated = Storage.addCategory(parsed.raw, name);
                 if (updated === parsed.raw) {
                     // Rejected: empty, already taken, or a name that cannot be
-                    // written as a heading. Keep the entry open with the text
-                    // the user typed — closing it here would make Enter look
-                    // like a broken button.
+                    // written as a heading. The entry stays open with the typed
+                    // text — closing it here would make Enter look broken.
                     return Clutter.EVENT_STOP;
                 }
                 if (!Storage.writeTodo(this._todoPath(), updated)) {
-                    // Audit N4: a failed write changes NOTHING — the entry
-                    // stays open with the typed name, and no colour is stored
-                    // for a category the file does not contain.
+                    // A failed write changes nothing: the entry stays open and
+                    // no colour is stored for a category the file lacks.
                     return Clutter.EVENT_STOP;
                 }
-                // File first, then colour: `changed::category-colors` fires
+                // File first, then colour: changed::category-colors fires
                 // synchronously and the refresh prunes keys the file lacks.
                 this._addingNewCategory = false;
 
-                // Auto-color: the next palette entry in order,
-                // wrapping around after the last.
+                // Auto colour: the next palette entry, wrapping around.
                 const existingCount =
                     Storage.parseDocument(parsed.raw).categories.length;
                 const colors = this._settings.get_value('category-colors')
@@ -391,9 +373,9 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Build the inline category RENAME row (Faz 7): the same row shape as the
-     * new-category entry, prefilled with the current name and preselected, so
-     * typing replaces it. Enter commits through Storage.renameCategory.
+     * Build the inline category rename row: the new-category row shape,
+     * prefilled with the current name and preselected so typing replaces it.
+     * Enter commits through Storage.renameCategory.
      *
      */
     _makeRenameRow(categoryName) {
@@ -405,8 +387,7 @@ export default class TodoExtension extends Extension {
         });
         entry.set_x_expand(true);
         capWidth(entry, this._settings.get_int('menu-width'));
-        // Preselect: typing a new name replaces the old one instead of
-        // appending to it.
+        // Preselect, so typing replaces the old name instead of appending.
         entry.clutter_text.set_selection(0, categoryName.length);
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() !== Clutter.KEY_Return) {
@@ -416,25 +397,23 @@ export default class TodoExtension extends Extension {
             const parsed = Storage.readTodo(this._todoPath());
             const updated = Storage.renameCategory(parsed.raw, categoryName, name);
             if (updated === parsed.raw) {
-                // Rejected: an unusable name, the unchanged name, or a name
-                // already taken. Keep the entry open with the typed text (D5).
+                // Rejected: an unusable name, the unchanged name, or one
+                // already taken. The entry stays open with the typed text.
                 return Clutter.EVENT_STOP;
             }
             if (!Storage.writeTodo(this._todoPath(), updated)) {
-                // Audit N4: a failed write changes NOTHING — the text stays.
+                // A failed write changes nothing: the text stays.
                 return Clutter.EVENT_STOP;
             }
             this._closeInteractions();
-            // The active tab follows the rename BEFORE the colour write:
-            // set_value fires changed::category-colors SYNCHRONOUSLY (L-018),
-            // and that refresh drops an active category the file no longer has
-            // — which is what threw the user back to 'All' (reported
-            // 2026-10-10, right after the first manual test of this panel).
+            // The active tab follows the rename before the colour write:
+            // set_value fires changed::category-colors synchronously, and that
+            // refresh drops an active category the file no longer has.
             if (this._activeCategory === categoryName) {
                 this._activeCategory = name;
             }
-            // File first, then colour (L-018): the stored colour follows the
-            // new name, so a rename never silently loses a colour.
+            // File first, then colour: the stored colour follows the new name,
+            // so a rename never loses a colour.
             const colors = this._settings.get_value('category-colors')
                 .recursiveUnpack();
             const moved = Storage.moveCategoryColor(colors, categoryName, name);
@@ -450,24 +429,22 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Build the category ACTION PANEL (Faz 7, approved design H) ONCE.
+     * Build the category action panel once.
      *
-     * It is a PopupSubMenu — the shell's own inline expander (popupMenu.js
-     * :1053-1192) — so it looks and animates like a native submenu while
-     * living in the content flow, right below the header that opened it.
+     * It is a PopupSubMenu — the shell's own inline expander — so it looks and
+     * animates like a native submenu while living in the content flow, right
+     * below the header that opened it.
      *
-     * Its items are added to the submenu box DIRECTLY, not through
-     * addMenuItem(): that call wires 'activate' to itemActivated(), which
-     * closes the menu on the FIRST click (:694-701) — and the two-step delete
-     * needs the panel to survive that first click. Every item therefore closes
-     * the panel itself, explicitly.
+     * Its items are added to the submenu box directly, not through
+     * addMenuItem(): that call wires 'activate' to itemActivated(), which closes
+     * the menu on the first click, and the two-step delete needs the panel to
+     * survive it. Every item therefore closes the panel itself.
      *
      */
     _makeActionsPanel() {
-        // The header's ⋮ button is the affordance; the submenu arrow exists
-        // only because open()/close() animate it (:1128-1136). It is kept
-        // invisible rather than borrowing the button's icon, which would mean
-        // reaching into the submenu's private _arrow.
+        // The submenu arrow exists only because open()/close() animate it; it is
+        // kept invisible rather than borrowing the button's icon, which would
+        // mean reaching into the submenu's private _arrow.
         const arrow = new St.Icon({icon_name: 'pan-down-symbolic'});
         arrow.visible = false;
         this._actions = new PopupMenu.PopupSubMenu(null, arrow);
@@ -479,8 +456,8 @@ export default class TodoExtension extends Extension {
             this._toggleAdd(target);
         });
 
-        // Faz 8: opens the colour picker row INSIDE the panel (a panel
-        // sub-state, so the five-field invariant does not grow).
+        // Opens the colour picker row inside the panel (a panel sub-state, so
+        // the invariant does not grow).
         const colorItem = new PopupMenu.PopupMenuItem('Change color');
         colorItem.connect('activate', () => {
             this._openColorPicker();
@@ -500,9 +477,8 @@ export default class TodoExtension extends Extension {
         deleteItem.connect('activate', () => {
             const target = this._actionsCategory;
             if (!this._deleteConfirming) {
-                // First click arms the confirmation and the panel stays open
-                // (see the docstring: that is why the items bypass
-                // addMenuItem).
+                // The first click arms the confirmation and the panel stays
+                // open — that is why the items bypass addMenuItem.
                 this._deleteConfirming = true;
                 deleteItem.label.text = 'Confirm delete?';
                 deleteItem.add_style_class_name('todo-action-confirm');
@@ -525,16 +501,15 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * The colour picker row (Faz 8): one swatch per palette entry plus a
-     * "remove colour" button, hidden until 'Change color' is chosen.
+     * The colour picker row: one swatch per palette entry plus a "remove
+     * colour" button, hidden until 'Change color' is chosen.
      *
-     * It lives INSIDE the panel, so the single-interaction invariant does not
-     * grow a sixth field — the picker is a panel sub-state, exactly like the
-     * two-step delete arm, and _hideActionsPanel() resets both.
+     * It lives inside the panel, so the single-interaction invariant does not
+     * grow: the picker is a panel sub-state, like the two-step delete arm, and
+     * _hideActionsPanel() resets both.
      *
-     * The swatch colour is set inline from Storage.CATEGORY_PALETTE (our own
-     * constant, never user input); only the shape and the selected ring live in
-     * stylesheet.css.
+     * The swatch colour is set inline from Storage.CATEGORY_PALETTE; only the
+     * shape and the selected ring live in stylesheet.css.
      */
     _makeColorRow() {
         const row = new St.BoxLayout({style_class: 'todo-color-row'});
@@ -554,7 +529,7 @@ export default class TodoExtension extends Extension {
             row.add_child(swatch);
         });
         // The 'none' swatch: a category may carry no colour at all, and a
-        // picker that can only ADD colours could never go back.
+        // picker that can only add colours could never go back.
         const none = new St.Button({
             style_class: 'todo-swatch todo-swatch-none',
             toggle_mode: true,
@@ -575,9 +550,9 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Swap the panel into its colour-picker state: the four items give the
-     * panel to the swatch row. The two-step delete arm is dropped — the two
-     * sub-states exclude each other.
+     * Swap the panel into its colour-picker state: the swatch row replaces the
+     * four items, and the delete arm is dropped (the sub-states exclude each
+     * other).
      */
     _openColorPicker() {
         this._resetDeleteConfirm();
@@ -590,9 +565,9 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Ring the swatch that matches the category's CURRENT colour (and the
-     * 'none' swatch when it has none), so the picker always shows the truth —
-     * the same colour the header and the tab are painted with.
+     * Ring the swatch that matches the category's current colour (or 'none'
+     * when it has none), so the picker shows the same colour the header and the
+     * tab are painted with.
      */
     _markSelectedSwatch() {
         const colors = this._settings.get_value('category-colors')
@@ -607,10 +582,9 @@ export default class TodoExtension extends Extension {
      * Apply (or remove) the colour of the panel's target category, then close
      * the panel and re-render.
      *
-     * NO file write happens on this path, and that is correct: the colour lives
-     * in GSettings only, so the L-018 "file first, then the map" rule does not
-     * apply here — the map IS the source of truth for colours. (A guard pins
-     * that no writeTodo creeps in.)
+     * No file write happens here, and that is correct: colours live in GSettings
+     * only, so the map is their source of truth. A guard pins that no writeTodo
+     * creeps into this path.
      */
     _applyCategoryColor(hex) {
         const target = this._actionsCategory;
@@ -645,7 +619,7 @@ export default class TodoExtension extends Extension {
 
     /**
      * Right-click on a tab: switch to that category and show its action panel
-     * under its header (one panel, one place to render it).
+     * under its header.
      *
      */
     _openActionsFor(categoryName) {
@@ -656,8 +630,8 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Delete a category with everything in it (approved semantics A), persist
-     * and refresh. The two-step confirmation happens in the panel, not here.
+     * Delete a category with everything in it, persist and refresh. The
+     * two-step confirmation happens in the panel, not here.
      *
      */
     _deleteCategory(categoryName) {
@@ -668,15 +642,15 @@ export default class TodoExtension extends Extension {
             return;
         }
         if (!Storage.writeTodo(this._todoPath(), updated)) {
-            // Audit N4: a failed write changes NOTHING — no colour is dropped
-            // for a category the file still contains.
+            // A failed write changes nothing: no colour is dropped for a
+            // category the file still contains.
             this._cancelEditing();
             return;
         }
         this._closeInteractions();
-        // File first, then colour (L-018): drop the deleted category's colour
-        // explicitly. The refresh prune keeps the whole map when the deleted
-        // category was the file's last heading (see removeCategoryColor).
+        // File first, then colour: drop the deleted category's colour
+        // explicitly. The refresh prune keeps the whole map when it was the
+        // file's last heading (see removeCategoryColor).
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
         const kept = Storage.removeCategoryColor(colors, categoryName);
@@ -688,24 +662,22 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Switch the active category tab. Closes any open inline interaction
-     * (locked decision: a tab switch must not leave an edit or add
-     * entry open). Remembered for the session; an unknown
-     * category falls back to 'All' at render time.
+     * Switch the active category tab. Closes any open inline interaction, so a
+     * tab switch cannot leave an edit or an add entry open. An unknown category
+     * falls back to 'All' at render time.
      *
      */
     _switchTo(categoryName) {
         this._cancelEditing();
         this._activeCategory = categoryName;
-        // NOTE: the scroll position is deliberately NOT reset here
-        // (selecting a category must not jump to the top — the
-        // persistent wrapper keeps both scroll offsets across refreshes).
+        // The scroll position is deliberately not reset here: the persistent
+        // wrapper keeps both offsets across refreshes.
         this._refreshTodoMenu();
     }
 
     /**
-     * Resolve the todo file path from the GSettings value (empty value and
-     * '~' forms fall back / expand — see Storage.resolveTodoPath).
+     * Resolve the todo file path from the GSettings value (see
+     * Storage.resolveTodoPath).
      *
      */
     _todoPath() {
@@ -719,20 +691,16 @@ export default class TodoExtension extends Extension {
     _refreshTodoMenu() {
         const menu = this._indicator.menu;
         menu.removeAll();
-        // FIXED menu width: the BoxPointer takes its size from
-        // the menu's NATURAL width; min-width alone only raises the
-        // minimum (st-theme-node.c :3936) and never widens the natural
-        // (:3943), so short content still shrank the menu (user test 5).
-        // CSS 'width' FORCES the preferred width to W and 'max-width'
-        // clamps the natural down to the same W — the frame can then
-        // never be narrower or wider than W.
+        // The BoxPointer sizes itself from the menu's NATURAL width, so
+        // min-width alone only raises the minimum and short content still
+        // shrank the menu. CSS 'width' forces the preferred width and
+        // 'max-width' clamps the natural to the same value, so the frame can
+        // never be narrower or wider than the setting.
         const menuWidth = this._settings.get_int('menu-width');
         menu.box.set_style(`width: ${menuWidth}px; max-width: ${menuWidth}px;`);
-        // Persistent scroll wrapper (created once, lives as long as the
-        // extension is enabled): content is cleared and refilled per
-        // refresh, so the vadjustment — and the scroll position — survive
-        // every rebuild WITHOUT visible jumps. menu.removeAll() does not
-        // track it (added via menu.box), which is exactly what we want.
+        // Persistent scroll wrapper: created once and refilled per refresh, so
+        // the vadjustment — and the scroll position — survive every rebuild.
+        // menu.removeAll() does not track it (it is added via menu.box).
         if (!this._scrollWrapper) {
             const maxMenuHeight = this._settings.get_int('max-menu-height');
             this._contentSection = new PopupMenu.PopupMenuSection();
@@ -741,21 +709,17 @@ export default class TodoExtension extends Extension {
                 vscrollbar_policy: St.PolicyType.AUTOMATIC,
                 x_expand: true,
             });
-            // Fixed width (single GSettings value, min == max): the menu
-            // must not widen with content nor shrink with short categories
-            // (single adjustable width, user decision). The menu
-            // box itself is force-sized in _refreshTodoMenu (width +
-            // max-width); this min-width keeps the wrapper filling it.
+            // Fixed width (min == max): the menu must not widen with content nor
+            // shrink with short categories. menu.box is force-sized below; this
+            // min-width keeps the wrapper filling it.
             const menuWidth = this._settings.get_int('menu-width');
             this._scrollWrapper.set_style(
                 `max-height: ${maxMenuHeight}px; min-width: ${menuWidth}px;`);
             this._scrollWrapper.clip_to_allocation = true;
             this._scrollWrapper.add_child(this._contentSection.actor);
         } else {
-            // Detach before rebuilding the fixed rows: the wrapper is re
-            // attached right below them further down, so the tab bar stays
-            // the first row (set_child_below_sibling only affects stacking,
-            // not the BoxLayout order — user-tested).
+            // Detach before rebuilding the fixed rows: the wrapper is
+            // re-attached right below them, so the tab bar stays the first row.
             menu.box.remove_child(this._scrollWrapper);
         }
         this._contentSection.removeAll();
@@ -764,42 +728,34 @@ export default class TodoExtension extends Extension {
             this._makeActionsPanel();
         }
 
-        // The panel actor is UNTRACKED by removeAll() (its delegate is a
-        // PopupSubMenu, not a menu item) — detach it here so the render
-        // step below can place it under the right header, or drop it.
+        // The panel actor is untracked by removeAll() (its delegate is a
+        // PopupSubMenu), so it is detached here and placed under the right
+        // header by the render step below.
         if (this._actions.actor.get_parent()) {
             this._actions.actor.get_parent().remove_child(this._actions.actor);
         }
 
         const todo = Storage.readTodo(this._todoPath());
         // What the menu now shows: the file monitor compares against this, so
-        // our OWN writes never trigger a second, redundant rebuild.
+        // our own writes never trigger a second rebuild.
         this._lastWritten = todo.ok ? todo.raw : null;
         const doc = Storage.parseDocument(todo.raw);
 
-        // Every category renders as a non-clickable header row (with a '+'
-        // button) followed by its task rows — task-less categories are
-        // actionable now that adding is per-category.
+        // Every category renders as a non-clickable header row followed by its
+        // task rows; task-less categories render too, since adding is
+        // per-category.
         const sections = Storage.renderSections(doc);
 
-        // Category colors from the settings map. Dead keys (categories
-        // that no longer exist) are pruned automatically; the write happens
-        // only when the prune actually removed something, so the
-        // changed:: signal does not cause a refresh loop.
+        // Category colours from the settings map. Dead keys are pruned
+        // automatically, and the write happens only when the prune removed
+        // something, so the changed:: signal cannot cause a refresh loop.
         //
-        // The whole decision — which list is authoritative, and WHEN not to
-        // prune at all — lives in Storage.prunedColorsForDocument() so it can
-        // be unit-tested; it used to sit here, untested, and twice wrong
-        // (audit D1: pruning against `doc.categories` dropped the whole map
-        // for an empty file; then pruning against the rendered sections still
-        // dropped it, because a file that lost every '##' heading renders one
-        // implicit 'General' section and all six real colours looked dead —
-        // 6 → 0, written permanently through set_value).
+        // Which list is authoritative, and when not to prune at all, lives in
+        // Storage.prunedColorsForDocument() so it is unit-testable. A failed
+        // read is skipped entirely: readTodo reports it via `ok`, and a
+        // transient failure would otherwise look exactly like "the user
+        // deleted every category" and wipe the map for good.
         //
-        // A failed read is skipped entirely. `readTodo` reports it via `ok`,
-        // and a transient failure (editor atomic save, rename window) would
-        // otherwise look exactly like "the user deleted every category" and
-        // wipe the map for good.
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
         const prunedColors = todo.ok
@@ -810,12 +766,9 @@ export default class TodoExtension extends Extension {
                 GLib.Variant.new('a{ss}', prunedColors));
         }
 
-        // Tab bar, ALWAYS rendered ('All' shows every category — default;
-        // other tabs filter the content to one category). The content model
-        // is unchanged — a tab only picks what gets rendered. A '+' button at
-        // the far right opens the new-category inline entry (design change:
-        // the separate 'New category' row was ugly; the bar is permanent so
-        // categories can be created from any file state).
+        // Tab bar, always rendered: 'All' shows every category, other tabs
+        // filter the content. A '+' button at the far right opens the
+        // new-category entry, so categories can be created from any file state.
         const ALL_TAB = null;
         if (this._activeCategory === undefined) {
             this._activeCategory = ALL_TAB;
@@ -825,8 +778,8 @@ export default class TodoExtension extends Extension {
             && !sections.some(section => section.name === this._activeCategory)) {
             this._activeCategory = ALL_TAB;
         }
-        // Same rule for the two Faz 7 states: a target that vanished (an
-        // external edit) must not leave a panel armed for a dead name.
+        // A target that vanished (an external edit) must not leave a panel
+        // armed for a dead name.
         const knownCategory = name => name === null
             || sections.some(section => section.name === name);
         if (!knownCategory(this._actionsCategory)
@@ -834,19 +787,15 @@ export default class TodoExtension extends Extension {
             this._closeInteractions();
         }
 
-        // The tab bar is PERSISTENT (created once, like the
-        // content scroll wrapper) and ALWAYS horizontally scrollable —
-        // only the tab buttons are refilled per refresh, so the
-        // hadjustment (horizontal scroll position) survives every
-        // rebuild, including category switches (user test 4).
-        // CRITICAL: it must be a PLAIN actor, NOT a PopupBaseMenuItem —
-        // menu.box children with a PopupBaseMenuItem _delegate are destroyed
-        // by menu.removeAll() (_getMenuItems + destroy), which crashed the
-        // shell (SEGV, journal 2026-09-26 21:26).
-        // Per-version shell line numbers for every API claim: docs/verified-apis.md.
+        // The tab bar is persistent (created once, like the content wrapper) and
+        // always horizontally scrollable: only the tab buttons are refilled, so
+        // the hadjustment survives every rebuild. It must be a PLAIN actor, not
+        // a PopupBaseMenuItem: menu.box children whose _delegate is a
+        // PopupBaseMenuItem are destroyed by menu.removeAll(), which crashed the
+        // Shell.
         if (!this._tabBar) {
-            // The strip itself lives in tabBar.js; this file only decides WHEN
-            // it exists, where it sits and what fills it.
+            // The strip itself lives in tabBar.js; this file decides when it
+            // exists, where it sits and what fills it.
             this._tabBar = new TabBar();
             this._tabBar.newCategoryButton.connect('clicked', () => {
                 this._cancelEditing();
@@ -854,14 +803,14 @@ export default class TodoExtension extends Extension {
                 this._refreshTodoMenu();
             });
         } else {
-            // Detach and clear the tab buttons; the strip (and its
-            // hadjustment) survive.
+            // Detach and clear the tab buttons; the strip and its hadjustment
+            // survive.
             this._tabBar.detach(menu.box);
             this._tabBar.clearTabs();
         }
 
-        // Re-attach the persistent tab bar as the FIRST row (refill only; the
-        // scroller's hadjustment — horizontal scroll — survives).
+        // Re-attach the persistent tab bar as the first row (refill only, so the
+        // scroller's hadjustment survives).
         this._tabBar.attach(menu.box);
         this._tabBar.refill(sections, prunedColors, this._activeCategory,
             name => this._switchTo(name),
@@ -874,31 +823,28 @@ export default class TodoExtension extends Extension {
             newCategoryRow.entry.grab_key_focus();
         }
 
-        // Re-attach the persistent scroll wrapper BELOW the fixed rows
-        // (tab bar first). Detaching/re-attaching does not touch the
-        // vadjustment, so the scroll position survives.
+        // Re-attach the persistent scroll wrapper below the fixed rows;
+        // detaching does not touch the vadjustment.
         menu.box.add_child(this._scrollWrapper);
 
-        // Scrollable content area (the shell's own PopupSubMenu pattern:
-        // St.ScrollView + clip_to_allocation + CSS max-height — the
-        // scrollbar only engages once a max-height is set). The tab bar stays
-        // fixed above it and the wrapper persists, keeping the scroll offset
-        // stable. (Shell line numbers: docs/verified-apis.md.)
+        // Scrollable content area, using the Shell's own pattern: St.ScrollView
+        // with clip_to_allocation and a CSS max-height (the scrollbar only
+        // engages once a max-height is set).
         const contentSection = this._contentSection;
 
         const visibleSections = this._activeCategory === ALL_TAB
             ? sections
             : sections.filter(section => section.name === this._activeCategory);
 
-        // Faz 9: the row a keyboard move produced takes the key focus back, so
-        // a second Alt+↑/↓ press keeps working without re-clicking. The target
-        // is CONSUMED here and never left set, so an unrelated later refresh
-        // cannot yank the focus back.
+        // The row a keyboard move produced takes the key focus back, so a second
+        // Alt+↑/↓ press works without re-clicking. The target is consumed here
+        // and never left set.
         const focusTarget = this._focusIndex;
         this._focusIndex = -1;
         let focusRow = null;
 
-        for (const section of visibleSections) {            // Non-reactive header + interactive child: the proven entryItem
+        for (const section of visibleSections) {
+            // Non-reactive header + interactive child: the proven entryItem
             // pattern (an interactive child inside a non-reactive row).
             const header = new PopupMenu.PopupBaseMenuItem(
                 {activate: false, can_focus: false});
@@ -906,11 +852,10 @@ export default class TodoExtension extends Extension {
                 text: section.name,
                 style_class: 'todo-category-header',
             });
-            // Same width cap as task labels (menu-width, GSettings) + fixed
-            // ellipsize: a long category name must not widen the menu.
+            // Same width cap as task labels plus a fixed ellipsize: a long
+            // category name must not widen the menu.
             label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
-            // Q1=A: the color applies to the header TEXT via inline style
-            // (set_style verified in the offline mirror, st14 st.widget).
+            // The colour applies to the header text via an inline style.
             const colorCss = Storage.categoryColorCss(section.name, prunedColors);
             const headerStyle
                 = `max-width: ${this._settings.get_int('menu-width')}px;`;
@@ -918,10 +863,8 @@ export default class TodoExtension extends Extension {
             label.set_x_expand(true);
             header.add_child(label);
 
-            // Faz 7: the category action menu replaced the per-header '+'
-            // button. The panel itself renders right below this header
-            // (see the render step further down), so the button only
-            // toggles it; adding a task is now the panel's first entry.
+            // The panel renders right below this header (see the render step
+            // below), so this button only toggles it.
             const categoryName = section.name;
             const actionsBtn = new St.Button({
                 style_class: 'todo-icon-button button',
@@ -947,30 +890,26 @@ export default class TodoExtension extends Extension {
                 this._toggleActions(categoryName);
                 return Clutter.EVENT_STOP;
             });
-            // Every content row fills the FIXED wrapper width — without
-            // x_expand a short category's rows keep their natural width and
-            // the right side collapses (the menu 'shrinks' on switch — user
-            // test 5).
+            // Every content row fills the fixed wrapper width: without x_expand
+            // a short category's rows keep their natural width and the right
+            // side collapses.
             header.set_x_expand(true);
             contentSection.addMenuItem(header);
 
-            // Faz 7: the action panel renders as an untracked row directly
-            // below its header — a PopupSubMenu actor, NOT a menu item, so
-            // contentSection.removeAll() never destroys it (popupMenu.js
-            // :827-850).
+            // The action panel renders as an untracked row directly below its
+            // header — a PopupSubMenu actor, not a menu item, so
+            // contentSection.removeAll() never destroys it.
             if (this._actionsCategory === categoryName) {
                 contentSection.box.add_child(this._actions.actor);
-                // sourceActor must be a menu item: the submenu's own
-                // Left-key handler dereferences sourceActor._delegate.active
-                // (popupMenu.js :1160-1164), and this header is the item
-                // the panel belongs to.
+                // sourceActor must be a menu item: the submenu's own Left-key
+                // handler dereferences sourceActor._delegate.active, and this
+                // header is the item the panel belongs to.
                 this._actions.sourceActor = header;
                 this._actions.focusActor = actionsBtn;
                 this._actions.open(true);
             }
 
-            // The rename entry takes the panel's slot when Rename was
-            // chosen (the single-interaction rule keeps them apart).
+            // The rename entry takes the panel's slot when Rename was chosen.
             if (this._renamingCategory === categoryName) {
                 const renameRow = this._makeRenameRow(categoryName);
                 renameRow.row.set_x_expand(true);
@@ -978,9 +917,9 @@ export default class TodoExtension extends Extension {
                 renameRow.entry.grab_key_focus();
             }
 
-            // The active add entry renders directly under its category
-            // header; render derives solely from _addingCategory, so two
-            // open adders can never coexist (single-add invariant).
+            // The active add entry renders directly under its category header;
+            // render derives solely from _addingCategory, so two open adders
+            // cannot coexist.
             if (this._addingCategory === categoryName) {
                 const addRow = this._rowFactory.makeAddRow(categoryName);
                 addRow.row.set_x_expand(true);
@@ -991,9 +930,9 @@ export default class TodoExtension extends Extension {
 
             const tasks = section.tasks;
             for (const task of tasks) {
-                // The row being edited renders as an inline entry instead of
-                // the usual label + buttons. Render derives solely from
-                // _editingIndex, so two open editors can never coexist.
+                // The row being edited renders as an inline entry instead of the
+                // usual label and buttons; render derives solely from
+                // _editingIndex, so two open editors cannot coexist.
                 if (task.index === this._editingIndex) {
                     const editRow = this._rowFactory.makeEditRow(task);
                     editRow.row.set_x_expand(true);
@@ -1014,8 +953,8 @@ export default class TodoExtension extends Extension {
             }
         }
 
-        // Faz 9: hand the key focus to the row a keyboard move produced, so a
-        // second Alt+↑/↓ press keeps working without re-clicking.
+        // Hand the key focus to the row a keyboard move produced, so a second
+        // Alt+↑/↓ press works without re-clicking.
         if (focusRow) {
             focusRow.grab_key_focus();
         }
@@ -1027,8 +966,7 @@ export default class TodoExtension extends Extension {
 
     /**
      * Switch a row into inline edit mode. Replaces any existing inline
-     * interaction (single-edit rule: render derives solely from
-     * _editingIndex; the add entry is closed together with the edit).
+     * interaction: render derives solely from _editingIndex.
      *
      */
     _startEditing(index) {
@@ -1059,8 +997,7 @@ export default class TodoExtension extends Extension {
         }
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
-        // Audit N4: a failed write must not close the edit and discard the new
-        // text. Same rule as _addTask.
+        // A failed write must not close the edit and discard the new text.
         if (!Storage.writeTodo(this._todoPath(), updated)) {
             return;
         }
@@ -1082,10 +1019,9 @@ export default class TodoExtension extends Extension {
 
         const parsed = Storage.readTodo(this._todoPath());
         const updated = Storage.addTask(parsed.raw, trimmed, category);
-        // Audit N4: the write result decides whether the entry may close. On
-        // failure (disk full, read-only file) the typed text STAYS in the entry
-        // instead of vanishing with a refresh that re-reads the old file — the
-        // same behaviour the rejected-category-name path already uses (audit D5).
+        // The write result decides whether the entry may close: on failure
+        // (disk full, read-only file) the typed text stays in the entry instead
+        // of vanishing with a refresh that re-reads the old file.
         if (!Storage.writeTodo(this._todoPath(), updated)) {
             return;
         }
@@ -1094,8 +1030,8 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Open (or toggle closed) the inline add entry of a category. Opening
-     * replaces any open inline interaction (single-interaction rule).
+     * Open (or toggle closed) the inline add entry of a category, replacing any
+     * other open interaction.
      *
      */
     _toggleAdd(categoryName) {
@@ -1133,21 +1069,20 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Set up the drag-and-drop plumbing ONCE per enable() (Faz 9).
+     * Set up the drag-and-drop plumbing once per enable().
      *
-     * The monitor is registered only while a drag is in flight (drag-begin →
-     * drag-end); the insertion line lives on Main.uiGroup, like the Shell's own
-     * drag actor, so it never takes part in the menu's layout.
+     * The monitor is registered only while a drag is in flight; the insertion
+     * line lives on Main.uiGroup, like the Shell's own drag actor, so it never
+     * takes part in the menu's layout.
      */
     _setupDragAndDrop() {
         this._dragMonitor = {
             dragMotion: event => this._onDragMotion(event),
-            // CONTINUE, never SUCCESS: a monitor that returns SUCCESS/FAILURE
-            // makes the Shell return early and SKIP its own cleanup — the drag
-            // actor is never destroyed, the modal grab is never popped and
-            // drag-end never fires (measured in the Faz 9 spike). The DROP
-            // itself belongs to the row's acceptDrop, which the Shell calls
-            // next once we continue.
+            // CONTINUE, never SUCCESS: a monitor returning SUCCESS/FAILURE makes
+            // the Shell return early and skip its own cleanup — the drag actor is
+            // never destroyed, the modal grab is never popped and drag-end never
+            // fires. The drop itself belongs to the row's acceptDrop, which the
+            // Shell calls next.
             dragDrop: () => DND.DragDropResult.CONTINUE,
         };
         this._dropLine = new St.Widget({style_class: 'todo-drop-line'});
@@ -1162,21 +1097,19 @@ export default class TodoExtension extends Extension {
     _onDragBegin(index, categoryName) {
         this._dragging = {index, category: categoryName};
         DND.addDragMonitor(this._dragMonitor);
-        // The menu raises ITSELF above every uiGroup sibling on each open
-        // (PopupMenu.open -> set_child_above_sibling(actor, null)), which puts
-        // our insertion line behind the menu's background. Raise the line back
-        // on top once per drag. Doing it HERE and not in _onDragMotion keeps
-        // the drag CLONE above the line: the Shell raises the clone after
-        // emitting drag-begin.
+        // The menu raises itself above every uiGroup sibling on each open
+        // (PopupMenu.open), which puts the insertion line behind the menu's
+        // background: raise it back on top once per drag. Here and not in
+        // _onDragMotion, so the drag clone — raised after drag-begin — stays
+        // above the line.
         if (this._dropLine) {
             Main.uiGroup.set_child_above_sibling(this._dropLine, null);
         }
     }
 
     /**
-     * The drag is over, dropped or not. Clear the drag state and rebuild —
-     * NOT inside acceptDrop: the Shell is still holding the drag actor while
-     * that runs, and a rebuild there would pull the row out from under it.
+     * The drag is over, dropped or not. Clear the drag state and rebuild — not
+     * inside acceptDrop: the Shell still holds the drag actor while that runs.
      */
     _onDragEnd() {
         this._dragging = null;
@@ -1187,11 +1120,11 @@ export default class TodoExtension extends Extension {
 
     /**
      * The drop itself, called by the Shell through the row's acceptDrop.
-     * Returning true makes the Shell finish the drag properly.
+     * Returning true makes the Shell finish the drag.
      *
-     * Locked rule: a task only moves inside its own category, so a drop on
-     * another category's row (the 'All' tab) is rejected and the row snaps
-     * back. Every rejected path returns false and writes nothing.
+     * A task only moves inside its own category, so a drop on another category's
+     * row (the 'All' tab) is rejected and the row snaps back. Every rejected
+     * path returns false and writes nothing.
      */
     _onDrop(toIndex, toCategory) {
         if (!this._dragging
@@ -1210,8 +1143,8 @@ export default class TodoExtension extends Extension {
 
     /**
      * Drag feedback: show the insertion line above or below the row under the
-     * pointer, and tell the Shell whether that spot can take the drop (the
-     * no-drop cursor comes for free from NO_DROP).
+     * pointer, and tell the Shell whether that spot can take the drop (NO_DROP
+     * gives the no-drop cursor for free).
      */
     _onDragMotion(event) {
         if (!this._dragging) {
@@ -1234,8 +1167,7 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * The task row an actor belongs to, or null. Rows carry `_todoCategory`
-     * (see rowFactory) precisely so a drag can map actors back to tasks.
+     * The task row an actor belongs to, or null.
      */
     _findTaskRow(actor) {
         let current = actor;
@@ -1256,9 +1188,9 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Reorder a task with Alt+↑ / Alt+↓ — the keyboard path that replaced the
-     * ↑↓ buttons in Faz 9. The adjacent task is the target, so one press is
-     * one step; the moved row keeps the key focus (see _refreshTodoMenu).
+     * Reorder a task with Alt+↑ / Alt+↓: the adjacent task is the target, so one
+     * press is one step. The moved row keeps the key focus (see
+     * _refreshTodoMenu).
      */
     _moveTask(index, categoryName, direction) {
         const parsed = Storage.readTodo(this._todoPath());
@@ -1275,13 +1207,12 @@ export default class TodoExtension extends Extension {
         if (updated === parsed.raw) {
             return;
         }
-        // Only once the move is known to happen: closing interactions WITHOUT
-        // a refresh would leave the menu showing a row that is already gone.
+        // Only once the move is known to happen: closing interactions without a
+        // refresh would leave the menu showing a row that is already gone.
         this._closeInteractions();
         Storage.writeTodo(this._todoPath(), updated);
-        // moveTaskTo lands the task in the target's slot, so in the NEW
-        // document it sits at `other`; remember its line index so the rebuild
-        // can hand the key focus back to it.
+        // moveTaskTo lands the task in the target's slot, so it sits at `other`
+        // in the new document; remember its line index for the focus hand-back.
         const moved = Storage.renderSections(Storage.parseDocument(updated))
             .find(candidate => candidate.name === categoryName);
         this._focusIndex = moved ? moved.tasks[other].index : -1;

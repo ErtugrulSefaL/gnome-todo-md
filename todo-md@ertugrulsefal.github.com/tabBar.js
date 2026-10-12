@@ -5,22 +5,16 @@ import Pango from 'gi://Pango';
 import * as Storage from './storage.js';
 
 /**
- * The persistent category tab strip: the `All` tab, one tab per category and
- * the far-right "new category" button, on a horizontally scrollable rail.
+ * The persistent category tab strip: the `All` tab, one tab per category, and
+ * the far-right "new category" button on a horizontally scrollable rail.
  *
- * WHY A SEPARATE MODULE (EGO best practices): one self-contained actor tree
- * with one lifecycle; drag-and-drop reordering of categories will land here.
+ * The strip is added to `menu.box` as a PLAIN actor, never as a menu item:
+ * `menu.removeAll()` destroys every `menu.box` child whose `_delegate` is a
+ * PopupBaseMenuItem, which crashed the Shell. So no PopupMenuItem, no
+ * PopupBaseMenuItem and no menu.addMenuItem in this file; a test pins it.
  *
- * 🔴 THE ONE INVARIANT THAT MUST NOT CHANGE — the shell SEGVs otherwise:
- * the strip is added to `menu.box` as a PLAIN actor. `menu.removeAll()`
- * destroys every `menu.box` child whose `_delegate` is a PopupBaseMenuItem
- * (`PopupMenuBase._getMenuItems()` + `destroy()`). So: no PopupMenuItem, no
- * PopupBaseMenuItem, no `menu.addMenuItem` in this file. Pinned by a test.
- * Per-version shell line numbers live in docs/verified-apis.md.
- *
- * Persistent by design: the actors are built once in `attach()` and only the
- * buttons inside `tabsBox` are refilled by `refill()`, which keeps the
- * horizontal scroll position (`hadjustment`) across rebuilds.
+ * The actors are built once in `attach()`; `refill()` only replaces the
+ * buttons inside `tabsBox`, which keeps the horizontal scroll position.
  */
 export class TabBar {
     /**
@@ -35,23 +29,21 @@ export class TabBar {
         this.scroller = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.AUTOMATIC,
             vscrollbar_policy: St.PolicyType.NEVER,
-            // CRITICAL: St's own wheel handler consumes scroll events
-            // (st-scroll-view.c :751 returns TRUE) and routes the wheel to the
-            // VADJUSTMENT only (`:771`) — useless here (vscrollbar NEVER).
-            // Disabling it lets our handler on `bar` receive the wheel.
+            // St's own wheel handler consumes scroll events and routes them to
+            // the VADJUSTMENT only, which is useless here (vscrollbar NEVER).
+            // Disabling it lets the handler below receive the wheel.
             enable_mouse_scrolling: false,
         });
         this.scroller.add_child(this.tabsBox);
         this.scroller.set_x_expand(true);
-        // NOTE: no min-width/max-width here — the menu.box itself is
-        // force-sized (width + max-width, set in _refreshTodoMenu), and a
-        // min-width on the scroller would eat the full menu width and push
-        // the far-right '+' button out of view (user report). The scroller
-        // just expands into the remaining space; once the tabs' minimum
-        // width exceeds that allocation the horizontal scrollbar engages.
+        // No min-width/max-width here: menu.box is force-sized, and a
+        // min-width on the scroller would eat the full menu width and push the
+        // '+' button out of view. The scroller expands into the remaining
+        // space, and the horizontal scrollbar engages once the tabs' minimum
+        // width exceeds it.
 
-        // Mouse wheel anywhere on the strip scrolls it horizontally.
-        // UP = scroll left, DOWN = scroll right; SMOOTH deltas supported.
+        // Mouse wheel anywhere on the strip scrolls it horizontally: UP left,
+        // DOWN right, smooth deltas included.
         this.bar.connect('scroll-event', (actor, event) => {
             const adj = this.scroller.hadjustment;
             if (!adj) {
@@ -75,8 +67,8 @@ export class TabBar {
             return Clutter.EVENT_PROPAGATE;
         });
 
-        // Far-right '+' — the new-category entry point (fixed, outside the
-        // scroller so it is always reachable).
+        // Far-right '+' — the new-category entry point, outside the scroller so
+        // it is always reachable.
         this.newCategoryButton = new St.Button({
             style_class: 'todo-icon-button button',
             accessible_name: 'New category',
@@ -146,11 +138,9 @@ export class TabBar {
     }
 
     /**
-     * Right-click on a category tab opens the SAME action panel the header's
-     * ⋮ button opens (Faz 7) — the practical trigger next to the
-     * discoverable one. St.Button's default button-mask is BUTTON1, so a
-     * right-click never fires 'clicked' (no accidental tab switch), and the
-     * handler returns EVENT_STOP so the press stops there.
+     * Right-click on a category tab opens the same action panel the header's ⋮
+     * button opens. St.Button's default button mask is BUTTON1, so a
+     * right-click never fires 'clicked' and cannot switch the tab.
      *
      */
     _connectActions(button, categoryName, onActions) {
@@ -168,11 +158,10 @@ export class TabBar {
 
     /**
      * One tab button: a toggle-mode St.Button whose text lives in a child
-     * St.Label (St.Button has no clutter_text of its own — journal
-     * 2026-09-26). Labels keep EllipsizeMode.NONE: an ellipsized label reports
-     * a small MINIMUM width, so the scroll cap never engages and the tabs get
-     * squeezed instead of scrolling (St.Label defaults to END, st-label.c
-     * :336 — user-tested).
+     * St.Label (St.Button has no clutter_text of its own). The label keeps
+     * EllipsizeMode.NONE: an ellipsized label reports a small minimum width, so
+     * the scroll cap would never engage and the tabs would be squeezed instead
+     * of scrolling.
      *
      */
     _makeButton(tab, colors, activeCategory) {
@@ -183,8 +172,8 @@ export class TabBar {
         const tabLabel = new St.Label({text: tab.label});
         button.set_child(tabLabel);
         tabLabel.clutter_text.set_ellipsize(Pango.EllipsizeMode.NONE);
-        // Tabs carry the category color too (the content header is filtered
-        // away when a tab is inactive).
+        // Tabs carry the category colour too; the content header is filtered
+        // away when a tab is inactive.
         if (tab.name && colors[tab.name]) {
             button.set_style(Storage.categoryColorCss(tab.name, colors));
         }

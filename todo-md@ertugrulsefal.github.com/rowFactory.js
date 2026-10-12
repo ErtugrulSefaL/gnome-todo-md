@@ -9,11 +9,8 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 import * as Storage from './storage.js';
 
 /**
- * Cap an actor's width to the `menu-width` setting.
- *
- * Exported as a plain function as well as used through the factory: the
- * new-category entry lives in extension.js (it is a workflow — validate, write,
- * colour, switch tab — not a row builder) and needs the same cap.
+ * Cap an actor's width to the `menu-width` setting. Exported because the
+ * new-category entry in extension.js needs the same cap.
  *
  */
 export function capWidth(actor, menuWidth) {
@@ -21,17 +18,12 @@ export function capWidth(actor, menuWidth) {
 }
 
 /**
- * Row builders: task rows, the inline add/edit entries, and the width cap.
+ * Builders for the menu's rows: task rows, the inline add/edit entries and the
+ * width cap. Callbacks are injected by extension.js, so this module never
+ * reaches into the extension's state.
  *
- * WHY A SEPARATE MODULE (EGO best practices): a row is one stateless actor
- * tree, and it is where the roadmap's colour-control and drag-and-drop
- * features land. The menu width and the actions are injected by extension.js;
- * this module stays free of the extension's private fields.
- *
- * NOT here, on purpose: `_makeNewCategoryRow`. That entry is a workflow, not a
- * row — validate the name, write the file, assign the auto-colour, switch tab —
- * and it carries the rejected-name and failed-write guards. Moving it here
- * would scatter the most heavily guarded code in the project.
+ * The new-category entry stays in extension.js: it is a workflow (validate,
+ * write, colour, switch tab), not a row.
  */
 export class RowFactory {
     constructor({menuWidth, onToggle, onEdit, onDelete, onMove, onDragBegin,
@@ -49,54 +41,46 @@ export class RowFactory {
     }
 
     /**
-     * Build a clickable task row: label (strikethrough + fade when done),
-     * edit + delete buttons pinned to the right, and — at the FAR RIGHT — the
-     * drag handle (Faz 9).
+     * Build a clickable task row: label (struck through and faded when done),
+     * edit and delete buttons, and the drag handle at the far right.
      *
-     * Drag starts ONLY from the handle, and the handle is an St.Button on
-     * purpose: st-button.c consumes press/release, so a plain click on it
-     * never reaches the row's activate (which would toggle the task). The
-     * dragged thing is a CLONE of the row, so the source row stays in place.
+     * Dragging starts from the handle only. The handle is an St.Button on
+     * purpose: st-button.c consumes press/release, so a plain click never
+     * reaches the row's activate. The Shell drags a CLONE of the row, which
+     * leaves the row itself in place.
      *
      */
     makeTaskRow(task, categoryName, colors) {
         const index = task.index;
         const row = new PopupMenu.PopupBaseMenuItem();
-        // Drag feedback and the drop target have to know which task a row
-        // stands for: the Shell hands back ACTORS during a drag
-        // (dragMotion/acceptDrop), never our model.
+        // The Shell hands back actors during a drag, never our model, so the
+        // row carries which task it stands for.
         row._todoIndex = index;
         row._todoCategory = categoryName;
         const label = new St.Label({
             text: task.text,
             style_class: task.done ? 'todo-text todo-done' : 'todo-text',
         });
-        // Fixed behavior (deliberately NOT user-configurable):
-        // long task texts truncate with an ellipsis instead of widening the
-        // menu. The full text stays reachable via the row's edit button.
-        // Width from GSettings menu-width (inline style; CSS max-width
-        // + Pango.EllipsizeMode.END = the constrained-width pattern).
+        // Long texts truncate with an ellipsis instead of widening the menu.
+        // The cap comes from the menu-width setting; CSS max-width plus
+        // Pango.EllipsizeMode.END is the constrained-width pattern.
         label.set_style(
             `max-width: ${this._menuWidth}px;`);
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
 
-        // Accessibility (audit D8): a task row is a checkable menu item, so
-        // tell assistive technology what it is and whether it is done.
-        // PopupBaseMenuItem defaults to Atk.Role.MENU_ITEM and has no
-        // checkAccessibleState() (that lives on PopupSwitchMenuItem), so the
-        // CHECKED state is maintained here — the row is rebuilt on every
-        // refresh, which keeps it in sync with `task.done`.
+        // A task row is a checkable menu item. PopupBaseMenuItem has no
+        // checkAccessibleState() — that lives on PopupSwitchMenuItem — so the
+        // CHECKED state is maintained here; the row is rebuilt on every
+        // refresh, which keeps it in sync with task.done.
         row.accessible_role = Atk.Role.CHECK_MENU_ITEM;
         row.label_actor = label;
         if (task.done) {
             row.add_accessible_state(Atk.StateType.CHECKED);
         }
-        // Fixed-width checkbox area at the START of every row:
-        // the check never appends to the text, so checking a task can
-        // never widen the menu). A 16x16 circle in BOTH states: empty
-        // outline when pending, filled with the CATEGORY COLOR and a
-        // white check when done (St.Bin centers the child; St.Widget has
-        // no layout, which is why the check drifted — user test).
+        // Fixed-width checkbox area at the start of every row, so checking a
+        // task can never widen the menu. A 16x16 circle in both states: an
+        // empty outline when pending, filled with the category colour and a
+        // check icon when done (St.Bin centres the child).
         const hexColor = Storage.categoryColorHex(categoryName, colors);
         const checkBox = new St.Bin({
             style_class: task.done ? 'todo-check todo-check-done' : 'todo-check',
@@ -110,37 +94,33 @@ export class RowFactory {
             }));
         }
         if (task.done && hexColor) {
-            // Category color fill (validated hex only — same guard as the
-            // inline header colors).
+            // Category colour fill (validated hex only).
             checkBox.set_style(
                 `background-color: ${hexColor}; border-color: transparent;`);
         }
         row.add_child(checkBox);
 
         if (task.done) {
-            // Fade completed rows via actor opacity (CSS opacity is not
-            // reliably honored by St.Label); 0.6 * 255.
+            // Fade completed rows via actor opacity; CSS opacity is not
+            // reliably honoured by St.Label. 0.6 * 255.
             label.opacity = 153;
         }
 
-        // Drag handle (Faz 9). It REPLACED the old ↑↓ buttons: they were ugly,
-        // and at the category edges they were dead, insensitive buttons. The
-        // keyboard path moved to Alt+↑/↓ on the focused row (see the bottom of
-        // this function). `list-drag-handle-symbolic` is Adwaita's grip
-        // (verified present in the local icon theme); Yaru's
-        // `drag-handle-symbolic` is NOT used — it does not exist in Adwaita.
+        // Drag handle. Adwaita's grip icon is used; Yaru's
+        // `drag-handle-symbolic` is not — it does not exist in Adwaita. The old
+        // ↑↓ buttons are gone: the keyboard path is Alt+↑/↓ on the focused row
+        // (see below).
         const handle = new St.Button({
             style_class: 'todo-icon-button todo-drag-handle button',
-            // Icon-only button: without this a screen reader announces
-            // "button" with no name (audit D8).
+            // Icon-only button: without an accessible name a screen reader
+            // announces just "button".
             accessible_name: 'Reorder task',
             child: new St.Icon({
                 icon_name: 'list-drag-handle-symbolic',
                 style_class: 'system-status-icon',
             }),
         });
-        // The Shell asks the HANDLE's delegate for the drag actor, so the
-        // clone (and the source it snaps back to) is wired here.
+        // The Shell asks the handle's delegate for the drag actor.
         handle._delegate = {
             getDragActor: () => new Clutter.Clone({source: row}),
             getDragActorSource: () => row,
@@ -152,8 +132,6 @@ export class RowFactory {
         // Delete button pinned to the right of the task text.
         const delBtn = new St.Button({
             style_class: 'todo-icon-button button',
-            // Icon-only button: without this a screen reader announces
-            // "button" with no name (audit D8).
             accessible_name: 'Delete task',
             child: new St.Icon({
                 icon_name: 'user-trash-symbolic',
@@ -164,13 +142,9 @@ export class RowFactory {
             this._onDelete(index);
         });
 
-        // Edit button next to delete: switches the row into an inline
-        // entry. St.Button consumes its press/release (st-button.c returns
-        // TRUE), so the row's activate (toggle) never fires.
+        // Edit button next to delete: switches the row into an inline entry.
         const editBtn = new St.Button({
             style_class: 'todo-icon-button button',
-            // Icon-only button: without this a screen reader announces
-            // "button" with no name (audit D8).
             accessible_name: 'Edit task',
             child: new St.Icon({
                 icon_name: 'document-edit-symbolic',
@@ -181,8 +155,8 @@ export class RowFactory {
             this._onEdit(index);
         });
 
-        // Let the label grow so the buttons pin to the far right.
-        // (Clutter uses x_expand, not GTK's hexpand.)
+        // Let the label grow so the buttons pin to the far right (Clutter
+        // uses x_expand, not GTK's hexpand).
         label.set_x_expand(true);
         label.set_x_align(Clutter.ActorAlign.START);
         editBtn.set_x_align(Clutter.ActorAlign.END);
@@ -198,15 +172,14 @@ export class RowFactory {
             this._onToggle(index);
         });
 
-        // Drop target. Returning true lets the Shell FINISH the drag properly
-        // (destroy the drag actor, pop the modal grab, emit drag-end); false
-        // makes it walk further up the tree and finally snap the row back.
-        // Locked: no cross-category moves — the extension rejects those.
+        // Drop target. Returning true lets the Shell finish the drag (destroy
+        // the drag actor, pop the modal grab, emit drag-end); false makes it
+        // walk up the tree and snap the row back. A drop on another category
+        // is rejected by the extension.
         row.acceptDrop = () => this._onDrop(index, categoryName) === true;
 
-        // Keyboard path (a11y): Alt+↑ / Alt+↓ on the focused row. The row's
-        // own key handler ignores any press with a modifier held
-        // (popupMenu.js vfunc_key_press_event), so the event reaches us.
+        // Keyboard path: Alt+↑/↓ on the focused row. The row's own key handler
+        // ignores any press with a modifier held, so the event reaches us.
         row.connect('key-press-event', (actor, event) => {
             if ((event.get_state() & Clutter.ModifierType.MOD1_MASK) === 0) {
                 return Clutter.EVENT_PROPAGATE;
@@ -223,10 +196,8 @@ export class RowFactory {
     }
 
     /**
-     * Constrain an actor's width to the GSettings menu-width cap
-     * (fixed default + user-adjustable). Used by the inline add/edit/
-     * new-category entries so a long text being typed cannot widen the
-     * menu (user test: 'not ekleme sırasında ... büyüyor').
+     * Constrain an actor to the menu-width cap, so a long text being typed
+     * cannot widen the menu.
      */
     capWidth(actor) {
         capWidth(actor, this._menuWidth);
@@ -234,17 +205,16 @@ export class RowFactory {
 
     /**
      * Build the inline edit row: an entry prefilled with the current text.
-     * Enter commits, Escape cancels. Note: Escape is actually intercepted by
-     * the shell's MenuManager in the capture phase (popupMenu.js
-     * _onCapturedEvent), so it closes the menu; the edit is then discarded by
-     * the open-state-changed invariant instead.
+     * Enter commits. Escape is intercepted by the Shell's menu manager in the
+     * capture phase, which closes the menu; the edit is then discarded by the
+     * open-state-changed invariant.
      *
      */
     makeEditRow(task) {
         const row = new PopupMenu.PopupBaseMenuItem({activate: false, can_focus: false});
         const entry = new St.Entry({style_class: 'todo-edit-entry'});
-        // Prefill with `raw` (tags inline), NOT the tag-stripped display text:
-        // committing the edit rewrites the whole line, and raw keeps the tags.
+        // Prefill with `raw`, tags included: committing rewrites the whole
+        // line, and raw is what keeps the tags.
         entry.set_text(task.raw);
         entry.set_x_expand(true);
         this.capWidth(entry);
@@ -262,7 +232,7 @@ export class RowFactory {
 
     /**
      * Build the inline add row for a category: an empty entry with a
-     * per-category hint. Enter commits via Storage.addTask(text, category).
+     * per-category hint. Enter commits.
      *
      */
     makeAddRow(categoryName) {

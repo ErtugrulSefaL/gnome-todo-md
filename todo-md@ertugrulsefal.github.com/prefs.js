@@ -9,15 +9,14 @@ import {ExtensionPreferences}
 
 import * as Storage from './storage.js';
 
-// GNOME HIG palette (verified visually round swatches in the palette popover).
+// GNOME palette, matching the swatches in the preferences popover.
 const PALETTE = Storage.CATEGORY_PALETTE;
 
 /**
- * Preferences for the Todo MD extension (GTK4 + libadwaita).
- *
- * Pattern verified against gjs.guide `development/preferences.md` (GNOME 45+):
- * `ExtensionPreferences.fillPreferencesWindow(window)` + `this.getSettings()`
- * (reads metadata.json settings-schema, loads schemas/ from the extension dir).
+ * Preferences for the Todo MD extension (GTK4 + libadwaita). Uses
+ * `ExtensionPreferences.fillPreferencesWindow(window)` and
+ * `this.getSettings()`, which reads `settings-schema` from metadata.json and
+ * loads `schemas/` from the extension directory.
  */
 export default class TodoMDPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
@@ -41,9 +40,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         });
         page.add(group);
 
-        // EntryRow shows `title` as its placeholder; the content lives in
-        // the Gtk.Editable `text` property (libadwaita docs: EntryRow has
-        // "only minimal API and should be used with the Gtk.Editable API").
+        // EntryRow shows `title` as its placeholder; the content lives in the
+        // Gtk.Editable `text` property.
         const row = new Adw.EntryRow({
             title: 'Todo file path',
         });
@@ -51,8 +49,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         group.add(row);
 
-        // Suffix button: reset the key to its schema default ('' = default
-        // ~/todo.md); the bind syncs the new value back into the row.
+        // Suffix button: reset the key to its schema default ('' means the
+        // default ~/todo.md); the bind syncs it back into the row.
         const resetButton = new Gtk.Button({
             icon_name: 'view-refresh-symbolic',
             valign: Gtk.Align.CENTER,
@@ -78,9 +76,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         group.add(heightRow);
 
-        // Fixed menu content width (single adjustable value, no min/max
-        // split). Long task texts truncate with an
-        // ellipsis at this width; the tab bar scrolls horizontally.
+        // Fixed menu content width: long task texts truncate at this width and
+        // the tab bar scrolls horizontally.
         const widthRow = new Adw.SpinRow({
             title: 'Menu width',
             subtitle: 'Fixed menu width in pixels (default 500)',
@@ -120,17 +117,16 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             categories.push(Storage.FALLBACK_CATEGORY);
         }
 
-        // Swatch styling for the quick-palette buttons (load_from_string is
-        // GTK 4.12+; every supported shell is well past that).
+        // Swatch styling for the quick-palette buttons (load_from_string needs
+        // GTK 4.12, which every supported shell is well past).
         const provider = new Gtk.CssProvider();
         provider.load_from_string(
             PALETTE.map((hex, i) => `.todo-swatch-${i} { background: ${hex}; }`)
                 .join(' ')
             + ' .todo-swatch { min-width: 20px; min-height: 20px; '
             + 'border-radius: 10px; padding: 0; }');
-        // GJS exposes this as a CLASS-STATIC method: Gtk.StyleContext.
-        // add_provider_for_display — the bare C name
-        // Gtk.style_context_add_provider_for_display is undefined at runtime.
+        // GJS exposes this as a class-static: Gtk.StyleContext.
+        // add_provider_for_display. The bare C name is undefined at runtime.
         Gtk.StyleContext.add_provider_for_display(
             Gdk.Display.get_default(), provider,
             Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
@@ -143,8 +139,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
     }
 
     _addRowControls(settings, row, name) {
-        // Free color picker (Gtk.ColorDialogButton, GTK 4.10+, officially
-        // "suitable ... for selecting a color in a preference dialog").
+        // Free colour picker (Gtk.ColorDialogButton, GTK 4.10+).
         const dialogButton = new Gtk.ColorDialogButton({
             dialog: new Gtk.ColorDialog(),
         });
@@ -156,9 +151,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         }
         let syncingRgba = false;
         dialogButton.connect('notify::rgba', () => {
-            // Programmatic set_rgba below also fires this handler; guard so
-            // the palette write does not round-trip through the dialog's
-            // handler and clobber itself.
+            // set_rgba below fires this handler too; the guard keeps the
+            // palette write from clobbering itself.
             if (syncingRgba) {
                 return;
             }
@@ -173,9 +167,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         });
         row.add_suffix(dialogButton);
 
-        // Quick palette behind a menu button (Q2: dialog + palette together).
-        // Both pickers drive the same settings key, so a palette click ALSO
-        // updates the dialog button's rgba (keeps the two widgets in sync).
+        // Quick palette behind a menu button. Both pickers drive the same
+        // settings key, so a palette click also updates the dialog button.
         const swatches = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
             spacing: 4,
@@ -206,8 +199,8 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             const colors = this._readColors(settings);
             delete colors[name];
             syncingRgba = true;
-            // No transparent-rgba setter needed: the dialog button keeps its
-            // last color, which is harmless (None means "no map entry").
+            // The dialog button keeps its last colour when the map entry is
+            // removed; harmless.
             syncingRgba = false;
             this._writeColors(settings, colors);
             popover.popdown();

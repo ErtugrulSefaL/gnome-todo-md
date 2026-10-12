@@ -1,11 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  GSettings schema for todo-md. The schema is identical on every supported
-  shell version (no GNOME version has changed these key types).
+  GSettings schema for todo-md. Identical on every supported shell version.
 
-  The default for todo-file-path is the empty string, which the extension
-  resolves to ~/todo.md at runtime: schema defaults must be static literals,
-  so $HOME cannot be expanded here.
+  todo-file-path defaults to the empty string, which the extension resolves to
+  ~/todo.md at runtime: schema defaults must be static literals, so $HOME
+  cannot be expanded here.
 -->
 <schemalist>
   <schema id="org.gnome.shell.extensions.todo-md"

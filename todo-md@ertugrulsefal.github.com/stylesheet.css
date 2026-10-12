@@ -1,6 +1,5 @@
-/* Todo extension: small icon buttons (edit + delete) inside task rows.
- * Symbolic glyphs render oversized inside a menu row; this keeps them small
- * and aligned with the row text. */
+/* Small icon buttons (edit, delete, drag handle) inside task rows: symbolic
+ * glyphs render oversized in a menu row. */
 
 .todo-icon-button {
     border-radius: 3px;
@@ -18,11 +17,9 @@
     text-decoration: line-through;
 }
 
-/* Faz 6.6: fixed-width checkbox area at the start of every task row.
- * A 16x16 circle in BOTH states keeps every row layout identical —
- * checking a task can never widen the menu. Pending: empty circle
- * (theme-foreground outline); done: filled with the CATEGORY COLOR
- * (inline background-color) + a white check icon, centered via St.Bin. */
+/* Fixed-width checkbox area at the start of every task row, so checking a task
+ * can never widen the menu. Pending: an empty circle. Done: filled with the
+ * category colour (inline) and a check icon, centred via St.Bin. */
 .todo-check {
     min-width: 16px;
     max-width: 16px;
@@ -30,8 +27,7 @@
     max-height: 16px;
     border: 1.5px solid;
     /* Fallback only — the real colour follows the shell's colour scheme (see
-     * the theme-aware block at the end of this file). A fixed white made the
-     * ring invisible on the light shell theme. */
+     * the theme-aware block at the end of this file). */
     border-color: rgba(128, 128, 128, 0.55);
     border-radius: 999px;
     margin-right: 6px;
@@ -53,8 +49,8 @@
     padding: 4px 8px 2px 8px;
 }
 
-/* Faz 6: category tabs. The active tab gets St's :checked pseudo-class
- * (St.Button toggle_mode + set_checked). */
+/* Category tabs. The active tab gets St's :checked pseudo-class (St.Button
+ * toggle_mode + set_checked). */
 .todo-tab-bar {
     spacing: 6px;
     padding: 4px 0;
@@ -69,9 +65,9 @@
 .todo-tab:checked {
     font-weight: bold;
 }
-/* Faz 7: category action panel entries (a PopupSubMenu inside the menu).
- * Delete is the destructive entry; its first click turns it into the
- * confirmation, which is why the armed state is bold. */
+/* Category action panel entries (a PopupSubMenu inside the menu). Delete is the
+ * destructive entry; its first click turns it into the confirmation, which is
+ * why the armed state is bold. */
 .todo-action-danger {
     color: #e01b24;
 }
@@ -80,10 +76,10 @@
     font-weight: bold;
 }
 
-/* Faz 8: the in-menu colour picker row, inside the category action panel.
- * The swatch COLOUR is set inline from Storage.CATEGORY_PALETTE; only the
- * shape and the selected ring live here. The prefs window has its own GTK
- * copy of this rule — different process, different stylesheet. */
+/* The in-menu colour picker row, inside the category action panel. The swatch
+ * colour is set inline from Storage.CATEGORY_PALETTE; only the shape and the
+ * selected ring live here. The preferences window has its own GTK copy of this
+ * rule — different process, different stylesheet. */
 .todo-color-row {
     spacing: 2px;
     padding: 4px 2px;
@@ -117,19 +113,12 @@
 
 /* Theme-aware colours.
  *
- * St's stylesheet grammar has no `currentColor` (verified: the token is absent
- * from libst), so CSS cannot follow the theme on its own. extension.js reads
- * St.Settings.color_scheme and tags the menu box with .todo-dark / .todo-light;
- * everything theme-dependent is scoped under that tag.
+ * St's stylesheet grammar has no `currentColor`, so CSS cannot follow the theme
+ * on its own. extension.js reads St.Settings.color_scheme and tags the menu box
+ * with .todo-dark / .todo-light; everything theme-dependent is scoped under
+ * that tag.
  *
- * Two problems this fixes, both only visible on the LIGHT shell theme:
- *  - the unchecked checkbox ring and the swatch rings were hard-coded white
- *    and vanished on a light menu;
- *  - the scrollbar handles are drawn by the theme at an effective ~2px
- *    (#bdbdbd inside an 8px bar with a 3px transparent border), which is not
- *    perceivable on a light menu at all.
- *
- * The scrollbar rules are scoped to OUR scroll views only, so the shell's own
+ * The scrollbar rules are scoped to our own scroll views, so the shell's own
  * scrollbars keep the theme's look.
  */
 .todo-light .todo-check {
@@ -170,10 +159,9 @@
     background-color: rgba(255, 255, 255, 0.32);
 }
 
-/* Faz 9: the drag-and-drop insertion line. It lives on Main.uiGroup — NOT
- * inside menu.box — so it never joins the menu's layout. For the same reason
- * it carries the colour-scheme class DIRECTLY (.todo-light.todo-drop-line)
- * instead of inheriting it as a descendant of the tagged menu box. */
+/* The drag-and-drop insertion line. It lives on Main.uiGroup, not inside
+ * menu.box, so it never joins the menu's layout; for the same reason it carries
+ * the colour-scheme class directly (.todo-light.todo-drop-line). */
 .todo-drop-line {
     height: 3px;
     border-radius: 2px;
