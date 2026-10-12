@@ -896,6 +896,54 @@ function testStaticChecks() {
         'the colour map is the source of truth for colours (L-018 covers '
         + 'file-backed state only)');
 
+    // --- Theme-aware colours (B2/B3) ---------------------------------------
+    // St's stylesheet grammar has no `currentColor` (verified against libst),
+    // so a colour that must follow the theme is chosen in JS from
+    // St.Settings.color_scheme and applied through a class on the menu box.
+    const schemeBody = handlerBody('_applyColorScheme() {');
+
+    record('static: the menu box is tagged from St.Settings.color_scheme',
+        schemeBody !== null
+        && /St\.Settings\.get\(\)\.color_scheme/.test(schemeBody)
+        && /St\.SystemColorScheme\.PREFER_DARK/.test(schemeBody)
+        && /add_style_class_name\(dark \? 'todo-dark' : 'todo-light'\)/.test(schemeBody)
+        && /this\._indicator\.menu\.box/.test(schemeBody),
+        'CSS cannot read the theme, so the scheme has to be read in JS');
+
+    record('static: the colour-scheme handler is disconnected in disable()',
+        /'notify::color-scheme'/.test(ui)
+        && /St\.Settings\.get\(\)\.disconnect\(this\._colorSchemeSignal\)/.test(ui),
+        'St.Settings is a shell singleton — a handler left behind calls back '
+        + 'into a torn-down menu');
+
+    // Extract the UNSCOPED base rules and check THOSE: white is only allowed
+    // inside a .todo-dark block. A file-wide regex also matched the .todo-dark
+    // rule, so a mutation that put white back into the base rule slipped past
+    // (mutation test, 2026-10-12).
+    const baseRule = selector =>
+        (css.match(new RegExp(`^${selector}\\s*\\{[^}]*\\}`, 'm')) || [''])[0];
+    const WHITE = /(#fff{1,2}\b|rgba?\(\s*255\s*,\s*255\s*,\s*255|:\s*white\b)/i;
+    record('static: no theme-dependent ring is hard-coded white any more',
+        baseRule('\\.todo-check') !== ''
+        && !WHITE.test(baseRule('\\.todo-check'))
+        && !WHITE.test(baseRule('\\.todo-swatch:checked'))
+        && !WHITE.test(baseRule('\\.todo-swatch-none')),
+        'the light shell theme made the white rings invisible (B2) — white may '
+        + 'only appear inside the .todo-dark blocks');
+
+    record('static: every StScrollBar rule is scoped to our own scroll views',
+        /StScrollBar/.test(css) && !/^[ \t]*StScrollBar/m.test(css),
+        'a bare StScrollBar rule would restyle every scrollbar in the shell (B3)');
+
+    record('static: both schemes define every theme-dependent colour',
+        ['.todo-light .todo-check {', '.todo-dark .todo-check {',
+            '.todo-light .todo-swatch:checked {', '.todo-dark .todo-swatch:checked {',
+            '.todo-light .todo-swatch-none {', '.todo-dark .todo-swatch-none {',
+        ].every(selector => css.includes(selector))
+        && /\.todo-light \.todo-scroll StScrollBar/.test(css)
+        && /\.todo-dark \.todo-scroll StScrollBar/.test(css),
+        'a scheme falling back to the mid-grey fallback is only half a fix');
+
     record('static: the picker rings the colour the category actually has',
         /_markSelectedSwatch\(\) \{[\s\S]{0,400}?Storage\.categoryColorHex\(this\._actionsCategory, colors\)/.test(ui)
         && /button\.set_checked\(hex === current\)/.test(ui),

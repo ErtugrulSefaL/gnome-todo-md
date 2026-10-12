@@ -129,6 +129,12 @@ chk('St.Button.toggle_mode/set_checked/checked/button_mask', () =>
 chk('St.Entry.clutter_text', () => has(St.Entry.prototype, 'clutter_text'));
 chk('St.Bin.child', () => has(St.Bin.prototype, 'child'));
 chk('St.Icon.icon_name', () => has(St.Icon.prototype, 'icon_name'));
+// The shell's colour scheme drives every theme-dependent colour we set
+// (stylesheet.css scopes them under .todo-dark / .todo-light).
+chk('St.Settings.color_scheme', () => has(St.Settings.prototype, 'color_scheme'));
+chk('St.SystemColorScheme.PREFER_DARK', () =>
+    St.SystemColorScheme !== undefined
+    && St.SystemColorScheme.PREFER_DARK !== undefined);
 
 // Clutter: enums, keys, events, actor a11y + opacity
 chk('Clutter.ActorAlign.START/END/CENTER', () =>

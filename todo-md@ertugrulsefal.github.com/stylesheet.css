@@ -29,7 +29,10 @@
     min-height: 16px;
     max-height: 16px;
     border: 1.5px solid;
-    border-color: rgba(255, 255, 255, 0.5);
+    /* Fallback only — the real colour follows the shell's colour scheme (see
+     * the theme-aware block at the end of this file). A fixed white made the
+     * ring invisible on the light shell theme. */
+    border-color: rgba(128, 128, 128, 0.55);
     border-radius: 999px;
     margin-right: 6px;
 }
@@ -99,13 +102,70 @@
 }
 
 .todo-swatch:checked {
-    border-color: #ffffff;
+    /* Fallback only — see the theme-aware block. */
+    border-color: rgba(128, 128, 128, 0.8);
 }
 
 .todo-swatch-none {
-    background-color: rgba(255, 255, 255, 0.12);
+    /* Fallback only — see the theme-aware block. */
+    background-color: rgba(128, 128, 128, 0.2);
 }
 
 .todo-swatch StIcon {
     icon-size: 12px;
+}
+
+/* Theme-aware colours.
+ *
+ * St's stylesheet grammar has no `currentColor` (verified: the token is absent
+ * from libst), so CSS cannot follow the theme on its own. extension.js reads
+ * St.Settings.color_scheme and tags the menu box with .todo-dark / .todo-light;
+ * everything theme-dependent is scoped under that tag.
+ *
+ * Two problems this fixes, both only visible on the LIGHT shell theme:
+ *  - the unchecked checkbox ring and the swatch rings were hard-coded white
+ *    and vanished on a light menu;
+ *  - the scrollbar handles are drawn by the theme at an effective ~2px
+ *    (#bdbdbd inside an 8px bar with a 3px transparent border), which is not
+ *    perceivable on a light menu at all.
+ *
+ * The scrollbar rules are scoped to OUR scroll views only, so the shell's own
+ * scrollbars keep the theme's look.
+ */
+.todo-light .todo-check {
+    border-color: rgba(0, 0, 0, 0.35);
+}
+
+.todo-dark .todo-check {
+    border-color: rgba(255, 255, 255, 0.45);
+}
+
+.todo-light .todo-swatch:checked {
+    border-color: rgba(0, 0, 0, 0.7);
+}
+
+.todo-dark .todo-swatch:checked {
+    border-color: #ffffff;
+}
+
+.todo-light .todo-swatch-none {
+    background-color: rgba(0, 0, 0, 0.10);
+}
+
+.todo-dark .todo-swatch-none {
+    background-color: rgba(255, 255, 255, 0.12);
+}
+
+.todo-light .todo-scroll StScrollBar > .vhandle,
+.todo-light .todo-scroll StScrollBar #vhandle,
+.todo-light .todo-tab-bar StScrollBar > .hhandle,
+.todo-light .todo-tab-bar StScrollBar #hhandle {
+    background-color: rgba(0, 0, 0, 0.32);
+}
+
+.todo-dark .todo-scroll StScrollBar > .vhandle,
+.todo-dark .todo-scroll StScrollBar #vhandle,
+.todo-dark .todo-tab-bar StScrollBar > .hhandle,
+.todo-dark .todo-tab-bar StScrollBar #hhandle {
+    background-color: rgba(255, 255, 255, 0.32);
 }

@@ -116,6 +116,12 @@ export default class TodoExtension extends Extension {
         // Add the indicator to the panel.
         Main.panel.addToStatusArea(this.uuid, this._indicator);
 
+        // Theme-dependent colours (checkbox ring, swatch ring, scrollbars)
+        // follow the shell's colour scheme; the shell announces changes.
+        this._applyColorScheme();
+        this._colorSchemeSignal = St.Settings.get().connect(
+            'notify::color-scheme', () => this._applyColorScheme());
+
         // Pre-fill the menu so it is not empty on first open (an empty popup
         // menu will not be shown by GNOME Shell).
         this._refreshTodoMenu();
@@ -123,6 +129,31 @@ export default class TodoExtension extends Extension {
         // Watch ~/todo.md so externally-added tasks appear live, without
         // needing a Shell reload.
         this._watchTodoFile();
+    }
+
+    /**
+     * Follow the shell's colour scheme.
+     *
+     * The extension's own CSS cannot read the theme's ink: St's stylesheet
+     * grammar has no `currentColor` (verified against libst — the token does
+     * not exist), so hard-coded colours end up invisible in one of the two
+     * themes. That is exactly what happened: white rings on the light shell
+     * theme, plus scrollbar handles that the theme itself draws at an effective
+     * ~2px (#bdbdbd inside an 8px bar with a 3px transparent border).
+     *
+     * The scheme is read here and the menu box is tagged; stylesheet.css scopes
+     * every theme-dependent colour under `.todo-dark` / `.todo-light`.
+     */
+    _applyColorScheme() {
+        if (!this._indicator) {
+            return;
+        }
+        const box = this._indicator.menu.box;
+        const dark = St.Settings.get().color_scheme
+            === St.SystemColorScheme.PREFER_DARK;
+        box.remove_style_class_name('todo-light');
+        box.remove_style_class_name('todo-dark');
+        box.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
     }
 
     disable() {
@@ -149,6 +180,12 @@ export default class TodoExtension extends Extension {
         if (this._widthSignal) {
             this._settings.disconnect(this._widthSignal);
             this._widthSignal = null;
+        }
+        // St.Settings is a shell singleton, not ours: our handler must go with
+        // the extension, or a disabled extension keeps being called back.
+        if (this._colorSchemeSignal) {
+            St.Settings.get().disconnect(this._colorSchemeSignal);
+            this._colorSchemeSignal = null;
         }
         // The panel's actor lives inside the content section, but the
         // PopupSubMenu object itself owns shell-side state (a
