@@ -1442,7 +1442,6 @@ function testCategoryDeleteRename() {
         Storage.removeCategoryColor(null, 'A') === null
         && Storage.removeCategoryColor(undefined, 'A') === undefined, '');
 
-
     // A category literally named '__proto__' is an edge the settings layer
     // cannot represent: GJS packs the key into a{ss} but deep_unpack drops it,
     // so no colour can ever be stored/read for it. Both facts are pinned here
@@ -1508,32 +1507,6 @@ function testPreambleFidelity() {
         Storage.addTaskTag(PREAMBLE, 1, 'due', 'mon')
             === '# T\n- [ ] a @due(mon)\n## General\n- [ ] b\n',
         JSON.stringify(Storage.addTaskTag(PREAMBLE, 1, 'due', 'mon')));
-
-    // D4 — moveTask could not see those tasks at all.
-    record('D4: tasks above the heading reorder among themselves',
-        Storage.moveTask('# T\n- [ ] a\n- [ ] z\n## General\n- [ ] b\n', 1, 'down')
-            === '# T\n- [ ] z\n- [ ] a\n## General\n- [ ] b\n',
-        JSON.stringify(Storage.moveTask(
-            '# T\n- [ ] a\n- [ ] z\n## General\n- [ ] b\n', 1, 'down')));
-
-    record('D4: first task up is still a no-op',
-        Storage.moveTask(PREAMBLE, 1, 'up') === PREAMBLE, '');
-
-    // Decision A: crossing the boundary is allowed and the boundary follows.
-    const crossed = Storage.moveTask(PREAMBLE, 1, 'down');
-    record('D4: moving across the heading moves the boundary with it',
-        crossed === '# T\n## General\n- [ ] b\n- [ ] a\n',
-        JSON.stringify(crossed));
-
-    // Once the boundary reaches 0 the heading is emitted first and stays
-    // there — moving a task back up restores the order, not the old layout.
-    record('D4: crossing back restores the original task order',
-        Storage.moveTask(crossed, 3, 'up') === '# T\n## General\n- [ ] a\n- [ ] b\n',
-        JSON.stringify(Storage.moveTask(crossed, 3, 'up')));
-
-    record('D4: a crossed file is stable under repeated writes',
-        Storage.serializeDocument(Storage.parseDocument(crossed)) === crossed,
-        JSON.stringify(crossed));
 
     // D2 — the '# ' line used to jump to the top of the file.
     const midTitle = '## A\n\n# T\n\n- [ ] x\n';
@@ -1627,42 +1600,71 @@ function testPreambleBlanks() {
         JSON.stringify(ob.categories.map(c => c.name)));
 }
 
-// ---- moveTask: within-category reordering (Faz 2 step 6) -----------------
+// ---- moveTaskTo: drop-anywhere reordering (Faz 9 step 1) ------------------
 
-function testMoveTask() {
-    // /goal: 5-task category — moving the 3rd task up twice brings it to #1.
-    const FIVE = '# T\n## C\n- [ ] one\n- [ ] two\n- [ ] three\n- [ ] four\n- [ ] five\n';
-    const once = Storage.moveTask(FIVE, 4, 'up');
-    record('moveTask: 3rd task up once swaps with the 2nd',
-        once === '# T\n## C\n- [ ] one\n- [ ] three\n- [ ] two\n- [ ] four\n- [ ] five\n',
-        JSON.stringify(once));
-    const twice = Storage.moveTask(once, 3, 'up');
-    record('moveTask: up again → the 3rd task is now first',
-        twice === '# T\n## C\n- [ ] three\n- [ ] one\n- [ ] two\n- [ ] four\n- [ ] five\n',
-        JSON.stringify(twice));
+function testMoveTaskTo() {
+    const FOUR = '# T\n## C\n- [ ] one\n- [ ] two\n- [ ] three\n- [ ] four\n';
 
-    record('moveTask: down swaps with the next task',
-        Storage.moveTask(FIVE, 2, 'down')
-            === '# T\n## C\n- [ ] two\n- [ ] one\n- [ ] three\n- [ ] four\n- [ ] five\n', '');
+    // The task ends up at the TARGET task's position in the task sequence.
+    record('moveTaskTo: first task down onto the 3rd',
+        Storage.moveTaskTo(FOUR, 2, 4)
+            === '# T\n## C\n- [ ] two\n- [ ] three\n- [ ] one\n- [ ] four\n',
+        JSON.stringify(Storage.moveTaskTo(FOUR, 2, 4)));
 
-    record('moveTask: first task up is a no-op',
-        Storage.moveTask(FIVE, 2, 'up') === FIVE, '');
-    record('moveTask: last task down is a no-op',
-        Storage.moveTask(FIVE, 6, 'down') === FIVE, '');
+    record('moveTaskTo: last task up onto the 2nd',
+        Storage.moveTaskTo(FOUR, 5, 3)
+            === '# T\n## C\n- [ ] one\n- [ ] four\n- [ ] two\n- [ ] three\n',
+        JSON.stringify(Storage.moveTaskTo(FOUR, 5, 3)));
 
-    // Movement stays within the category (cross-category is impossible).
-    const TWO = '# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b1\n- [ ] b2\n';
-    record('moveTask: never crosses category boundaries',
-        Storage.moveTask(TWO, 3, 'down') === TWO, '');
+    record('moveTaskTo: first task onto the last lands last',
+        Storage.moveTaskTo(FOUR, 2, 5)
+            === '# T\n## C\n- [ ] two\n- [ ] three\n- [ ] four\n- [ ] one\n',
+        JSON.stringify(Storage.moveTaskTo(FOUR, 2, 5)));
 
-    // Extras keep their slots; tasks swap around them.
-    const EXTRA = '# T\n## C\n- [ ] a\n\nnote line\n- [ ] b\n';
-    record('moveTask: tasks swap around interleaved extras',
-        Storage.moveTask(EXTRA, 2, 'down') === '# T\n## C\n- [ ] b\n\nnote line\n- [ ] a\n', '');
+    record('moveTaskTo: last task onto the first lands first',
+        Storage.moveTaskTo(FOUR, 5, 2)
+            === '# T\n## C\n- [ ] four\n- [ ] one\n- [ ] two\n- [ ] three\n',
+        JSON.stringify(Storage.moveTaskTo(FOUR, 5, 2)));
 
-    // Moved output is canonical: parse∘serialize round-trips byte-identical.
-    record('moveTask: output round-trips byte-identical',
-        Storage.serializeDocument(Storage.parseDocument(twice)) === twice, '');
+    // Rejected paths are byte-identical no-ops.
+    record('moveTaskTo: same index is a no-op',
+        Storage.moveTaskTo(FOUR, 2, 2) === FOUR, '');
+    record('moveTaskTo: an index no task owns is a no-op',
+        Storage.moveTaskTo(FOUR, 2, 99) === FOUR, '');
+    record('moveTaskTo: two indices in different categories is a no-op',
+        Storage.moveTaskTo('# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b1\n- [ ] b2\n',
+            2, 5) === '# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b1\n- [ ] b2\n', '');
+
+    // Extras keep their slots; only tasks move.
+    const EXTRA = '# T\n## C\n- [ ] a\n\nnote line\n- [ ] b\n- [ ] c\n';
+    record('moveTaskTo: interleaved extras keep their slots',
+        Storage.moveTaskTo(EXTRA, 2, 6)
+            === '# T\n## C\n\nnote line\n- [ ] b\n- [ ] c\n- [ ] a\n',
+        JSON.stringify(Storage.moveTaskTo(EXTRA, 2, 6)));
+
+    // Crossing the implicit '## General' heading boundary: the heading is
+    // emitted first once nothing is left above it (same rule as moveTask).
+    record('moveTaskTo: crossing the heading boundary downward',
+        Storage.moveTaskTo('# T\n- [ ] a\n## General\n- [ ] b\n', 1, 3)
+            === '# T\n## General\n- [ ] b\n- [ ] a\n',
+        JSON.stringify(Storage.moveTaskTo('# T\n- [ ] a\n## General\n- [ ] b\n', 1, 3)));
+
+    record('moveTaskTo: crossing the heading boundary upward',
+        Storage.moveTaskTo('# T\n## General\n- [ ] b\n- [ ] a\n', 3, 2)
+            === '# T\n## General\n- [ ] a\n- [ ] b\n',
+        JSON.stringify(Storage.moveTaskTo('# T\n## General\n- [ ] b\n- [ ] a\n', 3, 2)));
+
+    // Blank layout lines between the title and the first heading survive.
+    record('moveTaskTo: the preamble stays put',
+        Storage.moveTaskTo('# T\n\n## W\n- [ ] a\n- [ ] b\n', 3, 4)
+            === '# T\n\n## W\n- [ ] b\n- [ ] a\n',
+        JSON.stringify(Storage.moveTaskTo('# T\n\n## W\n- [ ] a\n- [ ] b\n', 3, 4)));
+
+    // Every moved output is canonical.
+    const moved = Storage.moveTaskTo(FOUR, 2, 5);
+    record('moveTaskTo: output round-trips byte-identical',
+        Storage.serializeDocument(Storage.parseDocument(moved)) === moved,
+        JSON.stringify(moved));
 }
 
 // ---- extensibility skeleton (Faz 2 step 7: no UI yet) --------------------
@@ -2019,7 +2021,7 @@ testDeleteTask();
 testEditTask();
 testAddTask();
 testAddTaskCategorized();
-testMoveTask();
+testMoveTaskTo();
 testExtensibilitySkeleton();
 testWriteRead();
 restoreOriginal();

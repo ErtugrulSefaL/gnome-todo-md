@@ -249,6 +249,60 @@ Consequence: the action panel is an **inline** expander inside the menu
 - Icon `action-unavailable-symbolic` verified present in the local Adwaita icon
   theme (`/usr/share/icons/Adwaita/symbolic/actions/`), not guessed.
 
+## Faz 9 (2026-10-12) — drag-and-drop reordering
+
+**Ground truth: the INSTALLED Shell (50.1)** — `tools/shell-api.sh extract
+/org/gnome/shell/ui/dnd.js`, `popupMenu.js`, `main.js`; `St-18` / `Clutter-18`
+typelibs. Cross-checked against the raw sources of tags 46.0 / 47.0 / 48.0 /
+49.0 / 50.1 (gnome-shell and mutter on gitlab.gnome.org).
+
+### APIs used (verified)
+
+| API | Comes from | Why it is safe on 46–50 |
+|---|---|---|
+| `DND.makeDraggable(actor)` | `resource:///org/gnome/shell/ui/dnd.js` | The public entry point is unchanged across the five tags. The module's INTERNALS are not: 46–48 start a drag with `button-press-event` + `global.stage.grab()`, 49+ with `St.DndStartGesture` (diffed tag by tag). Using the module keeps that difference inside the Shell. |
+| `DND.addDragMonitor` / `removeDragMonitor` | same | present in all five tags |
+| `DND.DragMotionResult.MOVE_DROP` / `NO_DROP`, `DND.DragDropResult.CONTINUE` | same | present in all five tags |
+| `actor._delegate.getDragActor` / `getDragActorSource` | read by `_gestureRecognized` | a `Clutter.Clone` of the row keeps the source row in place |
+| `row.acceptDrop()` (a `_delegate` method) | `popupMenu.js` sets `this._delegate = this` on `PopupBaseMenuItem` (46.0 and 50.1 alike) | the Shell walks up from the picked actor looking for `_delegate.acceptDrop` |
+| `Main.uiGroup.add_child` | `main.js` | where the Shell itself puts the drag actor and the grab handler actor |
+| `Clutter.Clone`, `Clutter.ButtonState`, `Clutter.InputDeviceType.POINTER_DEVICE`, `Clutter.VirtualInputDevice.notify_absolute_motion/notify_button` | `Clutter-18.typelib` | spike harness ONLY (not used by the extension) |
+
+### Measured behaviour (spike, 2026-10-12)
+
+An isolated **headless** GNOME Shell 50.1, driven by a **virtual pointer**, ran
+the whole drag programmatically (live session untouched; the spike was removed
+afterwards):
+
+- the drag starts from an `St.Button` handle inside the OPEN popup menu, and the
+  menu stays open and usable during and after the drag — no crash;
+- `dragMonitor.dragDrop` must return **CONTINUE**. `SUCCESS`/`FAILURE` makes
+  `_dragActorDropped` return early: the drag actor is never destroyed, the modal
+  grab is never popped and **`drag-end` never fires**;
+- the drop belongs on the row's `acceptDrop`; returning `true` there is what runs
+  the Shell's own cleanup (drag actor destroyed, modal popped, `drag-end` emitted);
+- a plain click on the handle must not reach the row's `activate` (it would
+  toggle the task, and on a top-level menu item it also closes the menu).
+  `St.Button` consumes press/release (`st-button.c`); a plain `St.Icon` does not —
+  both measured;
+- adding an input device while the menu is open **revokes the menu's grab and
+  closes it**; the spike creates its pointer before opening the menu;
+- `Main.pushModal` is a stage grab, and Mutter's Clutter keeps a **grab stack**
+  (`clutter-stage.c`: `grab->prev` / `grab->next`, `topmost_grab`), so the menu's
+  grab is restored when the drag's modal is popped;
+- the insertion line is drawn on `Main.uiGroup` — a `PopupMenuSection` child would
+  take part in the menu's layout.
+
+### Not used on purpose
+
+- **`St.DndStartGesture` directly** — it does not exist before GNOME 49 (the
+  `st14` mirror has no such entry); `makeDraggable` covers both paths.
+- **Omitting `getDragActor` (dragging the row itself)** — `_onAnimationComplete`
+  re-adds the actor with `add_child`, i.e. at the END of its parent, so a
+  cancelled drag would leave the row at the bottom of the section.
+- **A floating `PopupMenu` for the drop feedback** — a second menu fights the
+  open one (the manager closes the previous menu), which Faz 7 already learned.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - **FROZEN (2026-10-11):** the mirror can no longer be refreshed. gjs-docs.gnome.org

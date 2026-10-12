@@ -34,7 +34,8 @@ it simple: one markdown file, live panel menu, nothing else.
   tasks are grouped under them — every category header (including empty
   ones) has a **`+` button** that opens an inline entry to add a task right
   there; an empty file starts with an implicit `General` section
-- **Reordering**: move tasks up/down within their category
+- **Reordering**: drag the grip handle at the end of a row to move a task
+  within its category, or focus a row and press Alt+Up / Alt+Down
 - **Category colors**: assign a color to any category header from the
   preferences window (GNOME palette quick-picks or a free color dialog);
   changes apply to the panel menu instantly and dead entries are pruned

@@ -4,6 +4,7 @@ import Pango from 'gi://Pango';
 import Atk from 'gi://Atk';
 
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 import * as Storage from './storage.js';
 
@@ -33,25 +34,39 @@ export function capWidth(actor, menuWidth) {
  * would scatter the most heavily guarded code in the project.
  */
 export class RowFactory {
-    constructor({menuWidth, onToggle, onEdit, onDelete, onMove,
-        onAddTask, onFinishEditing}) {
+    constructor({menuWidth, onToggle, onEdit, onDelete, onMove, onDragBegin,
+        onDragEnd, onDrop, onAddTask, onFinishEditing}) {
         this._menuWidth = menuWidth;
         this._onToggle = onToggle;
         this._onEdit = onEdit;
         this._onDelete = onDelete;
         this._onMove = onMove;
+        this._onDragBegin = onDragBegin;
+        this._onDragEnd = onDragEnd;
+        this._onDrop = onDrop;
         this._onAddTask = onAddTask;
         this._onFinishEditing = onFinishEditing;
     }
 
     /**
      * Build a clickable task row: label (strikethrough + fade when done),
-     * move up/down buttons, and edit + delete buttons pinned to the right.
+     * edit + delete buttons pinned to the right, and — at the FAR RIGHT — the
+     * drag handle (Faz 9).
+     *
+     * Drag starts ONLY from the handle, and the handle is an St.Button on
+     * purpose: st-button.c consumes press/release, so a plain click on it
+     * never reaches the row's activate (which would toggle the task). The
+     * dragged thing is a CLONE of the row, so the source row stays in place.
      *
      */
-    makeTaskRow(task, isFirst, isLast, categoryName, colors) {
+    makeTaskRow(task, categoryName, colors) {
         const index = task.index;
         const row = new PopupMenu.PopupBaseMenuItem();
+        // Drag feedback and the drop target have to know which task a row
+        // stands for: the Shell hands back ACTORS during a drag
+        // (dragMotion/acceptDrop), never our model.
+        row._todoIndex = index;
+        row._todoCategory = categoryName;
         const label = new St.Label({
             text: task.text,
             style_class: task.done ? 'todo-text todo-done' : 'todo-text',
@@ -108,46 +123,31 @@ export class RowFactory {
             label.opacity = 153;
         }
 
-        // Move up/down within the category (locked: no cross-category moves).
-        // ALWAYS created and allocated (go-up/go-down-symbolic verified in
-        // the local Adwaita icon theme) but INSENSITIVE at the category's
-        // edges: rows must keep a constant button area so every task line
-        // ends at the same x position regardless of its position (user
-        // test: rows at the edges had different widths).
-        const upBtn = new St.Button({
-            style_class: 'todo-icon-button button',
+        // Drag handle (Faz 9). It REPLACED the old ↑↓ buttons: they were ugly,
+        // and at the category edges they were dead, insensitive buttons. The
+        // keyboard path moved to Alt+↑/↓ on the focused row (see the bottom of
+        // this function). `list-drag-handle-symbolic` is Adwaita's grip
+        // (verified present in the local icon theme); Yaru's
+        // `drag-handle-symbolic` is NOT used — it does not exist in Adwaita.
+        const handle = new St.Button({
+            style_class: 'todo-icon-button todo-drag-handle button',
             // Icon-only button: without this a screen reader announces
             // "button" with no name (audit D8).
-            accessible_name: 'Move up',
+            accessible_name: 'Reorder task',
             child: new St.Icon({
-                icon_name: 'go-up-symbolic',
+                icon_name: 'list-drag-handle-symbolic',
                 style_class: 'system-status-icon',
             }),
         });
-        upBtn.set_reactive(!isFirst);
-        if (isFirst) {
-            upBtn.set_style('opacity: 0.4;');
-        }
-        upBtn.connect('clicked', () => {
-            this._onMove(index, 'up');
-        });
-        const downBtn = new St.Button({
-            style_class: 'todo-icon-button button',
-            // Icon-only button: without this a screen reader announces
-            // "button" with no name (audit D8).
-            accessible_name: 'Move down',
-            child: new St.Icon({
-                icon_name: 'go-down-symbolic',
-                style_class: 'system-status-icon',
-            }),
-        });
-        downBtn.set_reactive(!isLast);
-        if (isLast) {
-            downBtn.set_style('opacity: 0.4;');
-        }
-        downBtn.connect('clicked', () => {
-            this._onMove(index, 'down');
-        });
+        // The Shell asks the HANDLE's delegate for the drag actor, so the
+        // clone (and the source it snaps back to) is wired here.
+        handle._delegate = {
+            getDragActor: () => new Clutter.Clone({source: row}),
+            getDragActorSource: () => row,
+        };
+        const draggable = DND.makeDraggable(handle);
+        draggable.connect('drag-begin', () => this._onDragBegin(index, categoryName));
+        draggable.connect('drag-end', () => this._onDragEnd());
 
         // Delete button pinned to the right of the task text.
         const delBtn = new St.Button({
@@ -185,19 +185,39 @@ export class RowFactory {
         // (Clutter uses x_expand, not GTK's hexpand.)
         label.set_x_expand(true);
         label.set_x_align(Clutter.ActorAlign.START);
-        upBtn.set_x_align(Clutter.ActorAlign.END);
-        downBtn.set_x_align(Clutter.ActorAlign.END);
         editBtn.set_x_align(Clutter.ActorAlign.END);
         delBtn.set_x_align(Clutter.ActorAlign.END);
+        handle.set_x_align(Clutter.ActorAlign.END);
 
         row.add_child(label);
-        row.add_child(upBtn);
-        row.add_child(downBtn);
         row.add_child(editBtn);
         row.add_child(delBtn);
+        row.add_child(handle);
 
         row.connect('activate', () => {
             this._onToggle(index);
+        });
+
+        // Drop target. Returning true lets the Shell FINISH the drag properly
+        // (destroy the drag actor, pop the modal grab, emit drag-end); false
+        // makes it walk further up the tree and finally snap the row back.
+        // Locked: no cross-category moves — the extension rejects those.
+        row.acceptDrop = () => this._onDrop(index, categoryName) === true;
+
+        // Keyboard path (a11y): Alt+↑ / Alt+↓ on the focused row. The row's
+        // own key handler ignores any press with a modifier held
+        // (popupMenu.js vfunc_key_press_event), so the event reaches us.
+        row.connect('key-press-event', (actor, event) => {
+            if ((event.get_state() & Clutter.ModifierType.MOD1_MASK) === 0) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+            const symbol = event.get_key_symbol();
+            if (symbol !== Clutter.KEY_Up && symbol !== Clutter.KEY_Down) {
+                return Clutter.EVENT_PROPAGATE;
+            }
+            this._onMove(index, categoryName,
+                symbol === Clutter.KEY_Up ? 'up' : 'down');
+            return Clutter.EVENT_STOP;
         });
         return row;
     }

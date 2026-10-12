@@ -169,3 +169,20 @@
 .todo-dark .todo-tab-bar StScrollBar #hhandle {
     background-color: rgba(255, 255, 255, 0.32);
 }
+
+/* Faz 9: the drag-and-drop insertion line. It lives on Main.uiGroup — NOT
+ * inside menu.box — so it never joins the menu's layout. For the same reason
+ * it carries the colour-scheme class DIRECTLY (.todo-light.todo-drop-line)
+ * instead of inheriting it as a descendant of the tagged menu box. */
+.todo-drop-line {
+    height: 3px;
+    border-radius: 2px;
+}
+
+.todo-drop-line.todo-light {
+    background-color: rgba(0, 0, 0, 0.85);
+}
+
+.todo-drop-line.todo-dark {
+    background-color: rgba(255, 255, 255, 0.95);
+}

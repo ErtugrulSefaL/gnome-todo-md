@@ -377,7 +377,8 @@ export function parseDocument(content) {
                 // so far appeared BEFORE the heading, so remember where the
                 // boundary falls (`preCount`) and keep every item in ONE list
                 // — a second list (the old `preItems`) was invisible to
-                // categoryTasks/addTaskTag/moveTask, which silently did nothing
+                // categoryTasks/addTaskTag and the line-based helpers, which
+                // silently did nothing
                 // for the tasks in it.
                 current.implicit = false;
                 current.preCount = current.items.length;
@@ -684,48 +685,61 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     return serializeDocument(doc);
 }
 
+
 /**
- * Move the task at line `index` up or down within its own category (locked:
- * no cross-category moves). The two adjacent tasks in the category's task
- * sequence swap positions; interleaved extras (blank/note lines) keep their
- * slots. Moving the first task up or the last task down is a no-op, and so
- * is an index that no task owns.
+ * Move the task at line `fromIndex` to the slot of the task at line `toIndex`
+ * (Faz 9: drag-and-drop needs "drop anywhere", not just an adjacent swap).
+ * Both are 0-based line indices, the same ones toggleTask / editTask /
+ * deleteTask use.
  *
- * Note: the task sequence spans the whole category, including items that sat
- * above an explicit '## General' heading in the file; moving one across that
- * boundary moves the boundary with it (decision A: allowed).
+ * Rules:
+ * - The moved task ends up where the target task was, in the category's TASK
+ *   sequence; interleaved extras (blank/note lines) keep their slots.
+ * - Locked: no cross-category moves. If the two indices belong to different
+ *   categories (or either one is not a task), the content is returned
+ *   unchanged — byte-identical, like every other rejected path.
+ * - A move across the `## General` heading boundary keeps `preCount` in step
+ *   (it counts the items emitted BEFORE the heading), so the round-trip stays
+ *   byte-identical. When the boundary reaches the end, the heading is emitted
+ *   first, which is the rule the old adjacent-swap helper used too.
  *
  */
-export function moveTask(content, index, direction) {
+export function moveTaskTo(content, fromIndex, toIndex) {
     const doc = parseDocument(content);
     for (const category of doc.categories) {
         const tasks = categoryTasks(category);
-        const pos = tasks.findIndex(task => task.index === index);
-        if (pos === -1) {
+        const fromPos = tasks.findIndex(task => task.index === fromIndex);
+        const toPos = tasks.findIndex(task => task.index === toIndex);
+        if (fromPos === -1 || toPos === -1 || fromPos === toPos) {
             continue;
         }
 
-        const other = direction === 'up' ? pos - 1 : pos + 1;
-        if (other < 0 || other >= tasks.length) {
-            return content;
-        }
-
-        // Swap the two task items in place; extras between them stay put.
         const items = category.items;
-        const ia = items.indexOf(tasks[pos]);
-        const ib = items.indexOf(tasks[other]);
-        items[ia] = tasks[other];
-        items[ib] = tasks[pos];
+        const moving = tasks[fromPos];
+        const target = tasks[toPos];
+        const ia = items.indexOf(moving);
 
-        // A swap across the '## Name' boundary moves one item from the
-        // headingless preamble into the section (or back). Keep preCount in
-        // step so the round-trip stays faithful, and emit the heading first
-        // once nothing is left above it — a trailing empty section would be
-        // pointless.
-        if (category.preCount !== undefined
-            && (ia < category.preCount) !== (ib < category.preCount)) {
-            category.preCount += ia < category.preCount ? 1 : -1;
-            if (category.preCount >= category.items.length) {
+        // Land the item next to the target in the array WITHOUT the moving
+        // item: after the target when moving down, before it when moving up.
+        // Either way the task sequence ends up with the moved task at `toPos`.
+        items.splice(ia, 1);
+        const targetAt = items.indexOf(target);
+        const insertAt = fromPos < toPos ? targetAt + 1 : targetAt;
+        items.splice(insertAt, 0, moving);
+
+        // preCount counts the items emitted BEFORE the heading. Work out the
+        // boundary position in the array that no longer holds the moving item,
+        // then re-derive preCount from whether the item landed above it.
+        if (category.preCount !== undefined) {
+            const wasPre = ia < category.preCount;
+            const boundary = category.preCount - (wasPre ? 1 : 0);
+            const isPre = insertAt < boundary;
+            if (wasPre && !isPre) {
+                category.preCount -= 1;
+            } else if (!wasPre && isPre) {
+                category.preCount += 1;
+            }
+            if (category.preCount >= items.length) {
                 category.preCount = 0;
             }
         }

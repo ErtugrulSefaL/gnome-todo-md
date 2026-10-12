@@ -4,6 +4,44 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.20.0 - 2026-10-12
+
+### Added
+- **Drag-and-drop reordering.** Every task row now ends in a grip handle
+  (`list-drag-handle-symbolic`). Dragging it lifts a clone of the row, shows an
+  insertion line where the task will land, and reorders the task inside its
+  category on drop. The drop stays inside the category: on the "All" tab a drop
+  on another category's row is refused — the cursor becomes a no-drop cursor,
+  the line disappears and the row snaps back. The menu stays open and usable for
+  the whole drag.
+- **Keyboard reordering on a focused row: Alt+Up / Alt+Down.** It replaces the
+  per-row up/down buttons, which were removed: they were the ugliest part of a
+  row, and at the top and bottom of a category they were dead, insensitive
+  buttons. The moved row keeps the key focus, so pressing the combination again
+  walks the task further.
+
+### Changed
+- `Storage.moveTask` (adjacent swap) was replaced by `Storage.moveTaskTo`, a
+  "move this task into that task's slot" operation. It keeps interleaved
+  note/blank lines in their slots, keeps the `## General` heading boundary
+  honest, and returns the content unchanged for every rejected move
+  (cross-category, unknown index, no-op).
+- The file monitor no longer rebuilds the menu for the extension's OWN writes —
+  it compares the file against the content the menu just rendered. One action is
+  now one rebuild instead of two or three.
+
+### Notes
+- Verified on GNOME Shell 50.1 (Wayland). Before a line of UI code was written,
+  the Shell's own drag-and-drop framework
+  (`resource:///org/gnome/shell/ui/dnd.js`) was proven to work inside a panel
+  popup menu with an isolated headless shell driven by a virtual pointer; the
+  findings and the exact integration rules are recorded in
+  `docs/verified-apis.md`.
+- GNOME 46/47/48 take the older internal path of that same module
+  (`button-press-event` plus a stage grab, instead of `St.DndStartGesture`).
+  The public API is identical, but drag-and-drop has NOT been regression-tested
+  on those shells yet; nothing else about the extension changes there.
+
 ## 0.19.0 - 2026-10-12
 
 ### Added

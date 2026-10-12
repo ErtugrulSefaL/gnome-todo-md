@@ -8,6 +8,7 @@ import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import * as PopupMenu from 'resource:///org/gnome/shell/ui/popupMenu.js';
+import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 import * as Storage from './storage.js';
 import {TabBar} from './tabBar.js';
@@ -98,6 +99,7 @@ export default class TodoExtension extends Extension {
                     // Menu closed: neither an uncommitted edit nor an open
                     // action panel may survive into the next open.
                     this._closeInteractions();
+                    this._focusIndex = -1;
                 }
             });
 
@@ -108,13 +110,24 @@ export default class TodoExtension extends Extension {
             onToggle: index => this._toggleTask(index),
             onEdit: index => this._startEditing(index),
             onDelete: index => this._deleteTask(index),
-            onMove: (index, direction) => this._moveTask(index, direction),
+            onMove: (index, categoryName, direction) =>
+                this._moveTask(index, categoryName, direction),
+            onDragBegin: (index, categoryName) => this._onDragBegin(index, categoryName),
+            onDragEnd: () => this._onDragEnd(),
+            onDrop: (toIndex, toCategory) => this._onDrop(toIndex, toCategory),
             onAddTask: (text, categoryName) => this._addTask(text, categoryName),
             onFinishEditing: text => this._finishEditing(text),
         });
 
         // Add the indicator to the panel.
         Main.panel.addToStatusArea(this.uuid, this._indicator);
+
+        // Faz 9: drag-and-drop state and the insertion line. The line has to
+        // exist BEFORE _applyColorScheme() so it gets the scheme class too.
+        this._dragging = null;
+        this._focusIndex = -1;
+        this._lastWritten = null;
+        this._setupDragAndDrop();
 
         // Theme-dependent colours (checkbox ring, swatch ring, scrollbars)
         // follow the shell's colour scheme; the shell announces changes.
@@ -154,6 +167,14 @@ export default class TodoExtension extends Extension {
         box.remove_style_class_name('todo-light');
         box.remove_style_class_name('todo-dark');
         box.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
+        // The insertion line is NOT inside menu.box — it lives on Main.uiGroup
+        // so it never joins the menu's layout — so it carries the scheme class
+        // DIRECTLY instead of inheriting it as a descendant.
+        if (this._dropLine) {
+            this._dropLine.remove_style_class_name('todo-light');
+            this._dropLine.remove_style_class_name('todo-dark');
+            this._dropLine.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
+        }
     }
 
     disable() {
@@ -186,6 +207,18 @@ export default class TodoExtension extends Extension {
         if (this._colorSchemeSignal) {
             St.Settings.get().disconnect(this._colorSchemeSignal);
             this._colorSchemeSignal = null;
+        }
+        // Faz 9: the drag monitor is a MODULE-GLOBAL list in the Shell, so it
+        // must never outlive the extension; the insertion line is our own actor
+        // on Main.uiGroup and has to go too.
+        if (this._dragMonitor) {
+            DND.removeDragMonitor(this._dragMonitor);
+            this._dragMonitor = null;
+        }
+        this._dragging = null;
+        if (this._dropLine) {
+            this._dropLine.destroy();
+            this._dropLine = null;
         }
         // The panel's actor lives inside the content section, but the
         // PopupSubMenu object itself owns shell-side state (a
@@ -226,6 +259,15 @@ export default class TodoExtension extends Extension {
         this._todoMonitor = Gio.File.new_for_path(this._todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
+            // Our OWN writes fire the monitor too (replace_contents emits
+            // CREATED/CHANGES_DONE_HINT — measured in the Faz 9 fix round). We
+            // already refreshed for them, and refreshing AGAIN throws away what
+            // that refresh just restored — the key focus after a keyboard move.
+            // Identical content is therefore ignored.
+            const current = Storage.readTodo(this._todoPath());
+            if (current.ok && current.raw === this._lastWritten) {
+                return;
+            }
             // Any file write (external or our own) may shift line indexes, so
             // an in-progress edit cannot be trusted: close it (single-edit
             // rule) and rebuild.
@@ -730,6 +772,9 @@ export default class TodoExtension extends Extension {
         }
 
         const todo = Storage.readTodo(this._todoPath());
+        // What the menu now shows: the file monitor compares against this, so
+        // our OWN writes never trigger a second, redundant rebuild.
+        this._lastWritten = todo.ok ? todo.raw : null;
         const doc = Storage.parseDocument(todo.raw);
 
         // Every category renders as a non-clickable header row (with a '+'
@@ -845,8 +890,15 @@ export default class TodoExtension extends Extension {
             ? sections
             : sections.filter(section => section.name === this._activeCategory);
 
-        for (const section of visibleSections) {
-            // Non-reactive header + interactive child: the proven entryItem
+        // Faz 9: the row a keyboard move produced takes the key focus back, so
+        // a second Alt+↑/↓ press keeps working without re-clicking. The target
+        // is CONSUMED here and never left set, so an unrelated later refresh
+        // cannot yank the focus back.
+        const focusTarget = this._focusIndex;
+        this._focusIndex = -1;
+        let focusRow = null;
+
+        for (const section of visibleSections) {            // Non-reactive header + interactive child: the proven entryItem
             // pattern (an interactive child inside a non-reactive row).
             const header = new PopupMenu.PopupBaseMenuItem(
                 {activate: false, can_focus: false});
@@ -938,8 +990,7 @@ export default class TodoExtension extends Extension {
             }
 
             const tasks = section.tasks;
-            for (let ti = 0; ti < tasks.length; ti++) {
-                const task = tasks[ti];
+            for (const task of tasks) {
                 // The row being edited renders as an inline entry instead of
                 // the usual label + buttons. Render derives solely from
                 // _editingIndex, so two open editors can never coexist.
@@ -954,11 +1005,19 @@ export default class TodoExtension extends Extension {
                 }
 
                 const taskRow = this._rowFactory.makeTaskRow(task,
-                    ti === 0, ti === tasks.length - 1, section.name,
-                    prunedColors);
+                    section.name, prunedColors);
                 taskRow.set_x_expand(true);
                 contentSection.addMenuItem(taskRow);
+                if (task.index === focusTarget) {
+                    focusRow = taskRow;
+                }
             }
+        }
+
+        // Faz 9: hand the key focus to the row a keyboard move produced, so a
+        // second Alt+↑/↓ press keeps working without re-clicking.
+        if (focusRow) {
+            focusRow.grab_key_focus();
         }
 
         // (The scroll position is never reset: the persistent wrapper keeps
@@ -1074,15 +1133,149 @@ export default class TodoExtension extends Extension {
     }
 
     /**
-     * Move a task up/down within its category, persist and refresh.
-     * Closing any open edit first keeps the single-edit invariant.
+     * Set up the drag-and-drop plumbing ONCE per enable() (Faz 9).
      *
+     * The monitor is registered only while a drag is in flight (drag-begin →
+     * drag-end); the insertion line lives on Main.uiGroup, like the Shell's own
+     * drag actor, so it never takes part in the menu's layout.
      */
-    _moveTask(index, direction) {
-        this._closeInteractions();
+    _setupDragAndDrop() {
+        this._dragMonitor = {
+            dragMotion: event => this._onDragMotion(event),
+            // CONTINUE, never SUCCESS: a monitor that returns SUCCESS/FAILURE
+            // makes the Shell return early and SKIP its own cleanup — the drag
+            // actor is never destroyed, the modal grab is never popped and
+            // drag-end never fires (measured in the Faz 9 spike). The DROP
+            // itself belongs to the row's acceptDrop, which the Shell calls
+            // next once we continue.
+            dragDrop: () => DND.DragDropResult.CONTINUE,
+        };
+        this._dropLine = new St.Widget({style_class: 'todo-drop-line'});
+        this._dropLine.visible = false;
+        Main.uiGroup.add_child(this._dropLine);
+    }
+
+    /**
+     * A drag started on a row's handle: remember what is moving and start
+     * listening for its motion.
+     */
+    _onDragBegin(index, categoryName) {
+        this._dragging = {index, category: categoryName};
+        DND.addDragMonitor(this._dragMonitor);
+    }
+
+    /**
+     * The drag is over, dropped or not. Clear the drag state and rebuild —
+     * NOT inside acceptDrop: the Shell is still holding the drag actor while
+     * that runs, and a rebuild there would pull the row out from under it.
+     */
+    _onDragEnd() {
+        this._dragging = null;
+        DND.removeDragMonitor(this._dragMonitor);
+        this._hideDropLine();
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * The drop itself, called by the Shell through the row's acceptDrop.
+     * Returning true makes the Shell finish the drag properly.
+     *
+     * Locked rule: a task only moves inside its own category, so a drop on
+     * another category's row (the 'All' tab) is rejected and the row snaps
+     * back. Every rejected path returns false and writes nothing.
+     */
+    _onDrop(toIndex, toCategory) {
+        if (!this._dragging
+            || this._dragging.category !== toCategory
+            || this._dragging.index === toIndex) {
+            return false;
+        }
         const parsed = Storage.readTodo(this._todoPath());
-        const updated = Storage.moveTask(parsed.raw, index, direction);
+        const updated = Storage.moveTaskTo(parsed.raw, this._dragging.index, toIndex);
+        if (updated === parsed.raw) {
+            return false;
+        }
         Storage.writeTodo(this._todoPath(), updated);
+        return true;
+    }
+
+    /**
+     * Drag feedback: show the insertion line above or below the row under the
+     * pointer, and tell the Shell whether that spot can take the drop (the
+     * no-drop cursor comes for free from NO_DROP).
+     */
+    _onDragMotion(event) {
+        if (!this._dragging) {
+            return DND.DragMotionResult.CONTINUE;
+        }
+        const row = this._findTaskRow(event.targetActor);
+        if (!row
+            || row._todoCategory !== this._dragging.category
+            || row._todoIndex === this._dragging.index) {
+            this._hideDropLine();
+            return DND.DragMotionResult.NO_DROP;
+        }
+        const [x, y] = row.get_transformed_position();
+        const height = row.get_height();
+        const below = event.y >= y + height / 2;
+        this._dropLine.set_width(row.get_width());
+        this._dropLine.set_position(x, below ? y + height : y);
+        this._dropLine.visible = true;
+        return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    /**
+     * The task row an actor belongs to, or null. Rows carry `_todoCategory`
+     * (see rowFactory) precisely so a drag can map actors back to tasks.
+     */
+    _findTaskRow(actor) {
+        let current = actor;
+        while (current) {
+            if (current._delegate instanceof PopupMenu.PopupBaseMenuItem
+                && current._todoCategory !== undefined) {
+                return current;
+            }
+            current = current.get_parent();
+        }
+        return null;
+    }
+
+    _hideDropLine() {
+        if (this._dropLine) {
+            this._dropLine.visible = false;
+        }
+    }
+
+    /**
+     * Reorder a task with Alt+↑ / Alt+↓ — the keyboard path that replaced the
+     * ↑↓ buttons in Faz 9. The adjacent task is the target, so one press is
+     * one step; the moved row keeps the key focus (see _refreshTodoMenu).
+     */
+    _moveTask(index, categoryName, direction) {
+        const parsed = Storage.readTodo(this._todoPath());
+        const section = Storage.renderSections(Storage.parseDocument(parsed.raw))
+            .find(candidate => candidate.name === categoryName);
+        const pos = section
+            ? section.tasks.findIndex(task => task.index === index)
+            : -1;
+        const other = direction === 'up' ? pos - 1 : pos + 1;
+        if (pos === -1 || other < 0 || other >= section.tasks.length) {
+            return;
+        }
+        const updated = Storage.moveTaskTo(parsed.raw, index, section.tasks[other].index);
+        if (updated === parsed.raw) {
+            return;
+        }
+        // Only once the move is known to happen: closing interactions WITHOUT
+        // a refresh would leave the menu showing a row that is already gone.
+        this._closeInteractions();
+        Storage.writeTodo(this._todoPath(), updated);
+        // moveTaskTo lands the task in the target's slot, so in the NEW
+        // document it sits at `other`; remember its line index so the rebuild
+        // can hand the key focus back to it.
+        const moved = Storage.renderSections(Storage.parseDocument(updated))
+            .find(candidate => candidate.name === categoryName);
+        this._focusIndex = moved ? moved.tasks[other].index : -1;
         this._refreshTodoMenu();
     }
 }
