@@ -1162,6 +1162,15 @@ export default class TodoExtension extends Extension {
     _onDragBegin(index, categoryName) {
         this._dragging = {index, category: categoryName};
         DND.addDragMonitor(this._dragMonitor);
+        // The menu raises ITSELF above every uiGroup sibling on each open
+        // (PopupMenu.open -> set_child_above_sibling(actor, null)), which puts
+        // our insertion line behind the menu's background. Raise the line back
+        // on top once per drag. Doing it HERE and not in _onDragMotion keeps
+        // the drag CLONE above the line: the Shell raises the clone after
+        // emitting drag-begin.
+        if (this._dropLine) {
+            Main.uiGroup.set_child_above_sibling(this._dropLine, null);
+        }
     }
 
     /**
