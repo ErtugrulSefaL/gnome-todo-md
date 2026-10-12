@@ -22,3 +22,6 @@ test.md
 
 # Packaging output: the EGO zip is reproducible via tools/make-package.sh.
 dist/
+
+# VM test reports written by tools/vm-setup.sh from inside a test VM.
+.vm/
