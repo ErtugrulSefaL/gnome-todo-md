@@ -116,15 +116,29 @@ Windows editor does not produce a whole-file diff.
 ```bash
 git clone https://github.com/ErtugrulSefaL/gnome-todo-md
 cd gnome-todo-md
+
+# The compiled schema is deliberately NOT in git (GNOME 45+ generates it when
+# installing from a zip). A manual symlink install has to compile it by hand,
+# otherwise getSettings() throws and the extension ends up in an ERROR state.
+glib-compile-schemas todo-md@ertugrulsefal.github.com/schemas/
+
 mkdir -p ~/.local/share/gnome-shell/extensions
 ln -s "$(pwd)/todo-md@ertugrulsefal.github.com" \
       ~/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com
 ```
 
-Then reload GNOME Shell:
+Then reload GNOME Shell (there is no reload shortcut on Wayland — log out and
+back in) and enable it:
 
-- X11: press `Alt+F2`, type `r`, Enter (or log out/in on Wayland)
-- Enable: `gnome-extensions enable todo-md@ertugrulsefal.github.com`
+```bash
+gnome-extensions enable todo-md@ertugrulsefal.github.com
+gnome-extensions info todo-md@ertugrulsefal.github.com   # State: ACTIVE
+```
+
+> **Development only:** on a GNOME version this extension does not declare yet,
+> the Shell refuses to load it (`OUT_OF_DATE`). To test unreleased support:
+> `gsettings set org.gnome.shell disable-extension-version-validation true`
+> (the Shell then reloads extensions immediately).
 
 ## Test
 
