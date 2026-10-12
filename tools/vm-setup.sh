@@ -41,13 +41,21 @@ mkdir -p "$REPO/.vm"
     python3 -c "import json;print(json.load(open('$EXT_SRC/metadata.json'))['version-name'])" 2>/dev/null \
         || grep -o '"version-name": *"[^"]*"' "$EXT_SRC/metadata.json"
 
-    echo "--- schema compile ---"
-    if glib-compile-schemas "$EXT_SRC/schemas/"; then echo SCHEMA_OK; else echo SCHEMA_FAIL; fi
-
-    echo "--- symlink into the extensions dir ---"
+    echo "--- install into the extensions dir (COPY, not a symlink) ---"
+    # A symlink into the share breaks on the next boot: /mnt is gone, the shell
+    # cannot read metadata.json and does not list the extension at all. Copy
+    # instead, so the installed extension is self-contained.
     mkdir -p "$(dirname "$EXT_DIR")"
     rm -rf "$EXT_DIR"
-    if ln -s "$EXT_SRC" "$EXT_DIR"; then ls -l "$EXT_DIR"; else echo SYMLINK_FAIL; fi
+    mkdir -p "$EXT_DIR"
+    if cp -r "$EXT_SRC/." "$EXT_DIR/"; then
+        echo "copied $(du -sh "$EXT_DIR" | cut -f1) -> $EXT_DIR"
+    else
+        echo COPY_FAIL
+    fi
+
+    echo "--- schema compile (in the installed copy) ---"
+    if glib-compile-schemas "$EXT_DIR/schemas/"; then echo SCHEMA_OK; else echo SCHEMA_FAIL; fi
 
     echo "--- test fixture (~/todo.md) ---"
     FIXTURE="$REPO/.vm/fixture.md"
@@ -75,6 +83,20 @@ mkdir -p "$REPO/.vm"
     echo "--- extension state (before the session restart) ---"
     gnome-extensions info todo-md@ertugrulsefal.github.com 2>&1 | grep -E "Version|State|Enabled" \
         || echo "(shell has not scanned it yet — log out and back in)"
+
+    echo "--- diagnostics: why would the extension not be listed? ---"
+    if mountpoint -q /mnt; then
+        echo "/mnt: MOUNTED ($(findmnt -no FSTYPE,SOURCE /mnt 2>/dev/null))"
+    else
+        echo "/mnt: NOT MOUNTED -> the symlink below is DANGLING and the shell"
+        echo "     cannot read metadata.json, so it will not list the extension."
+        echo "     Fix: sudo mount -t virtiofs todomd /mnt, then log out and back in."
+    fi
+    echo "extensions dir:"; ls -l "$HOME/.local/share/gnome-shell/extensions/" 2>&1
+    echo "installed copy readable? $([ -r "$EXT_DIR/metadata.json" ] && echo yes || echo NO)"
+    echo "installed version: $(grep -o '\"version-name\": *\"[^\"]*\"' "$EXT_DIR/metadata.json" 2>/dev/null)"
+    echo "shell's own list:"; gnome-extensions list 2>&1 | head -10
+    echo "is our uuid listed by gnome-extensions? $(gnome-extensions list 2>/dev/null | grep -c '^todo-md@')"
 
     echo "--- LAYER 1: API probe ---"
     bash "$REPO/tools/shell-api.sh" probe
