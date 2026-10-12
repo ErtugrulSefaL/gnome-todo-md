@@ -4,6 +4,32 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.18.1 - 2026-10-12
+
+### Fixed
+- **A blank line after the title no longer invents a "General" category.** In a
+  file like
+
+  ```
+  # Todo
+
+  ## Work
+  ```
+
+  the blank line between the title and the first heading was parsed as
+  heading-less content, so the menu showed a General section that held nothing
+  and — because the parser marks such fallback categories as implicit — could
+  not be renamed or deleted. A fallback category containing only blank lines is
+  now kept as `preamble` and emitted right after the title, so the written file
+  is byte-for-byte what it was. Real heading-less content (an orphan task, a
+  note) still forms the implicit General, and a blank line after a heading still
+  belongs to that category.
+
+### Tests
+- 245 unit tests (10 new for the preamble rule). A 12-case old-vs-new
+  comparison confirms the serialized bytes are unchanged in every case — only
+  the phantom category disappears.
+
 ## 0.18.0 - 2026-10-12
 
 ### Changed
