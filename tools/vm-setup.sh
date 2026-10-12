@@ -49,6 +49,19 @@ mkdir -p "$REPO/.vm"
     rm -rf "$EXT_DIR"
     if ln -s "$EXT_SRC" "$EXT_DIR"; then ls -l "$EXT_DIR"; else echo SYMLINK_FAIL; fi
 
+    echo "--- test fixture (~/todo.md) ---"
+    FIXTURE="$REPO/.vm/fixture.md"
+    if [ -f "$FIXTURE" ]; then
+        if [ -f "$HOME/todo.md" ]; then
+            cp "$HOME/todo.md" "$HOME/todo.md.bak.$(date +%s)"
+            echo "existing ~/todo.md backed up"
+        fi
+        cp "$FIXTURE" "$HOME/todo.md"
+        echo "fixture installed: $(grep -c '^## ' "$HOME/todo.md") categories / $(grep -c '^- \[' "$HOME/todo.md") tasks"
+    else
+        echo "(no fixture at $FIXTURE — skipping)"
+    fi
+
     echo "--- version-validation bypass (test-only setting) ---"
     export XDG_RUNTIME_DIR="/run/user/$(id -u)"
     export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
