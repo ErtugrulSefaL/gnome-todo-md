@@ -2,8 +2,8 @@
 
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload. Last used for: **0.15.0** (review pending).
-Next upload: **0.18.0** — the GNOME 50 port (do not upload while 0.15.0 is still
-under review).
+Next upload: **0.19.0** — GNOME 50 support plus verified support for 46-49 and
+two bug fixes (do not upload while 0.15.0 is still under review).
 
 ---
 
@@ -29,9 +29,11 @@ change it if you consider it a requirement.
 **`Main.panel.addToStatusArea`:** The standard indicator pattern from the
 gjs.guide "Getting Started" guide. It lives in GNOME Shell's own JS internals
 (no stability guarantee), so `shell-version` declares only the versions this
-code has been regression-tested on. It is `["50"]` now (GNOME Shell 50.1 on
-Ubuntu 26.04); older branches (46-49) are added one at a time, after a manual
-regression run in a VM, never optimistically.
+code has been regression-tested on: `["46", "47", "48", "49", "50"]`. Each one
+was validated individually — the API probe plus the same 18-point manual
+regression checklist — in its own VM: Ubuntu 24.04 (GNOME 46), 24.10 (47),
+25.04 (48), 25.10 (49) and 26.04 (50). A static guard pins the exact list, so
+adding a version is always a deliberate act that follows a test.
 
 **Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
 `disable()` explicitly destroys every long-lived actor — the persistent scroll
@@ -41,10 +43,11 @@ six signals held on long-lived objects (4× GSettings, indicator menu, file
 monitor). The analyzer cannot trace actor ownership; the objects it flags are
 destroyed through their owners.
 
-**Testing:** GNOME Shell 50.1 on Ubuntu 26.04 (Wayland). 235 unit tests cover
-the storage layer (pure string-in/string-out functions, byte-identical
-round-trip); the UI layer was verified manually per change, against a written
-regression checklist (18 checks) that includes an Orca accessibility pass.
+**Testing:** GNOME Shell 46, 47, 48, 49 and 50 on Ubuntu 24.04, 24.10, 25.04,
+25.10 and 26.04 (all Wayland). 250 unit tests cover the storage layer (pure
+string-in/string-out functions, byte-identical round-trip); the UI layer was
+verified manually in every one of those shells against the same written
+regression checklist (18 checks), which includes an Orca accessibility pass.
 
 **Static analysis:** ego-lint reports 0 errors; Shexli reports 0 errors /
 3 warnings, addressed above.

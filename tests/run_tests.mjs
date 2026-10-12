@@ -392,9 +392,10 @@ function testStaticChecks() {
     // Project rules that must not drift. R3 (docs/roadmap.md §C): shell-version
     // lists ONLY versions verified by a manual regression run — widening it is a
     // deliberate act that follows a test, never an optimistic edit.
-    record('static: metadata shell-version is exactly ["50"]',
-        /"shell-version"\s*:\s*\[\s*"50"\s*\]/.test(meta),
-        'only verified shell versions may be declared (R3)');
+    record('static: metadata shell-version is exactly ["46","47","48","49","50"]',
+        /"shell-version"\s*:\s*\[\s*"46"\s*,\s*"47"\s*,\s*"48"\s*,\s*"49"\s*,\s*"50"\s*\]/.test(meta),
+        'only verified shell versions may be declared (R3) — each one was '
+        + 'regression-tested in its own VM before being added here');
     noMatch('static: no opacity in CSS (actor label.opacity is used instead)',
         css, /opacity\s*:/, 'CSS opacity is unreliable on St.Label; use actor opacity');
 
