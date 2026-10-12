@@ -4,6 +4,26 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.18.2 - 2026-10-12
+
+### Fixed
+- **Both shell themes are supported now.** On the light theme the unchecked
+  checkbox ring and the colour-picker rings were hard-coded white and vanished
+  against a light menu, and neither scrollbar was visible at all — the theme
+  draws the handles at an effective ~2px in a pale grey. The extension now reads
+  the shell colour scheme, tags the menu box `.todo-dark` / `.todo-light`, and
+  every theme-dependent colour — the checkbox ring, both swatch rings and the
+  handles of its own two scroll views — is scoped under that tag. The scrollbar
+  rules are scoped to the extension's scroll views, so the shell's own
+  scrollbars keep the theme's look. CSS alone cannot do this: St's stylesheet
+  grammar has no `currentColor`.
+
+### Tests
+- 250 unit tests (5 new static guards for the theme rules); 6/6 injected
+  mutations caught — including a file-wide regex that had to be tightened to
+  window the unscoped base rule. `tools/shell-api.sh probe` now also checks
+  `St.Settings.color_scheme` and `St.SystemColorScheme` (58 checks).
+
 ## 0.18.1 - 2026-10-12
 
 ### Fixed
