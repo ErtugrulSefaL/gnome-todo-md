@@ -2,8 +2,14 @@
 
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload. Last used for: **0.15.0** (review pending).
-Next upload: **0.19.0** — GNOME 50 support plus verified support for 46-49 and
-two bug fixes (do not upload while 0.15.0 is still under review).
+Next upload: **0.20.1** — drag-and-drop reordering (Faz 9) + the insertion-line
+fix, on top of GNOME 46-50 support (do not upload while 0.15.0 is still under
+review).
+
+⚠️ **The reviewer notes below are still the 0.15.0 text.** Before the next
+upload they must gain the Faz 9 feature bullet (drag handle + Alt+Up/Alt+Down
+reordering, `Storage.moveTaskTo`) and the DND verification row (46 X11 · 47 ·
+48); the version numbers and the unit-test count (now **249**) also need a pass.
 
 ---
 
