@@ -415,6 +415,21 @@ export function parseDocument(content) {
         ensureCategory().items.push({type: 'extra', raw: line});
     }
 
+    // A fallback category that only ever collected BLANK lines is not content.
+    // A blank line between the title and the first heading is LAYOUT, and it
+    // used to become an implicit 'General' section: the menu rendered it (with
+    // a colour, a tab and a ⋮ menu) but deleteCategory/renameCategory refuse
+    // implicit categories, so the user could neither remove nor rename it. The
+    // lines are still kept — as `preamble`, emitted directly after the title —
+    // so an unchanged file round-trips byte-identically.
+    const first = doc.categories[0];
+    if (first !== undefined && first.implicit
+        && first.items.length > 0
+        && first.items.every(item => item.type === 'extra' && item.raw.trim() === '')) {
+        doc.preamble = first.items;
+        doc.categories.shift();
+    }
+
     return doc;
 }
 
@@ -506,6 +521,12 @@ export function serializeDocument(doc) {
                 : item.raw);
         }
     };
+
+    // Blank lines that sat between the title and the first heading — held
+    // outside the category list by parseDocument. They belong directly under
+    // the title, which is exactly where the removed fallback category emitted
+    // them before, so the output is unchanged.
+    pushItems(doc.preamble ?? []);
 
     for (const category of doc.categories) {
         // `preCount` leading items belong before the heading (see

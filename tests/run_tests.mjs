@@ -1508,6 +1508,76 @@ function testPreambleFidelity() {
         JSON.stringify(Storage.addCategory(midTitle, 'B')));
 }
 
+// ---- B1: a blank line is layout, not a category ---------------------------
+
+function testPreambleBlanks() {
+    // The report: '# title' + blank + '## heading' rendered an implicit
+    // 'General' section that the user could neither rename nor delete.
+    const DOC = '# Todo\n\n## Work\n- [ ] a\n';
+    const doc = Storage.parseDocument(DOC);
+
+    record('B1: a blank line after the title invents no category',
+        doc.categories.length === 1 && doc.categories[0].name === 'Work',
+        JSON.stringify(doc.categories.map(c => c.name)));
+
+    record('B1: the blank line is kept as preamble (1 item)',
+        (doc.preamble ?? []).length === 1
+        && doc.preamble[0].type === 'extra' && doc.preamble[0].raw === '',
+        JSON.stringify(doc.preamble));
+
+    record('B1: round-trip stays byte-identical',
+        Storage.serializeDocument(doc) === DOC,
+        JSON.stringify(Storage.serializeDocument(doc)));
+
+    record('B1: the menu renders no General section',
+        JSON.stringify(Storage.renderSections(doc).map(s => s.name))
+            === JSON.stringify(['Work']),
+        JSON.stringify(Storage.renderSections(doc).map(s => s.name)));
+
+    const two = Storage.parseDocument('# T\n\n\n## W\n');
+    record('B1: two blank lines share the preamble, still no category',
+        two.categories.length === 1 && (two.preamble ?? []).length === 2,
+        JSON.stringify(two.categories.map(c => c.name)) + ' / '
+        + (two.preamble ?? []).length);
+
+    const ws = Storage.parseDocument('# T\n   \n## W\n');
+    record('B1: a whitespace-only line counts as blank',
+        ws.categories.length === 1 && (ws.preamble ?? []).length === 1,
+        JSON.stringify(ws.categories.map(c => c.name)));
+
+    const CRLF = '# T\r\n\r\n## W\r\n- [ ] a\r\n';
+    const crlf = Storage.parseDocument(CRLF);
+    record('B1: CRLF preamble — no category, round-trip byte-identical',
+        crlf.categories.length === 1
+        && Storage.serializeDocument(crlf) === CRLF,
+        JSON.stringify(Storage.serializeDocument(crlf)));
+
+    // Regression guard: the fix must not swallow real pre-heading content.
+    const orphan = Storage.parseDocument('# T\n\n- [ ] orphan\n## W\n');
+    record('B1: real orphan content still forms the implicit General',
+        orphan.categories.length === 2
+        && orphan.categories[0].name === 'General'
+        && orphan.categories[0].implicit === true
+        && Storage.categoryTasks(orphan.categories[0]).length === 1
+        && (orphan.preamble ?? []).length === 0,
+        JSON.stringify(orphan.categories.map(c => c.name)));
+
+    // Regression guard: a blank line AFTER a heading belongs to that category.
+    const after = Storage.parseDocument('# T\n## W\n- [ ] a\n\n## Other\n');
+    record('B1: a blank line after a heading stays in that category',
+        after.categories.length === 2
+        && after.categories[0].items.some(i => i.type === 'extra' && i.raw === '')
+        && (after.preamble ?? []).length === 0,
+        JSON.stringify(after.categories.map(c => c.items.length)));
+
+    const onlyBlank = '# T\n\n';
+    const ob = Storage.parseDocument(onlyBlank);
+    record('B1: title + blank only — no category, round-trip identical',
+        ob.categories.length === 0
+        && Storage.serializeDocument(ob) === onlyBlank,
+        JSON.stringify(ob.categories.map(c => c.name)));
+}
+
 // ---- moveTask: within-category reordering (Faz 2 step 6) -----------------
 
 function testMoveTask() {
@@ -1909,6 +1979,7 @@ testSerializeDocument();
 testCategoryNameHygiene();
 testCategoryDeleteRename();
 testPreambleFidelity();
+testPreambleBlanks();
 testAtomicWritePath();
 testPathParams();
 testResolveTodoPath();
