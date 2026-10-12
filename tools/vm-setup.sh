@@ -11,6 +11,11 @@
 #   sudo mount -t virtiofs todomd /mnt        # 9p fallback below
 #   bash /mnt/tools/vm-setup.sh
 #
+# With an SSH-reachable VM you can copy the project instead and pass its path:
+#   scp todo-ext.tgz test2504@<ip>:/tmp/ && ssh test2504@<ip> \
+#     'mkdir -p ~/todo-ext && tar xzf /tmp/todo-ext.tgz -C ~/todo-ext \
+#      && bash ~/todo-ext/tools/vm-setup.sh ~/todo-ext'
+#
 # 9p fallback if virtiofs is unavailable:
 #   sudo mount -t 9p -o trans=virtio,version=9p2000.L todomd /mnt
 #
@@ -19,7 +24,7 @@
 #
 set -u
 
-REPO=/mnt
+REPO="${1:-/mnt}"
 EXT_SRC="$REPO/todo-md@ertugrulsefal.github.com"
 EXT_DIR="$HOME/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com"
 OUT="$REPO/.vm/out.txt"
