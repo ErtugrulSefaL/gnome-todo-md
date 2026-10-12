@@ -4,6 +4,27 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.20.1 - 2026-10-12
+
+### Fixed
+- **The drag insertion line was invisible on GNOME 46, 47 and 48**, in both
+  themes. `panelMenu.js` adds the menu actor to `Main.uiGroup`, and
+  `PopupMenu.open()` raises it above every sibling in that group
+  (`set_child_above_sibling(actor, null)` — `popupMenu.js:982` on 46.0 and
+  `:1069` on 50.1), so the line, a later sibling, ended up behind the menu's
+  background. It is now raised once per drag. This was version-independent: on
+  GNOME 50 the menu background is semi-transparent, which is why the line only
+  looked faint there instead of vanishing.
+- The line also reads softer now: alpha 0.85 / 0.95 → **0.65 / 0.75**.
+
+### Notes
+- Verified on GNOME 46 (X11), 47 and 48 (Wayland), each in its own VM: drag,
+  drop, the no-drop refusal, the insertion line and the Alt+Up/Alt+Down keyboard
+  path all behave, and the rest of the extension is unaffected.
+- Tooling: `tools/vm-setup.sh` now takes the project path as an argument, so an
+  SSH-reachable VM can copy the project instead of mounting it over virtiofs and
+  still use the same script (schema compile, fixture, probe, report).
+
 ## 0.20.0 - 2026-10-12
 
 ### Added
