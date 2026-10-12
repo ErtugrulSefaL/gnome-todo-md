@@ -1,30 +1,49 @@
 # EGO Submission Notes
 
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
-version line before each upload. Last used for: **0.15.0** (review pending).
-Next upload: **0.20.1** — drag-and-drop reordering (Faz 9) + the insertion-line
-fix, on top of GNOME 46-50 support (do not upload while 0.15.0 is still under
-review).
+version line before each upload.
 
-⚠️ **The reviewer notes below are still the 0.15.0 text.** Before the next
-upload they must gain the Faz 9 feature bullet (drag handle + Alt+Up/Alt+Down
-reordering, `Storage.moveTaskTo`) and the DND verification row (46 X11 · 47 ·
-48); the version numbers and the unit-test count (now **249**) also need a pass.
+**Current upload: 0.20.1** — drag-and-drop reordering, the insertion-line fix,
+GNOME 46–50 support and every fix from the 0.15.0 review window. It supersedes
+the 0.15.0 upload that is still waiting for review; uploading over a pending
+review is allowed (GNOME extensions maintainer, discourse.gnome.org/t/9205), and
+the reviewer is asked on the review page to look at this one instead:
+
+> Version 0.20.1 supersedes 0.15.0 — please review this one instead. It contains
+> the fixes for everything reported so far, plus drag-and-drop reordering. The
+> notes on this upload describe what changed.
 
 ---
 
-**Todo MD 0.15.0 — notes for the reviewer**
+**Todo MD 0.20.1 — notes for the reviewer**
 
 **What it does:** A panel menu over a plain markdown checkbox file (`~/todo.md`
 by default, path configurable). Categories are `##` headings, rendered as tabs;
-tasks support check/uncheck, inline edit, delete, reorder, and inline add per
-category.
+tasks support check/uncheck, inline edit, delete, drag-and-drop reorder, and
+inline add per category.
+
+**New since the 0.15.0 upload:** drag-and-drop reordering — a grip handle at the
+end of every row; the task moves inside its own category, with an insertion line
+and a no-drop cursor over another category's rows — and keyboard reordering with
+Alt+Up / Alt+Down on a focused row, which replaced the old per-row up/down
+buttons. `shell-version` now covers GNOME 46–50, and the findings from this
+review window (a colour-map wipe on an unreadable file, a blank line inventing a
+"General" category, theme-invisible controls and scrollbars) are all fixed here.
+
+**Drag-and-drop integration (disclosure):** reordering uses GNOME Shell's own
+drag-and-drop module (`resource:///org/gnome/shell/ui/dnd.js`, `makeDraggable`)
+rather than a reimplementation. One non-obvious detail, measured on GNOME 50:
+a drag monitor's `dragDrop` must return `CONTINUE` — returning `SUCCESS` or
+`FAILURE` makes the Shell skip its own cleanup, so the drag actor and the modal
+grab leak and `drag-end` never fires. The drop itself is handled by the row's
+`acceptDrop`.
 
 **File access (disclosure):** The extension reads and writes exactly one
 user-configured markdown file plus its own GSettings schema. No network access,
 no subprocesses, no clipboard use. Writes go through `Gio.File.replace_contents`
 (temp-file + rename, atomic). A `Gio.FileMonitor` on the file picks up external
-edits live.
+edits live; the extension's own writes are recognised and do not trigger a
+second rebuild.
 
 **Synchronous file IO (Shexli EGO-X-004):** Deliberate. The todo file is small
 (a user's task list, typically < 100 lines); it is read once per menu refresh
@@ -32,31 +51,34 @@ and written only on user actions. An async implementation would restructure
 every mutation path for no practical latency benefit at this size. Happy to
 change it if you consider it a requirement.
 
-**`Main.panel.addToStatusArea`:** The standard indicator pattern from the
-gjs.guide "Getting Started" guide. It lives in GNOME Shell's own JS internals
-(no stability guarantee), so `shell-version` declares only the versions this
-code has been regression-tested on: `["46", "47", "48", "49", "50"]`. Each one
-was validated individually — the API probe plus the same 18-point manual
-regression checklist — in its own VM: Ubuntu 24.04 (GNOME 46), 24.10 (47),
-25.04 (48), 25.10 (49) and 26.04 (50). A static guard pins the exact list, so
-adding a version is always a deliberate act that follows a test.
+**Shell internals (`Main.panel.addToStatusArea`, popup menu, drag-and-drop):**
+The standard indicator pattern from the gjs.guide "Getting Started" guide, plus
+the Shell's own popup-menu and drag-and-drop modules. They live in GNOME Shell's
+JS internals with no stability guarantee, so `shell-version` declares only the
+versions this code has been regression-tested on: `["46", "47", "48", "49",
+"50"]`. Each one was validated individually — the API probe plus the same
+18-point manual regression checklist — in its own VM: Ubuntu 24.04 (GNOME 46),
+24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50). A static guard pins the exact
+list, so adding a version is always a deliberate act that follows a test.
 
 **Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
 `disable()` explicitly destroys every long-lived actor — the persistent scroll
 wrapper (owner of the content section), the persistent tab bar (owner of the
-new-category button and its signal), and the indicator — and disconnects all
-six signals held on long-lived objects (4× GSettings, indicator menu, file
-monitor). The analyzer cannot trace actor ownership; the objects it flags are
-destroyed through their owners.
+new-category button and its signal), the indicator and the drag insertion line —
+and disconnects every signal held on long-lived objects (4× GSettings, indicator
+menu, file monitor, `St.Settings` colour scheme). The analyzer cannot trace
+actor ownership; the objects it flags are destroyed through their owners.
 
-**Testing:** GNOME Shell 46, 47, 48, 49 and 50 on Ubuntu 24.04, 24.10, 25.04,
-25.10 and 26.04 (all Wayland). 250 unit tests cover the storage layer (pure
-string-in/string-out functions, byte-identical round-trip); the UI layer was
-verified manually in every one of those shells against the same written
+**Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
+24.04, 24.10, 25.04, 25.10 and 26.04. 249 unit tests cover the storage layer
+(pure string-in/string-out functions, byte-identical round-trip); the UI layer
+was verified manually in every one of those shells against the same written
 regression checklist (18 checks), which includes an Orca accessibility pass.
+Drag-and-drop was additionally verified in the GNOME 46 (X11), 47 and 48 VMs.
 
-**Static analysis:** ego-lint reports 0 errors; Shexli reports 0 errors /
-3 warnings, addressed above.
+**Static analysis:** ego-lint reports no hard failures (its remaining findings
+are warnings, all pre-existing and explained in the repository); Shexli reports
+0 errors / 3 warnings, addressed above.
 
 ---
 
