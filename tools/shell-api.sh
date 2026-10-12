@@ -148,8 +148,15 @@ chk('Clutter.ScrollDirection.SMOOTH/UP/DOWN', () =>
 chk('Clutter.KEY_Return/Escape/Left', () =>
     Clutter.KEY_Return !== undefined && Clutter.KEY_Escape !== undefined
     && Clutter.KEY_Left !== undefined);
-chk('Clutter.Actor.accessible_role/add_accessible_state()', () =>
-    has(Clutter.Actor.prototype, 'accessible_role') && has(Clutter.Actor.prototype, 'add_accessible_state'));
+// a11y lives on St.Widget in EVERY supported shell (46-50). Clutter.Actor is
+// the wrong target: it carries accessible_role/add_accessible_state only from
+// GNOME 47 on and never label_actor, so checking the actor base class reported
+// a FALSE "MISSING" on GNOME 46. Our rows are St-based (PopupBaseMenuItem is an
+// St.BoxLayout) — that is what has to be checked.
+chk('St.Widget.accessible_role/add_accessible_state()/label_actor', () =>
+    has(St.Widget.prototype, 'accessible_role')
+    && has(St.Widget.prototype, 'add_accessible_state')
+    && has(St.Widget.prototype, 'label_actor'));
 chk('Clutter.Text.set_ellipsize()', () => has(Clutter.Text.prototype, 'set_ellipsize'));
 chk('Clutter.Actor.set_opacity()', () => has(Clutter.Actor.prototype, 'set_opacity'));
 
