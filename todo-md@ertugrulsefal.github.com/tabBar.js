@@ -25,7 +25,7 @@ export class TabBar {
         this.bar.set_x_expand(true);
         this.bar.set_reactive(true); // receive scroll events
 
-        this.tabsBox = new St.BoxLayout();
+        this.tabsBox = new St.BoxLayout({style_class: 'todo-tab-strip'});
         this.scroller = new St.ScrollView({
             hscrollbar_policy: St.PolicyType.AUTOMATIC,
             vscrollbar_policy: St.PolicyType.NEVER,
@@ -70,7 +70,7 @@ export class TabBar {
         // Far-right '+' — the new-category entry point, outside the scroller so
         // it is always reachable.
         this.newCategoryButton = new St.Button({
-            style_class: 'todo-icon-button button',
+            style_class: 'todo-tab-add button',
             accessible_name: 'New category',
             child: new St.Icon({
                 icon_name: 'list-add-symbolic',
@@ -78,6 +78,7 @@ export class TabBar {
             }),
         });
         this.newCategoryButton.set_x_align(Clutter.ActorAlign.END);
+        this.newCategoryButton.set_y_align(Clutter.ActorAlign.CENTER);
 
         this.bar.add_child(this.scroller);
         this.bar.add_child(this.newCategoryButton);

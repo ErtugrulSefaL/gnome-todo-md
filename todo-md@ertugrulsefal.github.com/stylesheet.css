@@ -49,22 +49,58 @@
     padding: 4px 8px 2px 8px;
 }
 
-/* Category tabs. The active tab gets St's :checked pseudo-class (St.Button
- * toggle_mode + set_checked). */
+/* Category tabs: a segmented control. The tab buttons are transparent and only
+ * the active one is a raised pill; the track behind them is .todo-tab-strip.
+ * St.ScrollView allocates its child the full content width, so the track spans
+ * the whole rail instead of hugging the tabs. The active tab gets St's :checked
+ * pseudo-class (St.Button toggle_mode + set_checked). */
 .todo-tab-bar {
+    /* Between the tab rail and the '+' button. */
     spacing: 6px;
     padding: 4px 0;
 }
 
+.todo-tab-strip {
+    spacing: 4px;
+    padding: 3px;
+    border-radius: 10px;
+    /* Fallback only — see the theme-aware block at the end of this file. */
+    background-color: rgba(128, 128, 128, 0.15);
+}
+
 .todo-tab {
-    padding: 5px 14px;
+    padding: 3px 12px;
     font-weight: normal;
-    border-radius: 6px;
+    border-radius: 7px;
+    background-color: transparent;
+    /* St animates whatever the theme node paints, so this covers the hover and
+     * checked background change too. */
+    transition-duration: 120ms;
 }
 
 .todo-tab:checked {
     font-weight: bold;
+    /* Fallback only — see the theme-aware block. */
+    background-color: rgba(128, 128, 128, 0.25);
 }
+
+/* The '+ new category' button: a flat round icon button, so the tab row reads
+ * as one strip. */
+.todo-tab-add {
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    background-color: transparent;
+    transition-duration: 120ms;
+}
+
+.todo-tab-add StIcon {
+    icon-size: 12px;
+}
+
 /* Category action panel entries (a PopupSubMenu inside the menu). Delete is the
  * destructive entry; its first click turns it into the confirmation, which is
  * why the armed state is bold. */
@@ -143,6 +179,66 @@
 
 .todo-dark .todo-swatch-none {
     background-color: rgba(255, 255, 255, 0.12);
+}
+
+/* Tab strip. The theme's .button rules sit at the same specificity, so each
+ * state the theme paints (background, focus tint, pressed) needs its own
+ * scoped override to keep the flat look. The focus ring itself comes from the
+ * theme's !important box-shadow and is deliberately left alone. */
+.todo-light .todo-tab-strip {
+    background-color: rgba(0, 0, 0, 0.06);
+}
+
+.todo-dark .todo-tab-strip {
+    background-color: rgba(0, 0, 0, 0.24);
+}
+
+.todo-light .todo-tab:focus,
+.todo-light .todo-tab-add:focus {
+    background-color: transparent;
+}
+
+.todo-dark .todo-tab:focus,
+.todo-dark .todo-tab-add:focus {
+    background-color: transparent;
+}
+
+.todo-light .todo-tab:hover,
+.todo-light .todo-tab-add:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.todo-dark .todo-tab:hover,
+.todo-dark .todo-tab-add:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+}
+
+.todo-light .todo-tab:active,
+.todo-light .todo-tab-add:active {
+    background-color: rgba(0, 0, 0, 0.09);
+}
+
+.todo-dark .todo-tab:active,
+.todo-dark .todo-tab-add:active {
+    background-color: rgba(255, 255, 255, 0.16);
+}
+
+.todo-light .todo-tab:checked {
+    background-color: #ffffff;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.todo-dark .todo-tab:checked {
+    background-color: rgba(255, 255, 255, 0.13);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.todo-light .todo-tab:checked:hover {
+    background-color: #ffffff;
+}
+
+.todo-dark .todo-tab:checked:hover {
+    background-color: rgba(255, 255, 255, 0.17);
 }
 
 .todo-light .todo-scroll StScrollBar > .vhandle,
