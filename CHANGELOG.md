@@ -4,6 +4,33 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.20.2 - 2026-10-13
+
+### Changed
+- **The category tab bar is a segmented control now.** The tabs used to be a
+  tightly packed row of joined grey `.button` pills with a barely distinguishable
+  active state (the theme's `.button:checked` only darkens by about 8 %). The
+  strip now carries a full-width recessed track, the tabs are transparent with
+  the category colour as their text, and the active tab is a raised pill. The
+  `+` button became a flat round icon button so the row reads as one strip.
+- The tabs are spaced apart — the old `spacing` was set on the outer box layout,
+  so the tabs themselves had none — and backgrounds cross-fade over 120 ms.
+
+### Fixed
+- **The horizontal scrollbar was visible even when the tabs fit.** With
+  `vscrollbar_policy: NEVER`, `StScrollView` compares the content *width*
+  against the rail's *height* (`st-scroll-view.c`, `st_scroll_view_allocate`;
+  present in 46.0, 48.0 and 50.1), which is true for any tab row, so the bar was
+  always shown. The vertical policy is `AUTOMATIC` again, which uses the branch
+  that compares width against width; the bar now appears only while the tabs
+  actually overflow. The tabs are vertically centred so the rail's reserved
+  scrollbar space cannot stretch them.
+
+### Notes
+- Verified on GNOME Shell 50.1 (host). Tab labels keep the category colour, so
+  no contrast logic was needed; the light and dark variants use the existing
+  `.todo-light` / `.todo-dark` scoping.
+
 ## 0.20.1 - 2026-10-12
 
 ### Fixed
