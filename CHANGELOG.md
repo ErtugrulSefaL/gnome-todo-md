@@ -4,6 +4,26 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.20.3 - 2026-10-13
+
+### Changed
+- **Every icon-only button now shares one flat round style.** The category
+  header's ⋮, the task rows' edit / delete / drag handle and the tab bar's `+`
+  used to be small grey pills with a 3px radius; they are 28px circles now, with
+  no chrome of their own and a translucent layer on hover and press, so the
+  menu's icon buttons read as one family.
+- The category ⋮ icon gets its own icon size. Yaru draws `view-more-symbolic`
+  as hairlines — roughly a fifth of Adwaita's dot size — so at the icon buttons'
+  shared 12px it was almost invisible.
+
+### Fixed
+- **Task texts and category headers are vertically centred again.** The taller
+  buttons stretched every row, and an `St.Label` without its own vertical
+  alignment draws its text at the top of the stretched box.
+
+### Notes
+- Verified on GNOME Shell 50.1 (host).
+
 ## 0.20.2 - 2026-10-13
 
 ### Changed
