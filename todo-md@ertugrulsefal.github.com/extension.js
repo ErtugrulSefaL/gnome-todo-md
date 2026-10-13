@@ -851,6 +851,8 @@ export default class TodoExtension extends Extension {
             const label = new St.Label({
                 text: section.name,
                 style_class: 'todo-category-header',
+                // The row's ⋮ button is taller than the text.
+                y_align: Clutter.ActorAlign.CENTER,
             });
             // Same width cap as task labels plus a fixed ellipsize: a long
             // category name must not widen the menu.

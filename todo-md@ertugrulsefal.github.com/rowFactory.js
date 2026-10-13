@@ -60,6 +60,8 @@ export class RowFactory {
         const label = new St.Label({
             text: task.text,
             style_class: task.done ? 'todo-text todo-done' : 'todo-text',
+            // The row's icon buttons are taller than the text.
+            y_align: Clutter.ActorAlign.CENTER,
         });
         // Long texts truncate with an ellipsis instead of widening the menu.
         // The cap comes from the menu-width setting; CSS max-width plus
