@@ -27,11 +27,15 @@ export class TabBar {
 
         this.tabsBox = new St.BoxLayout({style_class: 'todo-tab-strip'});
         this.scroller = new St.ScrollView({
+            // Both must stay AUTOMATIC: StScrollView compares the content
+            // WIDTH against the rail's HEIGHT whenever vscrollbar_policy is
+            // not AUTOMATIC (st-scroll-view.c, st_scroll_view_allocate), which
+            // kept the horizontal scrollbar visible even when the tabs fit.
             hscrollbar_policy: St.PolicyType.AUTOMATIC,
-            vscrollbar_policy: St.PolicyType.NEVER,
+            vscrollbar_policy: St.PolicyType.AUTOMATIC,
             // St's own wheel handler consumes scroll events and routes them to
-            // the VADJUSTMENT only, which is useless here (vscrollbar NEVER).
-            // Disabling it lets the handler below receive the wheel.
+            // the vertical adjustment only; the strip needs horizontal wheel
+            // handling, so it is disabled and handled below.
             enable_mouse_scrolling: false,
         });
         this.scroller.add_child(this.tabsBox);
@@ -169,6 +173,9 @@ export class TabBar {
         const button = new St.Button({
             style_class: 'todo-tab button',
             toggle_mode: true,
+            // The rail reserves the scrollbar's height, so the strip can end up
+            // taller than the tabs; keep them centred instead of stretched.
+            y_align: Clutter.ActorAlign.CENTER,
         });
         const tabLabel = new St.Label({text: tab.label});
         button.set_child(tabLabel);
