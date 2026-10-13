@@ -873,7 +873,7 @@ export default class TodoExtension extends Extension {
                 accessible_name: `Actions for ${categoryName}`,
                 child: new St.Icon({
                     icon_name: 'view-more-symbolic',
-                    style_class: 'system-status-icon',
+                    style_class: 'system-status-icon todo-more-icon',
                 }),
             });
             actionsBtn.set_x_align(Clutter.ActorAlign.END);

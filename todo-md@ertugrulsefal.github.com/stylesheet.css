@@ -17,6 +17,12 @@
     icon-size: 12px;
 }
 
+/* Yaru draws view-more-symbolic as hairlines, so the ⋮ needs a larger box than
+ * the other icon buttons to read at all. */
+.todo-icon-button .todo-more-icon {
+    icon-size: 16px;
+}
+
 /* Completed tasks get a line-through on the label text. */
 .todo-text.todo-done {
     text-decoration: line-through;
