@@ -1,11 +1,16 @@
-/* Small icon buttons (edit, delete, drag handle) inside task rows: symbolic
- * glyphs render oversized in a menu row. */
+/* Icon-only buttons: the category header's ⋮, the task rows' edit / delete /
+ * drag handle and the tab bar's '+'. One flat round treatment for all of them —
+ * no chrome of their own, a translucent layer on hover and press. */
 
 .todo-icon-button {
-    border-radius: 3px;
-    padding: 0px 6px;
-    min-height: 18px;
-    min-width: 18px;
+    min-width: 28px;
+    max-width: 28px;
+    min-height: 28px;
+    max-height: 28px;
+    padding: 0;
+    border-radius: 999px;
+    background-color: transparent;
+    transition-duration: 120ms;
 }
 
 .todo-icon-button StIcon {
@@ -82,23 +87,6 @@
     font-weight: bold;
     /* Fallback only — see the theme-aware block. */
     background-color: rgba(128, 128, 128, 0.25);
-}
-
-/* The '+ new category' button: a flat round icon button, so the tab row reads
- * as one strip. */
-.todo-tab-add {
-    min-width: 28px;
-    max-width: 28px;
-    min-height: 28px;
-    max-height: 28px;
-    padding: 0;
-    border-radius: 999px;
-    background-color: transparent;
-    transition-duration: 120ms;
-}
-
-.todo-tab-add StIcon {
-    icon-size: 12px;
 }
 
 /* Category action panel entries (a PopupSubMenu inside the menu). Delete is the
@@ -194,32 +182,32 @@
 }
 
 .todo-light .todo-tab:focus,
-.todo-light .todo-tab-add:focus {
+.todo-light .todo-icon-button:focus {
     background-color: transparent;
 }
 
 .todo-dark .todo-tab:focus,
-.todo-dark .todo-tab-add:focus {
+.todo-dark .todo-icon-button:focus {
     background-color: transparent;
 }
 
 .todo-light .todo-tab:hover,
-.todo-light .todo-tab-add:hover {
+.todo-light .todo-icon-button:hover {
     background-color: rgba(0, 0, 0, 0.05);
 }
 
 .todo-dark .todo-tab:hover,
-.todo-dark .todo-tab-add:hover {
+.todo-dark .todo-icon-button:hover {
     background-color: rgba(255, 255, 255, 0.08);
 }
 
 .todo-light .todo-tab:active,
-.todo-light .todo-tab-add:active {
+.todo-light .todo-icon-button:active {
     background-color: rgba(0, 0, 0, 0.09);
 }
 
 .todo-dark .todo-tab:active,
-.todo-dark .todo-tab-add:active {
+.todo-dark .todo-icon-button:active {
     background-color: rgba(255, 255, 255, 0.16);
 }
 

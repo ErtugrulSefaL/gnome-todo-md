@@ -74,7 +74,7 @@ export class TabBar {
         // Far-right '+' — the new-category entry point, outside the scroller so
         // it is always reachable.
         this.newCategoryButton = new St.Button({
-            style_class: 'todo-tab-add button',
+            style_class: 'todo-icon-button button',
             accessible_name: 'New category',
             child: new St.Icon({
                 icon_name: 'list-add-symbolic',
