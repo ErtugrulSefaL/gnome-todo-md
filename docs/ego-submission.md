@@ -184,6 +184,20 @@ menu survived the capture intact.
 
 Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 
+### Where a screenshot lives (storage rule, 2026-10-20)
+
+- Screenshots are archived **in the repository**: `docs/screenshots/todo-md-<version>.png`,
+  named after the **version the image actually shows** (not after the version
+  that is being uploaded next). The same file serves the README and the EGO
+  upload.
+- Take one only when a screenshot is actually captured **and** an upload is
+  decided — not once per version. A version with no new capture reuses the
+  previous image.
+- Division of labour: **the user takes and crops the image**; the agent only
+  prepares the path (a placeholder file if the README needs to reference it
+  before the real capture exists) and wires it into the README. The agent never
+  edits or crops the image itself.
+
 ### Candidates that were evaluated (2026-10-11, kept for the record)
 
 1. `org.freedesktop.portal.Screenshot` — **chosen** (see above).
@@ -203,5 +217,7 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
       version-gated and fails silently — see docs/verified-apis.md)
 - [ ] `metadata.json` version-name matches the CHANGELOG release
 - [ ] Notes above updated to the new version
+- [ ] Screenshot: `docs/screenshots/todo-md-<version>.png` present (real capture,
+      not a placeholder) and referenced by the README
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip
