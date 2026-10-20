@@ -68,7 +68,7 @@ export default class TodoExtension extends Extension {
 
         // Add an icon to the panel button.
         const icon = new St.Icon({
-            icon_name: 'list-add-symbolic',
+            icon_name: 'checkbox-checked-symbolic',
             style_class: 'system-status-icon',
         });
         this._indicator.add_child(icon);
