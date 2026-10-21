@@ -692,23 +692,56 @@ export function moveTaskTo(content, fromIndex, toIndex) {
     return content;
 }
 
+// Real content above a heading: not a blank layout line, so a move would have
+// to drag it across the heading boundary.
+const _hasContentAboveHeading = category =>
+    category.items.slice(0, category.preCount ?? 0)
+        .some(item => item.type !== 'extra' || item.raw.trim() !== '');
+
+const _moveBlocker = category => {
+    if (category.implicit) {
+        return 'implicit';
+    }
+    return _hasContentAboveHeading(category) ? 'carrier' : null;
+};
+
+/**
+ * Why a category may not be reordered, or null when it may. The menu needs the
+ * REASON for its drop feedback, and this is the same predicate moveCategoryTo
+ * refuses on, so the two cannot drift apart.
+ *
+ * - 'implicit': the fallback 'General' bucket has no heading of its own;
+ * - 'carrier': it holds real (non-blank) content above its heading, so that
+ *   boundary can only hold while the category stays first;
+ * - 'unknown': no category of that name.
+ *
+ */
+export function categoryMoveBlocker(content, name) {
+    const doc = parseDocument(content);
+    const category = doc.categories.find(item => item.name === name);
+    return category ? _moveBlocker(category) : 'unknown';
+}
+
+/**
+ * Why position 0 is a fixed anchor — null when it is free. A first category
+ * that is implicit or carries content above its heading cannot be displaced,
+ * so nothing may be dropped in front of it.
+ */
+export function firstCategoryMoveBlocker(content) {
+    const doc = parseDocument(content);
+    const first = doc.categories[0];
+    return first ? _moveBlocker(first) : null;
+}
+
 /**
  * Move a whole category — heading, tasks and extras — to `toIndex` in the
  * document's category order. The file IS the order, so the drop rewrites the
  * document. `toIndex` is the category's index AFTER it has been lifted out of
  * the list, i.e. 0 is the first category.
  *
- * Rejected paths return the content byte-identically:
- * - no category of that name, or a `toIndex` outside the list;
- * - the category is the implicit 'General' bucket, which has no heading of its
- *   own to move (deleteCategory and renameCategory refuse it for the same
- *   reason);
- * - the category carries real content above its heading (`preCount`): that
- *   boundary only holds while the category stays first (renameCategory drops
- *   `preCount` when the heading changes);
- * - `toIndex` is 0 while the current first category is such a carrier, or the
- *   implicit bucket — then position 0 is a fixed anchor and nothing may land
- *   before it.
+ * Rejected paths return the content byte-identically: see categoryMoveBlocker
+ * for the category itself and firstCategoryMoveBlocker for position 0, plus a
+ * `toIndex` outside the list.
  *
  * Blank `preCount` lines are layout, not content: they are handed to
  * `doc.preamble`, which is emitted right under the title, so the output stays
@@ -719,41 +752,25 @@ export function moveTaskTo(content, fromIndex, toIndex) {
 export function moveCategoryTo(content, name, toIndex) {
     const doc = parseDocument(content);
     const fromIndex = doc.categories.findIndex(category => category.name === name);
-    if (fromIndex === -1) {
+    if (fromIndex === -1 || toIndex < 0 || toIndex >= doc.categories.length) {
         return content;
     }
     const category = doc.categories[fromIndex];
-    if (category.implicit) {
+    if (_moveBlocker(category)) {
         return content;
     }
-    if (toIndex < 0 || toIndex >= doc.categories.length) {
+    if (toIndex === 0 && _moveBlocker(doc.categories[0])) {
         return content;
     }
-
-    // Items written above the heading. Only blank extras may travel: they are
-    // layout and move into the preamble, keeping the serialization identical.
-    const preCount = category.preCount ?? 0;
-    const preItems = category.items.slice(0, preCount);
-    if (preItems.some(item => item.type !== 'extra' || item.raw.trim() !== '')) {
-        return content;
-    }
-
-    const first = doc.categories[0];
-    const firstPreCount = first.preCount ?? 0;
-    const firstIsAnchor = first.implicit
-        || first.items.slice(0, firstPreCount)
-            .some(item => item.type !== 'extra' || item.raw.trim() !== '');
-    if (toIndex === 0 && first !== category && firstIsAnchor) {
-        return content;
-    }
-
     if (fromIndex === toIndex) {
         return content;
     }
 
+    // Blank preCount lines are layout: hand them to the preamble so they stay
+    // under the title instead of sliding under a heading they do not own.
+    const preCount = category.preCount ?? 0;
     if (preCount > 0) {
-        const preamble = doc.preamble ?? [];
-        doc.preamble = preamble.concat(preItems);
+        doc.preamble = (doc.preamble ?? []).concat(category.items.slice(0, preCount));
         category.items = category.items.slice(preCount);
         delete category.preCount;
     }

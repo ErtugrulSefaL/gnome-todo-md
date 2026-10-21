@@ -1756,6 +1756,23 @@ function testMoveCategoryTo() {
     record('moveCategoryTo: output round-trips byte-identical',
         Storage.serializeDocument(Storage.parseDocument(moved)) === moved,
         JSON.stringify(moved));
+
+    // The reason the menu shows when it refuses a drop.
+    record('categoryMoveBlocker: the implicit bucket, the carrier and the free case',
+        Storage.categoryMoveBlocker(IMPLICIT, 'General') === 'implicit'
+        && Storage.categoryMoveBlocker(CARRIER, 'General') === 'carrier'
+        && Storage.categoryMoveBlocker(CARRIER, 'W') === null
+        && Storage.categoryMoveBlocker(CARRIER, 'Nope') === 'unknown', '');
+    record('categoryMoveBlocker: blank-only content above a heading is not a reason',
+        Storage.categoryMoveBlocker(BLANK, 'General') === null
+        && Storage.categoryMoveBlocker(BASE, 'A') === null, '');
+
+    record('firstCategoryMoveBlocker: position 0 is fixed for an implicit or carrier first category',
+        Storage.firstCategoryMoveBlocker(IMPLICIT) === 'implicit'
+        && Storage.firstCategoryMoveBlocker(CARRIER) === 'carrier'
+        && Storage.firstCategoryMoveBlocker(BLANK) === null
+        && Storage.firstCategoryMoveBlocker(BASE) === null
+        && Storage.firstCategoryMoveBlocker('') === null, '');
 }
 
 // ---- extensibility skeleton (Faz 2 step 7: no UI yet) --------------------
