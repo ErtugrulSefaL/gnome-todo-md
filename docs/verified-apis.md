@@ -336,6 +336,38 @@ Infrastructure note (not a Shell quirk to rely on): an automation script passed 
 `await scriptModule.run()` (`scripting.js`, `_runPerfScript`), and a module without
 it makes the Shell fail the script fatally.
 
+### Measured behaviour (VM tour, 2026-10-21 — Faz 10: the no-drop cursor is version-bound)
+
+A refused drop answers `DragMotionResult.NO_DROP`, and the Shell turns that into a
+cursor by itself. Whether that cursor is *visible* is a GNOME-version fact,
+measured on the legacy VMs:
+
+| | 46 (`mutter-14`) | 47 (`mutter-15`) | 48 (`mutter-16`) | 50 (`mutter-18`) |
+|---|---|---|---|---|
+| `DragMotionResult.NO_DROP` maps to | `Meta.Cursor.DND_UNSUPPORTED_TARGET` (15) | same (15) | `Meta.Cursor.NO_DROP` (15) | `Clutter.CursorType.NO_DROP` |
+| cursor name the Shell asks the theme for | `dnd-unsupported-target` | `dnd-unsupported-target` | `no-drop` | `no-drop` |
+| shipped by the installed themes (Adwaita / Yaru) | ✗ / ✗ | ✗ / ✗ | ✓ / ✓ | ✓ / ✓ |
+| refusal cursor actually drawn | **no** | **no** | yes | yes |
+
+Evidence, per VM:
+- the name is compiled into the compositor —
+  `grep -ao 'dnd-unsupported-target\|no-drop\|not-allowed' /usr/lib/x86_64-linux-gnu/libmutter-<N>.so.0`
+  finds `dnd-unsupported-target` only in `-14`/`-15`, and `no-drop`+`not-allowed` in `-16`;
+- the enum —
+  `GI_TYPELIB_PATH=/usr/lib/x86_64-linux-gnu/mutter-<N> gjs -m` printing `Meta.Cursor`
+  (`DND_UNSUPPORTED_TARGET = 15` in 46/47; the same slot is `NO_DROP = 15` in 48,
+  where the enum was renamed to CSS-style names);
+- the theme —
+  `/usr/share/icons/Adwaita/cursors` has `no-drop` and `not-allowed` but no
+  `dnd-unsupported-target`; Yaru does ship `dnd-no-drop`, which is not the requested
+  name either. `dnd.js`'s `DRAG_CURSOR_MAP` confirms the Shell reads our `NO_DROP`
+  correctly — only the name it then asks for cannot be loaded, so the previous
+  cursor stays.
+
+Consequence for this extension: the refusal cursor is a bonus, never the feedback.
+The `NO_DROP` *behaviour* (nothing written, actor back in place) works on every
+version, and the refusal reason is carried by our own hint label on `Main.uiGroup`.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - **FROZEN (2026-10-11):** the mirror can no longer be refreshed. gjs-docs.gnome.org
