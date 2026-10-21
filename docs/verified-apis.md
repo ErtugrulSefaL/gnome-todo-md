@@ -303,6 +303,39 @@ afterwards):
 - **A floating `PopupMenu` for the drop feedback** — a second menu fights the
   open one (the manager closes the previous menu), which Faz 7 already learned.
 
+### Measured behaviour (spike, 2026-10-21 — Faz 10: dragging the tab button itself)
+
+An isolated **headless** GNOME Shell 50.1 (`gnome-shell-test-tool --headless`,
+own XDG home + keyfile GSettings, so the live session's dconf is not touched),
+driven by a **virtual pointer**, dragged an `St.Button` inside a horizontally
+scrolling `St.ScrollView` on `Main.uiGroup`:
+
+| Measured | Result |
+|---|---|
+| `St.Settings.get().drag_threshold` | 8 px |
+| plain click on a `makeDraggable`'d `St.Button` | `clicked` emitted, no `drag-begin` |
+| press + 20/90 px motion + release | `drag-begin` + `drag-end` + one `dragDrop`, `clicked` NOT emitted |
+| `hadjustment.value` across the drag | unchanged (no scroll conflict) |
+| right-click (button 3) on the tab | still reaches our own `button-press-event` handler |
+| overflow condition | `upper=196 > page_size=140` (the drag ran while the strip overflowed) |
+
+Why a whole tab may be draggable without a handle, per Shell source:
+- **49+** (`dnd.js` attaches `St.DndStartGesture`): the gesture only reaches
+  `COMPLETED` — i.e. only takes the sequence — once the pointer moves past
+  `drag-threshold` (`st-dnd-start-gesture.c`, `maybe_start_drag`). A motionless
+  press ends `CANCELLED` in `point_ended`, leaving the press to `St.Button`.
+- **46-48** (old `_Draggable`): `_onButtonPress` returns `Clutter.EVENT_PROPAGATE`,
+  so the press still reaches the button; when a real drag starts the code calls
+  `this.actor.fake_release()` and clears `hover` to discard the button's state.
+
+Also measured: dragging does **not** move the `ScrollView` adjustment, so edge
+auto-scroll during a tab drag has to be driven by the extension itself.
+
+Infrastructure note (not a Shell quirk to rely on): an automation script passed to
+`gnome-shell-test-tool`/`--automation-script` must export `run()` — the Shell calls
+`await scriptModule.run()` (`scripting.js`, `_runPerfScript`), and a module without
+it makes the Shell fail the script fatally.
+
 ## Known gaps of the offline mirror (do not trust blindly)
 
 - **FROZEN (2026-10-11):** the mirror can no longer be refreshed. gjs-docs.gnome.org
