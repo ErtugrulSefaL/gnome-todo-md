@@ -1667,6 +1667,97 @@ function testMoveTaskTo() {
         JSON.stringify(moved));
 }
 
+// ---- moveCategoryTo: category reordering (Faz 10 step 1) ------------------
+
+function testMoveCategoryTo() {
+    const BASE = '# TODO\n## A\n- [ ] a1\n## B\n- [ ] b1\n## C\n- [ ] c1\n';
+
+    // `toIndex` is the FINAL index: 0 is the first category.
+    record('moveCategoryTo: the first category moves to the end',
+        Storage.moveCategoryTo(BASE, 'A', 2)
+            === '# TODO\n## B\n- [ ] b1\n## C\n- [ ] c1\n## A\n- [ ] a1\n',
+        JSON.stringify(Storage.moveCategoryTo(BASE, 'A', 2)));
+
+    record('moveCategoryTo: the last category moves to the front',
+        Storage.moveCategoryTo(BASE, 'C', 0)
+            === '# TODO\n## C\n- [ ] c1\n## A\n- [ ] a1\n## B\n- [ ] b1\n',
+        JSON.stringify(Storage.moveCategoryTo(BASE, 'C', 0)));
+
+    record('moveCategoryTo: the middle category takes the first slot',
+        Storage.moveCategoryTo(BASE, 'B', 0)
+            === '# TODO\n## B\n- [ ] b1\n## A\n- [ ] a1\n## C\n- [ ] c1\n',
+        JSON.stringify(Storage.moveCategoryTo(BASE, 'B', 0)));
+
+    // A category is its heading, its tasks AND its extras: all three travel.
+    const MIXED = '# T\n## A\n- [ ] a\nnote\n- [x] b\n## B\n- [ ] c\n';
+    record('moveCategoryTo: heading, tasks and extras travel together',
+        Storage.moveCategoryTo(MIXED, 'A', 1)
+            === '# T\n## B\n- [ ] c\n## A\n- [ ] a\nnote\n- [x] b\n',
+        JSON.stringify(Storage.moveCategoryTo(MIXED, 'A', 1)));
+
+    // Rejected paths are byte-identical no-ops.
+    record('moveCategoryTo: the same index is a no-op',
+        Storage.moveCategoryTo(BASE, 'B', 1) === BASE, '');
+    record('moveCategoryTo: an unknown name is a no-op',
+        Storage.moveCategoryTo(BASE, 'Nope', 0) === BASE, '');
+    record('moveCategoryTo: an out-of-range toIndex is a no-op',
+        Storage.moveCategoryTo(BASE, 'A', 3) === BASE
+        && Storage.moveCategoryTo(BASE, 'A', -1) === BASE, '');
+
+    const IMPLICIT = '# T\n- [ ] x\n## A\n- [ ] a\n';
+    record('moveCategoryTo: the implicit General bucket is refused',
+        Storage.moveCategoryTo(IMPLICIT, 'General', 1) === IMPLICIT, '');
+
+    // Position 0 is a fixed anchor while a category carries content above its
+    // heading: neither that category nor anything dropping in front of it moves.
+    const CARRIER = '# T\n- [ ] pre\n## General\n- [ ] g\n## W\n- [ ] w\n## X\n- [ ] x\n';
+    record('moveCategoryTo: a category carrying content above its heading is refused',
+        Storage.moveCategoryTo(CARRIER, 'General', 1) === CARRIER, '');
+    record('moveCategoryTo: nothing may land before such a carrier',
+        Storage.moveCategoryTo(CARRIER, 'X', 0) === CARRIER, '');
+    record('moveCategoryTo: the other categories still move freely',
+        Storage.moveCategoryTo(CARRIER, 'W', 2)
+            === '# T\n- [ ] pre\n## General\n- [ ] g\n## X\n- [ ] x\n## W\n- [ ] w\n',
+        JSON.stringify(Storage.moveCategoryTo(CARRIER, 'W', 2)));
+
+    // Blank preCount lines are layout (L-044): the category moves and the line
+    // stays under the title, so the serialization is still canonical.
+    const BLANK = '# T\n\n## General\n- [ ] g\n## W\n- [ ] w\n';
+    const MOVED_BLANK = Storage.moveCategoryTo(BLANK, 'General', 1);
+    record('moveCategoryTo: a blank-only preCount category moves, blank line kept',
+        MOVED_BLANK === '# T\n\n## W\n- [ ] w\n## General\n- [ ] g\n',
+        JSON.stringify(MOVED_BLANK));
+
+    // Every move is either a byte-identical no-op or a stable, loss-less
+    // reorder: the output round-trips and keeps its categories and tasks.
+    const FUZZ = '# T\n## A\n- [ ] a\n## B\nnote\n- [ ] b\n## C\n- [ ] c\n## D\n\n- [ ] d\n';
+    const NAMES = ['A', 'B', 'C', 'D'];
+    let fuzzOk = true;
+    let nonNoop = 0;
+    for (const name of NAMES) {
+        for (let i = 0; i < NAMES.length; i++) {
+            const out = Storage.moveCategoryTo(FUZZ, name, i);
+            if (out === FUZZ) {
+                continue;
+            }
+            nonNoop++;
+            const doc = Storage.parseDocument(out);
+            if (Storage.serializeDocument(doc) !== out
+                || doc.categories.length !== NAMES.length
+                || doc.categories.reduce((k, c) => k + Storage.categoryTasks(c).length, 0) !== 4) {
+                fuzzOk = false;
+            }
+        }
+    }
+    record('moveCategoryTo: 16 moves stay loss-less and round-trip stably',
+        fuzzOk && nonNoop === 12, `nonNoop=${nonNoop}`);
+
+    const moved = Storage.moveCategoryTo(BASE, 'A', 2);
+    record('moveCategoryTo: output round-trips byte-identical',
+        Storage.serializeDocument(Storage.parseDocument(moved)) === moved,
+        JSON.stringify(moved));
+}
+
 // ---- extensibility skeleton (Faz 2 step 7: no UI yet) --------------------
 
 function testExtensibilitySkeleton() {
@@ -2022,6 +2113,7 @@ testEditTask();
 testAddTask();
 testAddTaskCategorized();
 testMoveTaskTo();
+testMoveCategoryTo();
 testExtensibilitySkeleton();
 testWriteRead();
 restoreOriginal();

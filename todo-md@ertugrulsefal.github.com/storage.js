@@ -693,6 +693,77 @@ export function moveTaskTo(content, fromIndex, toIndex) {
 }
 
 /**
+ * Move a whole category — heading, tasks and extras — to `toIndex` in the
+ * document's category order. The file IS the order, so the drop rewrites the
+ * document. `toIndex` is the category's index AFTER it has been lifted out of
+ * the list, i.e. 0 is the first category.
+ *
+ * Rejected paths return the content byte-identically:
+ * - no category of that name, or a `toIndex` outside the list;
+ * - the category is the implicit 'General' bucket, which has no heading of its
+ *   own to move (deleteCategory and renameCategory refuse it for the same
+ *   reason);
+ * - the category carries real content above its heading (`preCount`): that
+ *   boundary only holds while the category stays first (renameCategory drops
+ *   `preCount` when the heading changes);
+ * - `toIndex` is 0 while the current first category is such a carrier, or the
+ *   implicit bucket — then position 0 is a fixed anchor and nothing may land
+ *   before it.
+ *
+ * Blank `preCount` lines are layout, not content: they are handed to
+ * `doc.preamble`, which is emitted right under the title, so the output stays
+ * byte-identical. The colour map is keyed by category name and follows a move
+ * on its own.
+ *
+ */
+export function moveCategoryTo(content, name, toIndex) {
+    const doc = parseDocument(content);
+    const fromIndex = doc.categories.findIndex(category => category.name === name);
+    if (fromIndex === -1) {
+        return content;
+    }
+    const category = doc.categories[fromIndex];
+    if (category.implicit) {
+        return content;
+    }
+    if (toIndex < 0 || toIndex >= doc.categories.length) {
+        return content;
+    }
+
+    // Items written above the heading. Only blank extras may travel: they are
+    // layout and move into the preamble, keeping the serialization identical.
+    const preCount = category.preCount ?? 0;
+    const preItems = category.items.slice(0, preCount);
+    if (preItems.some(item => item.type !== 'extra' || item.raw.trim() !== '')) {
+        return content;
+    }
+
+    const first = doc.categories[0];
+    const firstPreCount = first.preCount ?? 0;
+    const firstIsAnchor = first.implicit
+        || first.items.slice(0, firstPreCount)
+            .some(item => item.type !== 'extra' || item.raw.trim() !== '');
+    if (toIndex === 0 && first !== category && firstIsAnchor) {
+        return content;
+    }
+
+    if (fromIndex === toIndex) {
+        return content;
+    }
+
+    if (preCount > 0) {
+        const preamble = doc.preamble ?? [];
+        doc.preamble = preamble.concat(preItems);
+        category.items = category.items.slice(preCount);
+        delete category.preCount;
+    }
+
+    doc.categories.splice(fromIndex, 1);
+    doc.categories.splice(toIndex, 0, category);
+    return serializeDocument(doc);
+}
+
+/**
  * A category name is written as `## <name>`, so it has to survive a re-read as
  * a heading: no line breaks, which would escape the heading, and no leading
  * '#', which would nest one. Such names are rejected rather than rewritten —
