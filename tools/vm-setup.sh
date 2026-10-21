@@ -19,6 +19,9 @@
 # 9p fallback if virtiofs is unavailable:
 #   sudo mount -t 9p -o trans=virtio,version=9p2000.L todomd /mnt
 #
+# The guest must already have an SSH server (or the share mounted); bringing a
+# fresh / agentless VM to that point is tools/vm-bootstrap-ssh.sh's job.
+#
 # Then log out and back in (the shell only scans extension directories at
 # startup) and run the RC checklist in the menu.
 #
