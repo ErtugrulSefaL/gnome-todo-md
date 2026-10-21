@@ -133,6 +133,11 @@ export class TabBar {
     refill(sections, colors, activeCategory, onSelect, onActions, drag) {
         this._drag = drag ?? null;
         this.tabsBox.remove_all_children();
+        if (sections.length === 0) {
+            // No categories at all: the menu shows its empty state and the strip
+            // keeps only its '+'.
+            return;
+        }
         if (sections.length > 1) {
             const tabs = [{name: null, label: 'All'}]
                 .concat(sections.map(section => ({
@@ -163,6 +168,20 @@ export class TabBar {
         button.set_checked(true);
         this._connectActions(button, sections[0].name, onActions);
         this.tabsBox.add_child(button);
+    }
+
+    /**
+     * Ring the '+' while the file has no categories: it is then the strip's only
+     * control, so it has to be findable. The class carries the ring's colours,
+     * scoped per colour scheme in stylesheet.css.
+     *
+     */
+    setEmptyState(on) {
+        if (on) {
+            this.newCategoryButton.add_style_class_name('todo-tab-add-hint');
+        } else {
+            this.newCategoryButton.remove_style_class_name('todo-tab-add-hint');
+        }
     }
 
     /**

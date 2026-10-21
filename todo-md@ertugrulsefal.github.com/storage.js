@@ -423,6 +423,20 @@ export function renderSections(doc) {
 }
 
 /**
+ * Whether the document names NO category at all: a brand-new file, or one that
+ * only has a '# title'. The menu answers that with its empty state instead of a
+ * 'General' section the user never asked for.
+ *
+ * This is deliberately NOT a question for renderSections(): that one keeps
+ * synthesizing the fallback so the colour pruning never sees a category-less
+ * document (D1). Asking this must not change what pruning sees.
+ *
+ */
+export function hasNoCategories(doc) {
+    return doc.categories.length === 0;
+}
+
+/**
  * The colour map as it should be STORED after reading `doc`. The decision
  * lives here, not in the UI, so it is unit-testable.
  *

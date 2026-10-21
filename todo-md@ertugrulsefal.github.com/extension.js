@@ -329,6 +329,62 @@ export default class TodoExtension extends Extension {
     }
 
     /**
+     * Open or close the inline "new category" entry. Two controls lead here —
+     * the strip's '+', and the empty-state guidance shown when the file names
+     * no category — so what "open the entry" means has one definition.
+     */
+    _toggleNewCategoryEntry() {
+        this._cancelEditing();
+        this._addingNewCategory = !this._addingNewCategory;
+        this._refreshTodoMenu();
+    }
+
+    /**
+     * Guidance for a file that names no category yet. The menu is otherwise
+     * blank, so this row says what to do and stands for the strip's '+' — its
+     * whole surface is one button. CSS reserves a fixed height for the row and
+     * the message is centred inside it.
+     */
+    _makeEmptyStateRow() {
+        // Non-reactive: the row would otherwise paint its own hover over the
+        // whole reserved height, doubling the button's tint.
+        const row = new PopupMenu.PopupBaseMenuItem({
+            activate: false,
+            can_focus: false,
+            reactive: false,
+            style_class: 'todo-empty-row',
+        });
+        row.set_x_expand(true);
+        // A Button, not the row itself: activating a menu item would close the
+        // menu, and the inline entry has to appear in it instead.
+        const button = new St.Button({
+            style_class: 'todo-empty-hint',
+            x_expand: true,
+            y_expand: true,
+            accessible_name: 'Create your first category',
+        });
+        const box = new St.BoxLayout({
+            vertical: true,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        box.add_child(new St.Label({
+            text: 'No categories yet',
+            style_class: 'todo-empty-title',
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
+        box.add_child(new St.Label({
+            text: 'Create your first category',
+            style_class: 'todo-empty-link',
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
+        button.set_child(box);
+        button.connect('clicked', () => this._toggleNewCategoryEntry());
+        row.add_child(button);
+        return row;
+    }
+
+    /**
      * Build the inline "new category" row: an empty entry. Enter commits via
      * Storage.addCategory; the new category becomes the active tab.
      *
@@ -755,6 +811,12 @@ export default class TodoExtension extends Extension {
         // per-category.
         const sections = Storage.renderSections(doc);
 
+        // A document naming NO category (an empty file, or nothing but a title)
+        // gets the empty state: the synthesized General section would otherwise
+        // appear as a single, pointless tab. Plain tasks without a heading do
+        // name a category, so they keep the normal render.
+        const emptyDocument = Storage.hasNoCategories(doc);
+
         // Category colours from the settings map. Dead keys are pruned
         // automatically, and the write happens only when the prune removed
         // something, so the changed:: signal cannot cause a refresh loop.
@@ -807,9 +869,7 @@ export default class TodoExtension extends Extension {
             // exists, where it sits and what fills it.
             this._tabBar = new TabBar();
             this._tabBar.newCategoryButton.connect('clicked', () => {
-                this._cancelEditing();
-                this._addingNewCategory = !this._addingNewCategory;
-                this._refreshTodoMenu();
+                this._toggleNewCategoryEntry();
             });
         } else {
             // Detach and clear the tab buttons; the strip and its hadjustment
@@ -821,7 +881,8 @@ export default class TodoExtension extends Extension {
         // Re-attach the persistent tab bar as the first row (refill only, so the
         // scroller's hadjustment survives).
         this._tabBar.attach(menu.box);
-        this._tabBar.refill(sections, prunedColors, this._activeCategory,
+        this._tabBar.refill(emptyDocument ? [] : sections,
+            prunedColors, this._activeCategory,
             name => this._switchTo(name),
             name => this._openActionsFor(name),
             {
@@ -829,6 +890,9 @@ export default class TodoExtension extends Extension {
                 onEnd: () => this._onDragEnd(),
                 onDrop: () => this._onCategoryDrop(),
             });
+        // With no categories the '+' is the only control on the strip, so it
+        // carries the emphasis ring.
+        this._tabBar.setEmptyState(emptyDocument);
 
         // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {
@@ -846,9 +910,17 @@ export default class TodoExtension extends Extension {
         // engages once a max-height is set).
         const contentSection = this._contentSection;
 
-        const visibleSections = this._activeCategory === ALL_TAB
-            ? sections
-            : sections.filter(section => section.name === this._activeCategory);
+        const visibleSections = emptyDocument
+            ? []
+            : (this._activeCategory === ALL_TAB
+                ? sections
+                : sections.filter(section => section.name === this._activeCategory));
+
+        // Nothing to list: the content area still shows, holding the guidance
+        // row instead of category sections.
+        if (emptyDocument) {
+            contentSection.addMenuItem(this._makeEmptyStateRow());
+        }
 
         // The row a keyboard move produced takes the key focus back, so a second
         // Alt+↑/↓ press works without re-clicking. The target is consumed here

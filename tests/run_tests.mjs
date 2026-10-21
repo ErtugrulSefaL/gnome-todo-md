@@ -634,6 +634,16 @@ function testStaticChecks() {
             && !/max-width:\s*28em/.test(ui),
         'width cap comes from the menu-width setting, not a fixed value');
 
+    // Empty state (post-Faz-10 work unit): the UI asks the document, never the
+    // rendered section list. renderSections() synthesizes 'General' for a
+    // category-less document on purpose — the colour pruning (D1) depends on
+    // that — so keying the empty state off `sections` would both show a
+    // pointless tab and tie the two decisions back together.
+    record('static: the empty state keys off Storage.hasNoCategories, not a section count',
+        /Storage\.hasNoCategories\(doc\)/.test(ui),
+        'hasNoCategories is the deliberate, non-renderSections question; '
+        + 'renderSections keeps synthesizing General for the D1 prune');
+
     // Faz 4: single-interaction invariant — every edit-state reset pairs the
     // two fields, and opening an edit closes the add entry (the exact bug
     // fixed in 0ab4e16: _startEditing missed the _addingCategory reset).
@@ -1669,8 +1679,7 @@ function testMoveTaskTo() {
 
 // ---- moveCategoryTo: category reordering (Faz 10 step 1) ------------------
 
-function testMoveCategoryTo() {
-    const BASE = '# TODO\n## A\n- [ ] a1\n## B\n- [ ] b1\n## C\n- [ ] c1\n';
+function testMoveCategoryTo() {    const BASE = '# TODO\n## A\n- [ ] a1\n## B\n- [ ] b1\n## C\n- [ ] c1\n';
 
     // `toIndex` is the FINAL index: 0 is the first category.
     record('moveCategoryTo: the first category moves to the end',
@@ -1773,6 +1782,25 @@ function testMoveCategoryTo() {
         && Storage.firstCategoryMoveBlocker(BLANK) === null
         && Storage.firstCategoryMoveBlocker(BASE) === null
         && Storage.firstCategoryMoveBlocker('') === null, '');
+}
+
+// ---- empty state (Faz 10 sonrası ara iş birimi) ----------------------------
+function testEmptyState() {
+    const empty = Storage.parseDocument('');
+    const titleOnly = Storage.parseDocument('# Todo\n');
+    const plainTasks = Storage.parseDocument('# Todo\n\n- [ ] a\n');
+    const withHeading = Storage.parseDocument('# Todo\n\n## Work\n- [ ] a\n');
+
+    record('hasNoCategories: an empty or title-only file names no category',
+        Storage.hasNoCategories(empty) && Storage.hasNoCategories(titleOnly),
+        'the menu answers those with its empty state instead of a General section');
+    record('hasNoCategories: plain tasks without a heading DO name a category',
+        !Storage.hasNoCategories(plainTasks) && !Storage.hasNoCategories(withHeading),
+        'the implicit General bucket keeps the "readable in any editor" case normal');
+    record('D1 stays pinned: an empty document still renders General and keeps every colour',
+        Storage.renderSections(empty).map(section => section.name).join(',') === 'General'
+        && Storage.prunedColorsForDocument({Work: '#2190a4'}, empty).Work === '#2190a4',
+        'the empty state must never reach renderSections, which the colour pruning depends on');
 }
 
 // ---- extensibility skeleton (Faz 2 step 7: no UI yet) --------------------
@@ -2131,6 +2159,7 @@ testAddTask();
 testAddTaskCategorized();
 testMoveTaskTo();
 testMoveCategoryTo();
+testEmptyState();
 testExtensibilitySkeleton();
 testWriteRead();
 restoreOriginal();
