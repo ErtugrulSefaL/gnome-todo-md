@@ -123,6 +123,7 @@ export default class TodoExtension extends Extension {
         this._dragging = null;
         this._focusIndex = -1;
         this._lastWritten = null;
+        this._autoscrollId = 0;
         this._setupDragAndDrop();
 
         // Theme-dependent colours (checkbox ring, swatch ring, scrollbars)
@@ -158,13 +159,16 @@ export default class TodoExtension extends Extension {
         box.remove_style_class_name('todo-light');
         box.remove_style_class_name('todo-dark');
         box.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
-        // The insertion line is not inside menu.box (it lives on Main.uiGroup so
-        // it never joins the menu's layout), so it carries the scheme class
+        // The drag actors are not inside menu.box (they live on Main.uiGroup so
+        // they never join the menu's layout), so they carry the scheme class
         // directly instead of inheriting it.
-        if (this._dropLine) {
-            this._dropLine.remove_style_class_name('todo-light');
-            this._dropLine.remove_style_class_name('todo-dark');
-            this._dropLine.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
+        for (const actor of [this._dropLine, this._tabDropLine, this._dragHint]) {
+            if (!actor) {
+                continue;
+            }
+            actor.remove_style_class_name('todo-light');
+            actor.remove_style_class_name('todo-dark');
+            actor.add_style_class_name(dark ? 'todo-dark' : 'todo-light');
         }
     }
 
@@ -199,17 +203,22 @@ export default class TodoExtension extends Extension {
             this._colorSchemeSignal = null;
         }
         // The drag monitor is a module-global list in the Shell, so it must
-        // never outlive the extension; the insertion line is our own actor on
-        // Main.uiGroup.
+        // never outlive the extension; the insertion lines and the hint are our
+        // own actors on Main.uiGroup.
         if (this._dragMonitor) {
             DND.removeDragMonitor(this._dragMonitor);
             this._dragMonitor = null;
         }
         this._dragging = null;
-        if (this._dropLine) {
-            this._dropLine.destroy();
-            this._dropLine = null;
+        this._stopAutoScroll();
+        for (const actor of [this._dropLine, this._tabDropLine, this._dragHint]) {
+            if (actor) {
+                actor.destroy();
+            }
         }
+        this._dropLine = null;
+        this._tabDropLine = null;
+        this._dragHint = null;
         // The panel's actor lives inside the content section, but the
         // PopupSubMenu owns shell-side state (a Main.sessionMode connection), so
         // it is destroyed before its actor's parent goes away.
@@ -814,7 +823,12 @@ export default class TodoExtension extends Extension {
         this._tabBar.attach(menu.box);
         this._tabBar.refill(sections, prunedColors, this._activeCategory,
             name => this._switchTo(name),
-            name => this._openActionsFor(name));
+            name => this._openActionsFor(name),
+            {
+                onBegin: (name, index) => this._onCategoryDragBegin(name, index),
+                onEnd: () => this._onDragEnd(),
+                onDrop: () => this._onCategoryDrop(),
+            });
 
         // The new-category inline entry renders right under the tab bar.
         if (this._addingNewCategory) {
@@ -1083,13 +1097,37 @@ export default class TodoExtension extends Extension {
             // CONTINUE, never SUCCESS: a monitor returning SUCCESS/FAILURE makes
             // the Shell return early and skip its own cleanup — the drag actor is
             // never destroyed, the modal grab is never popped and drag-end never
-            // fires. The drop itself belongs to the row's acceptDrop, which the
-            // Shell calls next.
+            // fires. The drop itself belongs to the target's acceptDrop, which
+            // the Shell calls next.
             dragDrop: () => DND.DragDropResult.CONTINUE,
         };
-        this._dropLine = new St.Widget({style_class: 'todo-drop-line'});
+        // Task rows and category tabs run along different axes, so each gets its
+        // own line: the row's takes its width from the row, the tab's its height
+        // from the tab.
+        this._dropLine = new St.Widget({style_class: 'todo-drop-line todo-drop-line-h'});
         this._dropLine.visible = false;
         Main.uiGroup.add_child(this._dropLine);
+        this._tabDropLine = new St.Widget({style_class: 'todo-drop-line todo-drop-line-v'});
+        this._tabDropLine.visible = false;
+        Main.uiGroup.add_child(this._tabDropLine);
+        // Why a category drop is refused, shown under the tab strip.
+        this._dragHint = new St.Label({style_class: 'todo-drag-hint'});
+        this._dragHint.visible = false;
+        Main.uiGroup.add_child(this._dragHint);
+    }
+
+    /**
+     * Put every drag actor above the menu. PopupMenu.open() raises the menu over
+     * all uiGroup siblings, which hides ours behind its background; doing it here
+     * and not in dragMotion keeps the drag clone — added after drag-begin —
+     * on top of them.
+     */
+    _raiseDragActors() {
+        for (const actor of [this._dropLine, this._tabDropLine, this._dragHint]) {
+            if (actor) {
+                Main.uiGroup.set_child_above_sibling(actor, null);
+            }
+        }
     }
 
     /**
@@ -1097,16 +1135,34 @@ export default class TodoExtension extends Extension {
      * listening for its motion.
      */
     _onDragBegin(index, categoryName) {
-        this._dragging = {index, category: categoryName};
+        this._dragging = {kind: 'task', index, category: categoryName};
         DND.addDragMonitor(this._dragMonitor);
-        // The menu raises itself above every uiGroup sibling on each open
-        // (PopupMenu.open), which puts the insertion line behind the menu's
-        // background: raise it back on top once per drag. Here and not in
-        // _onDragMotion, so the drag clone — raised after drag-begin — stays
-        // above the line.
-        if (this._dropLine) {
-            Main.uiGroup.set_child_above_sibling(this._dropLine, null);
-        }
+        this._raiseDragActors();
+    }
+
+    /**
+     * A drag started on a category tab. The file's heading order IS the tab
+     * order, so the drop rewrites the document. Whether this category may move
+     * at all, and whether position 0 is free, is decided once here — from the
+     * same predicates storage refuses on, so the feedback cannot disagree with
+     * the write.
+     */
+    _onCategoryDragBegin(name, index) {
+        const content = Storage.readTodo(this._todoPath()).raw;
+        this._dragging = {
+            kind: 'category',
+            name,
+            index,
+            blocked: Storage.categoryMoveBlocker(content, name),
+            anchor: Storage.firstCategoryMoveBlocker(content),
+            toIndex: -1,
+        };
+        // An open inline entry would be rebuilt away mid-drag; reset the state
+        // now and let the refresh at drag-end render it.
+        this._closeInteractions();
+        DND.addDragMonitor(this._dragMonitor);
+        this._raiseDragActors();
+        this._startAutoScroll();
     }
 
     /**
@@ -1116,7 +1172,10 @@ export default class TodoExtension extends Extension {
     _onDragEnd() {
         this._dragging = null;
         DND.removeDragMonitor(this._dragMonitor);
+        this._stopAutoScroll();
         this._hideDropLine();
+        this._hideTabDrop();
+        this._hideDragHint();
         this._refreshTodoMenu();
     }
 
@@ -1129,6 +1188,9 @@ export default class TodoExtension extends Extension {
      * path returns false and writes nothing.
      */
     _onDrop(toIndex, toCategory) {
+        if (this._dragging?.kind === 'category') {
+            return this._onCategoryDrop();
+        }
         if (!this._dragging
             || this._dragging.category !== toCategory
             || this._dragging.index === toIndex) {
@@ -1144,11 +1206,34 @@ export default class TodoExtension extends Extension {
     }
 
     /**
+     * The category drop, called by the Shell through the strip's acceptDrop.
+     * The target slot was already validated in dragMotion — it is what the
+     * insertion line showed — so this only re-reads the file and writes.
+     */
+    _onCategoryDrop() {
+        const drag = this._dragging;
+        if (!drag || drag.kind !== 'category'
+            || drag.blocked !== null || drag.toIndex < 0) {
+            return false;
+        }
+        const parsed = Storage.readTodo(this._todoPath());
+        const updated = Storage.moveCategoryTo(parsed.raw, drag.name, drag.toIndex);
+        if (!parsed.ok || updated === parsed.raw) {
+            return false;
+        }
+        Storage.writeTodo(this._todoPath(), updated);
+        return true;
+    }
+
+    /**
      * Drag feedback: show the insertion line above or below the row under the
      * pointer, and tell the Shell whether that spot can take the drop (NO_DROP
      * gives the no-drop cursor for free).
      */
     _onDragMotion(event) {
+        if (this._dragging?.kind === 'category') {
+            return this._onCategoryDragMotion(event);
+        }
         if (!this._dragging) {
             return DND.DragMotionResult.CONTINUE;
         }
@@ -1166,6 +1251,184 @@ export default class TodoExtension extends Extension {
         this._dropLine.set_position(x, below ? y + height : y);
         this._dropLine.visible = true;
         return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    /**
+     * Drag feedback for a category tab. The strip runs horizontally, so the
+     * insertion line stands upright in the gap the category would land in.
+     * Everything that cannot take the drop answers NO_DROP — the no-drop cursor
+     * comes with it — and a refused spot says why in the hint.
+     */
+    _onCategoryDragMotion(event) {
+        const drag = this._dragging;
+        drag.toIndex = -1;
+        this._dragX = event.x;
+        const slot = this._categorySlotAt(event.x, event.y);
+        if (slot === null) {
+            this._hideTabDrop();
+            this._hideDragHint();
+            return DND.DragMotionResult.NO_DROP;
+        }
+        if (drag.blocked !== null) {
+            this._hideTabDrop();
+            this._showDragHint(`"${drag.name}" can't be moved: `
+                + this._blockerReason(drag.blocked));
+            return DND.DragMotionResult.NO_DROP;
+        }
+        // Position 0 is a fixed anchor while the first category carries content
+        // above its heading or has no heading of its own.
+        if (slot === 0 && drag.anchor !== null) {
+            this._hideTabDrop();
+            this._showDragHint(`Can't drop before "${this._firstCategoryName()}": `
+                + this._blockerReason(drag.anchor));
+            return DND.DragMotionResult.NO_DROP;
+        }
+        const toIndex = slot > drag.index ? slot - 1 : slot;
+        if (toIndex === drag.index) {
+            // That gap is where the tab already is.
+            this._hideTabDrop();
+            this._hideDragHint();
+            return DND.DragMotionResult.NO_DROP;
+        }
+        drag.toIndex = toIndex;
+        this._hideDragHint();
+        this._positionTabDropLine(slot);
+        return DND.DragMotionResult.MOVE_DROP;
+    }
+
+    /**
+     * The drop slot at a stage point: how many category tabs the pointer has
+     * passed — 0 in front of the first one, tabs.length past the last. null when
+     * the pointer is off the strip, which is what keeps the '+' button and the
+     * rest of the menu out of the drop area.
+     */
+    _categorySlotAt(x, y) {
+        const tabs = this._categoryTabs();
+        if (tabs.length === 0) {
+            return null;
+        }
+        const scroller = this._tabBar.scroller;
+        const [sx, sy] = scroller.get_transformed_position();
+        if (x < sx || x > sx + scroller.get_width()
+            || y < sy || y > sy + scroller.get_height()) {
+            return null;
+        }
+        let slot = 0;
+        for (const tab of tabs) {
+            const [tx] = tab.get_transformed_position();
+            if (x > tx + tab.get_width() / 2) {
+                slot += 1;
+            }
+        }
+        return slot;
+    }
+
+    /**
+     * The category tab buttons in strip order — 'All' carries no category name
+     * and is filtered out.
+     */
+    _categoryTabs() {
+        return this._tabBar
+            ? this._tabBar.tabsBox.get_children()
+                .filter(actor => actor._todoCategoryName !== undefined)
+            : [];
+    }
+
+    /** The first category's name, for the refusal text. */
+    _firstCategoryName() {
+        const tabs = this._categoryTabs();
+        return tabs.length > 0 ? tabs[0]._todoCategoryName : '';
+    }
+
+    /**
+     * Stand the insertion line up in the gap before `slot`, or after the last
+     * tab when the category would land at the end.
+     */
+    _positionTabDropLine(slot) {
+        const tabs = this._categoryTabs();
+        const target = slot < tabs.length ? tabs[slot] : tabs[tabs.length - 1];
+        const [tx, ty] = target.get_transformed_position();
+        this._tabDropLine.set_position(
+            slot < tabs.length ? tx : tx + target.get_width(), ty);
+        this._tabDropLine.set_height(target.get_height());
+        this._tabDropLine.visible = true;
+    }
+
+    _hideTabDrop() {
+        if (this._tabDropLine) {
+            this._tabDropLine.visible = false;
+        }
+    }
+
+    /** Say why a category drop is refused, right under the strip. */
+    _showDragHint(text) {
+        if (!this._dragHint) {
+            return;
+        }
+        this._dragHint.set_text(text);
+        const [bx, by] = this._tabBar.bar.get_transformed_position();
+        this._dragHint.set_position(bx, by + this._tabBar.bar.get_height() + 4);
+        this._dragHint.visible = true;
+    }
+
+    _hideDragHint() {
+        if (this._dragHint) {
+            this._dragHint.visible = false;
+        }
+    }
+
+    /** The shared half of both refusal texts. */
+    _blockerReason(reason) {
+        return reason === 'implicit'
+            ? 'it has no heading of its own.'
+            : 'it holds content above the first heading.';
+    }
+
+    /**
+     * Edge auto-scroll. The Shell's drag does not move a ScrollView's adjustment
+     * on its own, so a strip wider than the menu has to be scrolled from here
+     * while the pointer rests near an edge.
+     */
+    _startAutoScroll() {
+        this._dragX = null;
+        this._autoscrollId = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+            this._autoScrollStep();
+            return GLib.SOURCE_CONTINUE;
+        });
+    }
+
+    _stopAutoScroll() {
+        if (this._autoscrollId) {
+            GLib.Source.remove(this._autoscrollId);
+            this._autoscrollId = 0;
+        }
+        this._dragX = null;
+    }
+
+    _autoScrollStep() {
+        if (this._dragging?.kind !== 'category' || this._dragX === null) {
+            return;
+        }
+        const scroller = this._tabBar.scroller;
+        const adjustment = scroller.hadjustment;
+        if (!adjustment) {
+            return;
+        }
+        const [sx] = scroller.get_transformed_position();
+        const width = scroller.get_width();
+        const EDGE = 24;
+        const STEP = 8;
+        let delta = 0;
+        if (this._dragX < sx + EDGE) {
+            delta = -STEP;
+        } else if (this._dragX > sx + width - EDGE) {
+            delta = STEP;
+        }
+        if (delta !== 0) {
+            adjustment.value = Math.max(adjustment.lower,
+                Math.min(adjustment.upper - adjustment.page_size,
+                    adjustment.value + delta));
+        }
     }
 
     /**

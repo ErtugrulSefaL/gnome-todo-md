@@ -251,10 +251,19 @@
 
 /* The drag-and-drop insertion line. It lives on Main.uiGroup, not inside
  * menu.box, so it never joins the menu's layout; for the same reason it carries
- * the colour-scheme class directly (.todo-light.todo-drop-line). */
+ * the colour-scheme class directly (.todo-light.todo-drop-line). Task rows run
+ * down the menu and category tabs across it, so the line has a horizontal and a
+ * vertical variant; each takes the other dimension from the drop target. */
 .todo-drop-line {
-    height: 3px;
     border-radius: 2px;
+}
+
+.todo-drop-line-h {
+    height: 3px;
+}
+
+.todo-drop-line-v {
+    width: 3px;
 }
 
 .todo-drop-line.todo-light {
@@ -263,4 +272,22 @@
 
 .todo-drop-line.todo-dark {
     background-color: rgba(255, 255, 255, 0.75);
+}
+
+/* Why a category drop is refused, shown under the tab strip. It sits on
+ * Main.uiGroup too, so it carries its own colour-scheme class. */
+.todo-drag-hint {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.todo-drag-hint.todo-light {
+    color: rgba(0, 0, 0, 0.85);
+    background-color: rgba(255, 255, 255, 0.9);
+}
+
+.todo-drag-hint.todo-dark {
+    color: rgba(255, 255, 255, 0.9);
+    background-color: rgba(0, 0, 0, 0.75);
 }

@@ -2,6 +2,8 @@ import St from 'gi://St';
 import Clutter from 'gi://Clutter';
 import Pango from 'gi://Pango';
 
+import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
+
 import * as Storage from './storage.js';
 
 /**
@@ -86,6 +88,15 @@ export class TabBar {
 
         this.bar.add_child(this.scroller);
         this.bar.add_child(this.newCategoryButton);
+
+        // The whole strip is one drop target for a category drag: the slot is
+        // computed from the pointer in dragMotion, so acceptDrop only has to
+        // confirm it. The Shell walks up from the picked actor looking for
+        // `_delegate.acceptDrop`, and this actor sits above every tab.
+        this._drag = null;
+        this.bar._delegate = {
+            acceptDrop: () => this._drag !== null && this._drag.onDrop() === true,
+        };
     }
 
     /**
@@ -114,21 +125,33 @@ export class TabBar {
     }
 
     /**
-     * Build the buttons for the current sections.
+     * Build the buttons for the current sections. `drag`, when given, carries
+     * `onBegin(name, index)` / `onEnd()` / `onDrop()`; only then does a
+     * category tab become draggable.
      *
      */
-    refill(sections, colors, activeCategory, onSelect, onActions) {
+    refill(sections, colors, activeCategory, onSelect, onActions, drag) {
+        this._drag = drag ?? null;
         this.tabsBox.remove_all_children();
         if (sections.length > 1) {
             const tabs = [{name: null, label: 'All'}]
                 .concat(sections.map(section => ({
                     name: section.name, label: section.name})));
-            for (const tab of tabs) {
+            for (let i = 0; i < tabs.length; i++) {
+                const tab = tabs[i];
                 const button = this._makeButton(tab, colors, activeCategory);
+                if (tab.name !== null) {
+                    // The strip's index among CATEGORIES ('All' is not one).
+                    button._todoCategoryName = tab.name;
+                    button._todoCategoryIndex = i - 1;
+                }
                 button.connect('clicked', () => {
                     onSelect(tab.name);
                 });
                 this._connectActions(button, tab.name, onActions);
+                if (tab.name !== null && this._drag !== null) {
+                    this._connectDrag(button, tab.name);
+                }
                 this.tabsBox.add_child(button);
             }
             return;
@@ -159,6 +182,24 @@ export class TabBar {
             onActions(categoryName);
             return Clutter.EVENT_STOP;
         });
+    }
+
+    /**
+     * A category tab drags itself — the whole tab is the handle. A plain click
+     * on it still fires 'clicked': the Shell's drag gesture only takes the
+     * sequence once the pointer moves past the drag threshold. The clone keeps
+     * the tab in place while it moves.
+     *
+     */
+    _connectDrag(button, categoryName) {
+        button._delegate = {
+            getDragActor: () => new Clutter.Clone({source: button}),
+            getDragActorSource: () => button,
+        };
+        const draggable = DND.makeDraggable(button);
+        draggable.connect('drag-begin',
+            () => this._drag.onBegin(categoryName, button._todoCategoryIndex));
+        draggable.connect('drag-end', () => this._drag.onEnd());
     }
 
     /**
