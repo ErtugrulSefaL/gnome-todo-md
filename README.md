@@ -75,7 +75,10 @@ the same manual regression run in its own VM (Ubuntu 24.04, 24.10, 25.04, 25.10,
   the tab bar stays fixed; both scroll positions survive every action, including
   category switches
 - **Reordering**: drag the grip handle at the end of a row to move a task inside
-  its category, or focus a row and press Alt+Up / Alt+Down
+  its category, or focus a row and press Alt+Up / Alt+Down. **A category tab
+  reorders the same way**: drag the whole tab along the strip to move its section
+  in the file. A tab that cannot move (the implicit `General`, or a section
+  holding lines above its heading) refuses the drop and says why
 - **Fixed menu width**: the frame never widens or shrinks with the content; long
   texts truncate with an ellipsis
 - Inline editing (Enter saves), delete, check/uncheck by clicking the row
@@ -202,7 +205,6 @@ see the manual checklists in the repository.
 
 ## Planned
 
-- [ ] Category drag-and-drop (reorder the tab bar)
 - [ ] Tags in the UI (add and remove `@key(value)` without editing the task text)
 - [ ] Date tags (`@due`, `@start`) with badges, and reminders built on them
 - [ ] Notifications and archiving

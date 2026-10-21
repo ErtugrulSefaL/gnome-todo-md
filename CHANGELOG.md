@@ -4,6 +4,31 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.21.0 - 2026-10-22
+
+### Added
+- **Category tabs can be reordered by dragging them.** The whole tab is the
+  handle — no grip — and the strip shows an upright insertion line in the gap the
+  tab would land in. The file's `##` heading order is rewritten to match, so the
+  new order is what any editor sees too. A tab that cannot move refuses the drop
+  and says why in a hint under the strip: the implicit `General` has no heading of
+  its own to move, and a section holding content above its heading can only keep
+  that boundary while it stays first (so position 0 is a fixed anchor for those).
+  The strip scrolls itself while the pointer rests near an edge, and a plain click
+  on a tab still switches tabs.
+
+### Notes
+- The move is a pure `storage.js` function (`moveCategoryTo`), and the reasons it
+  refuses are exported next to it, so the menu's feedback and the write cannot
+  disagree. 14 unit tests, including a 16-combination loss-less fuzz.
+- Verified on GNOME Shell 50.1 (host) and on the 46 (Wayland **and** X11), 47, 48
+  and 49 test VMs.
+- The no-drop cursor during a refused drag is only drawn on GNOME 48+: 46 and 47
+  ask the cursor theme for `dnd-unsupported-target`, which neither Adwaita nor
+  Yaru ships, so the cursor there does not change. The refusal itself — nothing
+  written, tab back in place — works on every version, and the hint label carries
+  the reason. Measured per version; see `docs/verified-apis.md`.
+
 ## 0.20.3 - 2026-10-13
 
 ### Changed
