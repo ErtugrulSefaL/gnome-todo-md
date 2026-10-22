@@ -89,27 +89,19 @@ the same manual regression run in its own VM (Ubuntu 24.04, 24.10, 25.04, 25.10,
 ## Install
 
 Todo MD is under review on extensions.gnome.org, so GitHub is currently the only
-install and update path. Installing takes no build tools and one command.
+install and update path. One command is enough — nothing to build, nothing to
+hunt for.
 
-### 1. Download the zip
-
-Open the [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest)
-and download the `.zip` file from its **Assets** list.
-
-### 2. Install it
+### Install
 
 ```bash
-gnome-extensions install "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)"
+curl -L -o /tmp/todo-md.zip https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest/download/todo-md.zip && gnome-extensions install --force /tmp/todo-md.zip
 ```
 
-The file name carries the version (`…-0.21.0.zip`), so the command takes the
-newest matching zip in `~/Downloads` — it still works if you have downloaded
-more than one before. `ls ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip`
-prints the exact names if you would rather pass one yourself.
-
-The command unpacks the extension into `~/.local/share/gnome-shell/extensions/`
-and compiles its GSettings schema. Now **log out and back in** — the Shell only
-scans that directory at startup — and enable it:
+That always pulls the newest release zip and installs it. The command unpacks
+the extension into `~/.local/share/gnome-shell/extensions/` and compiles its
+GSettings schema for you. Now **log out and back in** — the Shell only scans
+that directory at startup — and enable it:
 
 ```bash
 gnome-extensions enable todo-md@ertugrulsefal.github.com
@@ -118,29 +110,29 @@ gnome-extensions info todo-md@ertugrulsefal.github.com   # State: ACTIVE
 
 ### Update
 
-Download the newer zip from the [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest),
-then:
+Run the same command again. `--force` replaces the installed copy (without it
+the installer refuses to touch an existing extension), and your settings and
+`~/todo.md` are untouched. Log out and back in afterwards.
+
+### From source, one line (needs `git` and `zip`)
 
 ```bash
-gnome-extensions install --force "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)"
+D=$(mktemp -d) && git clone --depth 1 https://github.com/ErtugrulSefaL/gnome-todo-md "$D" && bash "$D/tools/make-package.sh" && gnome-extensions install --force "$(ls -t "$D"/dist/*.zip | head -n1)"
 ```
 
-`--force` is required: without it the installer refuses to touch an existing
-extension (`… exists and --force was not specified`). Log out and back in
-afterwards; your settings and `~/todo.md` are untouched.
+This builds from the current `master` instead of the release, so use it when you
+want the newest unreleased code. `sudo apt install git zip` if either is
+missing; `make-package.sh` prints the install command for the zip it built.
 
-### Build from source (for development)
+### With the browser
 
-Needs `git`, `jq` and `zip` (`sudo apt install git jq zip`):
+The [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest)
+lists the same zip under **Assets** as `todo-md.zip` (and under its versioned
+name); hand the downloaded file to the same command:
 
 ```bash
-git clone https://github.com/ErtugrulSefaL/gnome-todo-md
-cd gnome-todo-md
-bash tools/make-package.sh
+gnome-extensions install --force /tmp/todo-md.zip
 ```
-
-The script prints the exact install command for the zip it just built; add
-`--force` when reinstalling over an existing copy.
 
 ### Troubleshooting
 
@@ -154,7 +146,7 @@ The script prints the exact install command for the zip it just built; add
   ```bash
   DEST=~/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com
   mkdir -p "$DEST"
-  unzip -o "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)" -d "$DEST"
+  unzip -o /tmp/todo-md.zip -d "$DEST"
   glib-compile-schemas "$DEST/schemas"
   ```
 
