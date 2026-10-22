@@ -95,29 +95,44 @@ hunt for.
 ### Install
 
 ```bash
-curl -L -o /tmp/todo-md.zip https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest/download/todo-md.zip && gnome-extensions install --force /tmp/todo-md.zip
+curl -fsSL -o /tmp/todo-md.zip https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest/download/todo-md.zip \
+  && gnome-extensions install --force /tmp/todo-md.zip \
+  && echo "Todo MD installed. Log out and back in, then enable it: gnome-extensions enable todo-md@ertugrulsefal.github.com" \
+  || echo "Install FAILED - nothing was installed; the message above says why."
 ```
 
-That always pulls the newest release zip and installs it. The command unpacks
-the extension into `~/.local/share/gnome-shell/extensions/` and compiles its
-GSettings schema for you. Now **log out and back in** — the Shell only scans
-that directory at startup — and enable it:
+That always pulls the newest release zip and installs it; it stays quiet while
+downloading and only speaks up if something goes wrong. `gnome-extensions
+install` itself prints nothing on success, so the last line of the command is
+what tells you it worked: **`Todo MD installed.`** means the files are in
+`~/.local/share/gnome-shell/extensions/` (schema compiled too) — any other
+message, or the `Install FAILED` line, means nothing was installed.
+
+Now **log out and back in** — the Shell only scans that directory at startup —
+then enable the extension and print its state:
 
 ```bash
 gnome-extensions enable todo-md@ertugrulsefal.github.com
-gnome-extensions info todo-md@ertugrulsefal.github.com   # State: ACTIVE
+gnome-extensions info todo-md@ertugrulsefal.github.com | grep -E '^  (Version|State):'
 ```
+
+The last line of that output must read `State: ACTIVE`, and the line above it
+names the version you installed. `DISABLED` means it is installed but not
+switched on (run the `enable` command again), `OUT OF DATE` means the zip does
+not list your GNOME version, and `ERROR` means it failed to load — `journalctl -f`
+in another terminal shows why.
 
 ### Update
 
-Run the same command again. `--force` replaces the installed copy (without it
-the installer refuses to touch an existing extension), and your settings and
-`~/todo.md` are untouched. Log out and back in afterwards.
+Run the same command again — it ends with `Todo MD installed.` when it worked.
+`--force` replaces the installed copy (without it the installer refuses to touch
+an existing extension), and your settings and `~/todo.md` are untouched. Log out
+and back in afterwards.
 
 ### From source, one line (needs `git` and `zip`)
 
 ```bash
-D=$(mktemp -d) && git clone --depth 1 https://github.com/ErtugrulSefaL/gnome-todo-md "$D" && bash "$D/tools/make-package.sh" && gnome-extensions install --force "$(ls -t "$D"/dist/*.zip | head -n1)"
+D=$(mktemp -d) && git clone --depth 1 https://github.com/ErtugrulSefaL/gnome-todo-md "$D" && bash "$D/tools/make-package.sh" && gnome-extensions install --force "$(ls -t "$D"/dist/*.zip | head -n1)" && echo "Todo MD installed."
 ```
 
 This builds from the current `master` instead of the release, so use it when you
@@ -131,7 +146,7 @@ lists the same zip under **Assets** as `todo-md.zip` (and under its versioned
 name); hand the downloaded file to the same installer:
 
 ```bash
-gnome-extensions install --force ~/Downloads/todo-md.zip
+gnome-extensions install --force ~/Downloads/todo-md.zip && echo "Todo MD installed."
 ```
 
 ### Troubleshooting
