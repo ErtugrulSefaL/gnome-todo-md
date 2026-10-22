@@ -3,7 +3,17 @@ name: CI
 on:
   push:
     branches: [master]
+    tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to build the release from
+        required: true
+      dry_run:
+        description: Build and verify only; do not publish a release
+        type: boolean
+        default: true
 
 jobs:
   tests:
@@ -30,3 +40,101 @@ jobs:
       # code, so CI greps the verdict explicitly.
       - name: Unit + integration tests
         run: gjs -m tests/run_tests.mjs 2>&1 | tee /tmp/tests.log; grep -q 'RESULT_OK=true' /tmp/tests.log
+
+  # A tag push publishes the installable release: the versioned zip (what the
+  # EGO upload and the release page list) and todo-md.zip, the version-less name
+  # the README's one-command install downloads. Asset content must equal the tag,
+  # so the tag and metadata version-name are checked against each other first.
+  # workflow_dispatch re-runs the job on an existing tag; dry_run defaults to
+  # true so the pipeline can be verified without touching a published release.
+  release:
+    needs: tests
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install zip
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends zip
+
+      - name: Check the tag against metadata
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          EXT: todo-md@ertugrulsefal.github.com
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/.*"version-name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$EXT/metadata.json" | head -n1)
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::tag $TAG does not match metadata version-name $VERSION"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "tag $TAG == version-name $VERSION"
+
+      - name: Build the package
+        run: bash tools/make-package.sh
+
+      - name: Add the version-less copy
+        run: cp "dist/todo-md@ertugrulsefal.github.com-$VERSION.zip" dist/todo-md.zip
+
+      - name: Build the release notes
+        run: |
+          set -euo pipefail
+          {
+            echo 'Download and install with:'
+            echo
+            echo '```bash'
+            echo "curl -fsSL -o /tmp/todo-md.zip https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/todo-md.zip && gnome-extensions install --force /tmp/todo-md.zip"
+            echo '```'
+            echo
+            echo 'Log out and back in, then: `gnome-extensions enable todo-md@ertugrulsefal.github.com`'
+            echo
+            awk -v v="$VERSION" '$0 ~ "^## " v "( |$)" { found = 1; next } found && /^## / { exit } found { print }' CHANGELOG.md | sed '/./,$!d'
+          } > /tmp/notes.md
+          if ! grep -q "$VERSION" /tmp/notes.md; then
+            echo "::error::CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ inputs.tag || github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "dry run: would publish $TAG with dist/todo-md.zip and dist/todo-md@ertugrulsefal.github.com-$VERSION.zip"
+            exit 0
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/todo-md.zip "dist/todo-md@ertugrulsefal.github.com-$VERSION.zip" --clobber
+          else
+            gh release create "$TAG" \
+              dist/todo-md.zip "dist/todo-md@ertugrulsefal.github.com-$VERSION.zip" \
+              --title "Todo MD $VERSION" --notes-file /tmp/notes.md --verify-tag
+          fi
+
+      - name: Verify the published asset
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          if [ "${DRY_RUN}" = "true" ]; then
+            echo "dry run: skipped"
+            exit 0
+          fi
+          curl -fsSL -o /tmp/downloaded.zip \
+            "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/todo-md.zip"
+          diff <(unzip -Z1 dist/todo-md.zip | sort) <(unzip -Z1 /tmp/downloaded.zip | sort)
+          for f in $(unzip -Z1 dist/todo-md.zip | grep -v '/$'); do
+            a=$(unzip -p dist/todo-md.zip "$f" | md5sum | cut -d' ' -f1)
+            b=$(unzip -p /tmp/downloaded.zip "$f" | md5sum | cut -d' ' -f1)
+            [ "$a" = "$b" ] || { echo "::error::$f differs between the build and the published asset"; exit 1; }
+          done
+          echo "published asset matches the build, file by file"
