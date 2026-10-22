@@ -84,6 +84,10 @@ jobs:
       - name: Build the release notes
         run: |
           set -euo pipefail
+          if ! grep -Eq "^## $VERSION( |$)" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no section for $VERSION"
+            exit 1
+          fi
           {
             echo 'Download and install with:'
             echo
@@ -93,12 +97,10 @@ jobs:
             echo
             echo 'Log out and back in, then: `gnome-extensions enable todo-md@ertugrulsefal.github.com`'
             echo
+            echo "### Changes in $VERSION"
+            echo
             awk -v v="$VERSION" '$0 ~ "^## " v "( |$)" { found = 1; next } found && /^## / { exit } found { print }' CHANGELOG.md | sed '/./,$!d'
           } > /tmp/notes.md
-          if ! grep -q "$VERSION" /tmp/notes.md; then
-            echo "::error::CHANGELOG.md has no section for $VERSION"
-            exit 1
-          fi
 
       - name: Publish the release
         env:
