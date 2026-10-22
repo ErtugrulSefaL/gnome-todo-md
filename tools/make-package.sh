@@ -7,7 +7,9 @@
 # README.md / CHANGELOG.md / tests/ / docs/ / *.compiled are never packaged.
 #
 # Usage:  bash tools/make-package.sh
-# Output: dist/<uuid>-<version-name>.zip
+# Output: dist/<uuid>-<version-name>.zip + the exact install command to run.
+# Needs:  bash + zip only. jq is NOT required (the README's install path must
+#         work on a machine that has nothing but git and zip).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -16,10 +18,19 @@ DIST_DIR="dist"
 METADATA="$EXT_DIR/metadata.json"
 
 # Read uuid + version from metadata.json (single source of truth).
-UUID=$(jq -r '.uuid' "$METADATA")
-VERSION=$(jq -r '."version-name"' "$METADATA")
-SCHEMA_ID=$(jq -r '."settings-schema"' "$METADATA")
+read_meta() {
+    sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$METADATA" | head -n1
+}
+
+UUID=$(read_meta uuid)
+VERSION=$(read_meta version-name)
+SCHEMA_ID=$(read_meta settings-schema)
 SCHEMA_FILE="$EXT_DIR/schemas/$SCHEMA_ID.gschema.xml"
+
+if [ -z "$UUID" ] || [ -z "$VERSION" ] || [ -z "$SCHEMA_ID" ]; then
+    echo "ERROR: could not read uuid / version-name / settings-schema from $METADATA" >&2
+    exit 1
+fi
 
 # Fixed package list. LICENSE lives at the repo root (single copy, GitHub
 # detection); the script copies it into the zip root at packaging time.
@@ -78,3 +89,7 @@ fi
 echo "OK: $OUT"
 echo "version-name: $VERSION  uuid: $UUID"
 unzip -Z1 "$OUT" | grep -v '/$' | sort | sed 's/^/  /'
+
+echo
+echo "Install it with:"
+echo "  gnome-extensions install --force $OUT"
