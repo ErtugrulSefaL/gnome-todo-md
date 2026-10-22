@@ -89,37 +89,79 @@ the same manual regression run in its own VM (Ubuntu 24.04, 24.10, 25.04, 25.10,
 ## Install
 
 Todo MD is under review on extensions.gnome.org, so GitHub is currently the only
-install and update path.
+install and update path. Installing takes no build tools and one command.
 
-### Zip install
+### 1. Download the zip
+
+Open the [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest)
+and download the `.zip` file from its **Assets** list.
+
+### 2. Install it
 
 ```bash
-git clone https://github.com/ErtugrulSefaL/gnome-todo-md
-cd gnome-todo-md
-bash tools/make-package.sh
-gnome-extensions install dist/todo-md@ertugrulsefal.github.com-<version>.zip
+gnome-extensions install "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)"
 ```
 
-Log out and back in (the Shell scans the extension directory at startup), then:
+The file name carries the version (`…-0.21.0.zip`), so the command takes the
+newest matching zip in `~/Downloads` — it still works if you have downloaded
+more than one before. `ls ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip`
+prints the exact names if you would rather pass one yourself.
+
+The command unpacks the extension into `~/.local/share/gnome-shell/extensions/`
+and compiles its GSettings schema. Now **log out and back in** — the Shell only
+scans that directory at startup — and enable it:
 
 ```bash
 gnome-extensions enable todo-md@ertugrulsefal.github.com
 gnome-extensions info todo-md@ertugrulsefal.github.com   # State: ACTIVE
 ```
 
-Installing from a zip compiles the GSettings schema for you.
-
 ### Update
 
+Download the newer zip from the [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest),
+then:
+
 ```bash
-cd gnome-todo-md
-git pull
-bash tools/make-package.sh && gnome-extensions install --force dist/todo-md@ertugrulsefal.github.com-<version>.zip
+gnome-extensions install --force "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)"
 ```
-Log out and back in, then enable it as above.
+
+`--force` is required: without it the installer refuses to touch an existing
+extension (`… exists and --force was not specified`). Log out and back in
+afterwards; your settings and `~/todo.md` are untouched.
+
+### Build from source (for development)
+
+Needs `git`, `jq` and `zip` (`sudo apt install git jq zip`):
+
+```bash
+git clone https://github.com/ErtugrulSefaL/gnome-todo-md
+cd gnome-todo-md
+bash tools/make-package.sh
+```
+
+The script prints the exact install command for the zip it just built; add
+`--force` when reinstalling over an existing copy.
+
+### Troubleshooting
+
+- **`Can’t recursively copy directory`** — `gnome-extensions install` unpacks
+  through `~/.cache` first and then moves the result into `~/.local/share`,
+  which fails when those two are on different filesystems (known Shell
+  behaviour, [issue #2821](https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/2821)).
+  Unpack straight into the extension directory instead — the last line only
+  needs to run once, because a reload keeps the compiled schema:
+
+  ```bash
+  DEST=~/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com
+  mkdir -p "$DEST"
+  unzip -o "$(ls -t ~/Downloads/todo-md@ertugrulsefal.github.com-*.zip | head -n1)" -d "$DEST"
+  glib-compile-schemas "$DEST/schemas"
+  ```
 
 > [!NOTE]
-> Once the review finishes, updates come from extensions.gnome.org instead; GitHub stays the place for unreleased changes.
+> Once the review finishes, installs and updates move to extensions.gnome.org —
+> the Extensions app and the website. These release zips stay available for the
+> GNOME versions not published there yet.
 
 ## Settings
 
