@@ -128,10 +128,10 @@ missing; `make-package.sh` prints the install command for the zip it built.
 
 The [latest release](https://github.com/ErtugrulSefaL/gnome-todo-md/releases/latest)
 lists the same zip under **Assets** as `todo-md.zip` (and under its versioned
-name); hand the downloaded file to the same command:
+name); hand the downloaded file to the same installer:
 
 ```bash
-gnome-extensions install --force /tmp/todo-md.zip
+gnome-extensions install --force ~/Downloads/todo-md.zip
 ```
 
 ### Troubleshooting
