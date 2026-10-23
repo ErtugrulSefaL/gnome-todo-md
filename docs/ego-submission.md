@@ -4,7 +4,7 @@ Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload.
 
 **Current upload: 0.20.1** — drag-and-drop reordering, the insertion-line fix,
-GNOME 46–50 support and every fix from the 0.15.0 review window. It supersedes
+GNOME 46–51 support and every fix from the 0.15.0 review window. It supersedes
 the 0.15.0 upload that is still waiting for review; uploading over a pending
 review is allowed (GNOME extensions maintainer, discourse.gnome.org/t/9205), and
 the reviewer is asked on the review page to look at this one instead:
@@ -26,7 +26,7 @@ inline add per category.
 end of every row; the task moves inside its own category, with an insertion line
 and a no-drop cursor over another category's rows — and keyboard reordering with
 Alt+Up / Alt+Down on a focused row, which replaced the old per-row up/down
-buttons. `shell-version` now covers GNOME 46–50, and the findings from this
+buttons. `shell-version` now covers GNOME 46–51, and the findings from this
 review window (a colour-map wipe on an unreadable file, a blank line inventing a
 "General" category, theme-invisible controls and scrollbars) are all fixed here.
 
@@ -57,9 +57,10 @@ the Shell's own popup-menu and drag-and-drop modules. They live in GNOME Shell's
 JS internals with no stability guarantee, so `shell-version` declares only the
 versions this code has been regression-tested on: `["46", "47", "48", "49",
 "50"]`. Each one was validated individually — the API probe plus the same
-18-point manual regression checklist — in its own VM: Ubuntu 24.04 (GNOME 46),
-24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50). A static guard pins the exact
-list, so adding a version is always a deliberate act that follows a test.
+18-point manual regression checklist — each in its own environment: Ubuntu 24.04
+(GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50), plus CachyOS
+(GNOME 51). A static guard pins the exact list, so adding a version is always a
+deliberate act that follows a test.
 
 **Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
 `disable()` explicitly destroys every long-lived actor — the persistent scroll
@@ -70,7 +71,8 @@ menu, file monitor, `St.Settings` colour scheme). The analyzer cannot trace
 actor ownership; the objects it flags are destroyed through their owners.
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04. 249 unit tests cover the storage layer
+24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 270 unit
+tests cover the storage layer
 (pure string-in/string-out functions, byte-identical round-trip); the UI layer
 was verified manually in every one of those shells against the same written
 regression checklist (18 checks), which includes an Orca accessibility pass.

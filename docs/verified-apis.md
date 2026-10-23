@@ -27,7 +27,7 @@ re-guess an already-proven API.
 
 | Source | Notes |
 |---|---|
-| **Installed Shell** (`tools/shell-api.sh`) | PRIMARY since 2026-10-11. The Shell's own JS via GResource (`libshell-<N>.so`), the GI typelibs (`St-<N>`, `Clutter-<N>`) and a 56-API probe. Always matches the version under test; `<N>` is auto-detected so it survives GNOME 51+. |
+| **Installed Shell** (`tools/shell-api.sh`) | PRIMARY since 2026-10-11. The Shell's own JS via GResource (`libshell-<N>.so`), the GI typelibs (`St-<N>`, `Clutter-<N>`) and a 58-API probe. Always matches the version under test; `<N>` is auto-detected so it survives GNOME 51+. On GNOME 51 the mutter typelibs sit in a distro-specific directory (`/usr/lib/mutter-51` on Arch/CachyOS) that the script's Debian-shaped `MUTTER_BASE` does not cover, so `probe` needs `GI_TYPELIB_PATH` pointed at it. |
 | `gjsdoc` (offline mirror) | FROZEN as of 2026-10-11: gjs-docs.gnome.org no longer serves the docset JSON (`/<slug>/index.json` and `/<slug>/db.json` both answer with the SPA HTML shell, for every slug), so the mirror cannot be extended. The `st14~14` set already on disk still works offline. |
 | gjs.guide | Authoritative extension development guide (ESM, topics, a porting page per release). |
 | GNOME Shell source, version tag | `js/ui/*.js` (PopupMenu, PanelMenu, Main) — JS UI modules are NOT in GIR docs; the source is the ground truth. Tags used so far: `46.0`, `50.1`. |
@@ -185,10 +185,12 @@ wheel scrolling, theme colours, Orca) all passed.
 `probe` checks 56 APIs against the installed typelibs; run it after every GNOME
 upgrade.
 
-**Known forward breakage (GNOME 51, NOT addressed yet):** `PopupMenu.open()` /
-`close()` take a parameters object; event signals are deprecated in favour of
-controllers; St `vertical` is gone; `St.ButtonMask` members were renamed. See
-`roadmap.md` §D.
+**GNOME 51 measured (2026-10-23):** `PopupMenu.open()` / `close()` take a
+parameters object; event signals are deprecated in favour of controllers; St
+`vertical` is gone; `St.ButtonMask` members were renamed. On GNOME 51.1
+(CachyOS) `probe` reports all 58 checked APIs as present and the 18-check manual
+run passed, so no source change and no `compat.js` was needed — the names above
+belong to APIs this extension does not call. See `roadmap.md` §D.
 
 ## Faz 7 (2026-10-10) — category action panel (design H)
 
@@ -258,7 +260,7 @@ typelibs. Cross-checked against the raw sources of tags 46.0 / 47.0 / 48.0 /
 
 ### APIs used (verified)
 
-| API | Comes from | Why it is safe on 46–50 |
+| API | Comes from | Why it is safe on 46–51 |
 |---|---|---|
 | `DND.makeDraggable(actor)` | `resource:///org/gnome/shell/ui/dnd.js` | The public entry point is unchanged across the five tags. The module's INTERNALS are not: 46–48 start a drag with `button-press-event` + `global.stage.grab()`, 49+ with `St.DndStartGesture` (diffed tag by tag). Using the module keeps that difference inside the Shell. |
 | `DND.addDragMonitor` / `removeDragMonitor` | same | present in all five tags |

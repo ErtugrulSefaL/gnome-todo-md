@@ -7,9 +7,9 @@ editor, on any device.
 
 ![Todo MD in the GNOME Shell panel menu](docs/screenshots/todo-md-0.20.3.png)
 
-Compatible with GNOME Shell 46, 47, 48, 49 and 50 — each release was verified by
-the same manual regression run in its own VM (Ubuntu 24.04, 24.10, 25.04, 25.10,
-26.04), on Wayland. Written in JavaScript (ESModules, GJS).
+Compatible with GNOME Shell 46, 47, 48, 49, 50 and 51 — each release was verified
+by the same manual regression run (Ubuntu 24.04, 24.10, 25.04, 25.10, 26.04 and
+CachyOS), on Wayland. Written in JavaScript (ESModules, GJS).
 
 > **Status:** Todo MD is in review on extensions.gnome.org. Until it is published
 > there, GitHub is the only install and update path — see [Install](#install).
@@ -268,7 +268,7 @@ see the manual checklists in the repository.
 | `todo-md@ertugrulsefal.github.com/rowFactory.js` | Row builders (task rows, inline add/edit) |
 | `todo-md@ertugrulsefal.github.com/prefs.js` | GTK preferences window |
 | `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
-| `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version 46–50) |
+| `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version 46–51) |
 | `todo-md@ertugrulsefal.github.com/schemas/` | GSettings schema |
 | `tests/run_tests.mjs` | Unit/integration tests for `storage.js` (run with `gjs`) |
 | `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
