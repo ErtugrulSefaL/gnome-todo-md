@@ -3,7 +3,7 @@
 #
 # The zip root must contain only runtime files (EGO review rules):
 #   extension.js metadata.json prefs.js storage.js tabBar.js rowFactory.js
-#   stylesheet.css schemas/<id>.gschema.xml  LICENSE
+#   compat.js stylesheet.css schemas/<id>.gschema.xml  LICENSE
 # README.md / CHANGELOG.md / tests/ / docs/ / *.compiled are never packaged.
 #
 # Usage:  bash tools/make-package.sh
@@ -41,6 +41,7 @@ FILES=(
     "$EXT_DIR/storage.js"
     "$EXT_DIR/tabBar.js"
     "$EXT_DIR/rowFactory.js"
+    "$EXT_DIR/compat.js"
     "$EXT_DIR/stylesheet.css"
     "$SCHEMA_FILE"
     "LICENSE"
@@ -72,7 +73,7 @@ rm -f "$OUT"
 # 1) Exact content check: the zip must contain exactly the expected entries.
 EXPECTED=$(printf '%s\n' \
     extension.js metadata.json prefs.js storage.js tabBar.js rowFactory.js \
-    stylesheet.css "schemas/$(basename "$SCHEMA_FILE")" LICENSE | sort)
+    compat.js stylesheet.css "schemas/$(basename "$SCHEMA_FILE")" LICENSE | sort)
 ACTUAL=$(unzip -Z1 "$OUT" | grep -v '/$' | sort)
 if [ "$EXPECTED" != "$ACTUAL" ]; then
     echo "ERROR: zip contents differ from the expected package list" >&2

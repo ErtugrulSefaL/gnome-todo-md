@@ -266,6 +266,7 @@ see the manual checklists in the repository.
 | `todo-md@ertugrulsefal.github.com/storage.js` | Pure functions: parse, mutate, serialize `~/todo.md` |
 | `todo-md@ertugrulsefal.github.com/tabBar.js` | The persistent category tab strip |
 | `todo-md@ertugrulsefal.github.com/rowFactory.js` | Row builders (task rows, inline add/edit) |
+| `todo-md@ertugrulsefal.github.com/compat.js` | Version shims for Shell APIs that changed shape |
 | `todo-md@ertugrulsefal.github.com/prefs.js` | GTK preferences window |
 | `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version 46–51) |

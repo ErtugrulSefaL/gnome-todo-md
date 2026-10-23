@@ -12,6 +12,7 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 import * as Storage from './storage.js';
 import {TabBar} from './tabBar.js';
+import {popupArgs} from './compat.js';
 import {RowFactory, capWidth} from './rowFactory.js';
 
 export default class TodoExtension extends Extension {
@@ -301,7 +302,7 @@ export default class TodoExtension extends Extension {
             }
         }
         if (this._actions && this._actions.isOpen) {
-            this._actions.close(false);
+            this._actions.close(popupArgs(this._actions, 'close', false));
         }
     }
 
@@ -995,7 +996,7 @@ export default class TodoExtension extends Extension {
                 // header is the item the panel belongs to.
                 this._actions.sourceActor = header;
                 this._actions.focusActor = actionsBtn;
-                this._actions.open(true);
+                this._actions.open(popupArgs(this._actions, 'open', true));
             }
 
             // The rename entry takes the panel's slot when Rename was chosen.

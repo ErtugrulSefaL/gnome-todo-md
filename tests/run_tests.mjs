@@ -22,6 +22,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 import * as Storage from '../todo-md@ertugrulsefal.github.com/storage.js';
+import {popupArgs} from '../todo-md@ertugrulsefal.github.com/compat.js';
 
 // Where the file-level tests write.
 const TODO = GLib.dir_make_tmp(null) + '/todo.md';
@@ -328,6 +329,57 @@ function docBlocks(src) {
     return blocks;
 }
 
+// compat.js: the popup open()/close() argument shape. Both Shell shapes are
+// reproduced here as plain objects, so the detector is exercised without a
+// live Shell: the arity of the method decides which argument to pass.
+function testCompatPopupArgs() {
+    // GNOME 50 and older: open(animate) / close(animate).
+    const legacy = {
+        open(animate) { this.animate = animate; },
+        close(animate) { this.animate = animate; },
+    };
+    // GNOME 51 and newer: open(params = {}) / close(params = {}).
+    const modern = {
+        open(params = {}) { this.params = params; },
+        close(params = {}) { this.params = params; },
+    };
+
+    const legacyOpen = popupArgs(legacy, 'open', true);
+    record('compat: legacy open() receives the bare animate flag',
+        legacyOpen === true && typeof legacyOpen === 'boolean',
+        'a popup on 46-50 takes the boolean itself');
+
+    // The regression this shim exists for: an options object is truthy, so
+    // passing one to a legacy popup would make a no-animation close animate
+    // anyway. The flag must survive as a flag.
+    const legacyClose = popupArgs(legacy, 'close', false);
+    record('compat: legacy close() keeps animate=false (not a truthy object)',
+        legacyClose === false && !legacyClose,
+        'an object argument would be truthy and defeat close(false)');
+
+    const modernOpen = popupArgs(modern, 'open', true);
+    const modernClose = popupArgs(modern, 'close', false);
+    record('compat: modern open() receives an options object',
+        modernOpen !== null && typeof modernOpen === 'object'
+        && modernOpen.animate === true,
+        `got ${JSON.stringify(modernOpen)}`);
+    record('compat: modern close() receives an options object',
+        modernClose !== null && typeof modernClose === 'object'
+        && modernClose.animate === false,
+        `got ${JSON.stringify(modernClose)}`);
+
+    // A typo in the method name must fail loudly rather than silently pass a
+    // boolean to a 51+ popup that reads params.animate.
+    let threw = false;
+    try {
+        popupArgs(modern, 'opne', true);
+    } catch {
+        threw = true;
+    }
+    record('compat: an unknown method name throws instead of guessing',
+        threw, 'menu[method] is undefined, so reading .length throws');
+}
+
 function testStaticChecks() {
     const prefs = readFileText('todo-md@ertugrulsefal.github.com/prefs.js');
     const meta = readFileText('todo-md@ertugrulsefal.github.com/metadata.json');
@@ -399,6 +451,15 @@ function testStaticChecks() {
         ui, /\bvertical\s*:/,
         'St.BoxLayout has no `vertical` from 51 on; use orientation: '
         + 'Clutter.Orientation.VERTICAL');
+
+    // Same class of defect: GNOME 51 changed PopupMenu/PopupSubMenu
+    // open()/close() from a boolean to an options object. A raw flag still
+    // works there by falling back to the default, so the wrong shape is
+    // silent — route every call through compat.popupArgs.
+    noMatch('static: popup open()/close() go through compat.popupArgs',
+        ui, /\.(?:open|close)\((?:true|false)\)/,
+        'pass popupArgs(menu, \'open\'|\'close\', flag) so the argument '
+        + 'matches the Shell (boolean up to 50, {animate} from 51)');
 
     // Project rules that must not drift. R3 (docs/roadmap.md §C): shell-version
     // lists ONLY versions verified by a manual regression run — widening it is a
@@ -2184,6 +2245,7 @@ testAtomicWritePath();
 testPathParams();
 testResolveTodoPath();
 testCategoryColors();
+testCompatPopupArgs();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
