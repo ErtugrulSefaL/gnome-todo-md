@@ -4,6 +4,40 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.22.2 - 2026-10-23
+
+### Added
+- **`compat.js`: a version shim for the Shell APIs that changed shape.** `PopupMenu`
+  and `PopupSubMenu` `open()`/`close()` take an `animate` boolean up to GNOME 50 and
+  a params object (`open(params = {})`) from GNOME 51. `compat.popupArgs()` detects
+  the shape at runtime from the method's arity and returns the argument the running
+  Shell expects, so one code base keeps working across 46-51 without a per-version
+  branch.
+- **The category action panel fades in over 400 ms.** The Shell reveals a submenu
+  with a fixed 250 ms height ease, which reads as instant at the panel's size; an
+  opacity ease on the panel's own actor makes the reveal visible. The Shell's
+  `open()`/`close()` bookkeeping is untouched — no height animation is reimplemented
+  and `_needsScrollbar` stays the Shell's business. Under reduced motion the fade is
+  skipped, as GNOME's own animations are.
+
+### Fixed
+- **GNOME 46-50: the reduce-motion read would have aborted the whole menu build.**
+  `St.ReducedMotion` exists only from GNOME 51 on (verified: `undefined` on 46-50,
+  absent from the 46-49 API docs); on 46-50 the fade's
+  `St.Settings.get().reducedMotion === St.ReducedMotion.REDUCE` comparison threw a
+  `TypeError` in the middle of the rebuild — the same failure shape as 0.22.1's
+  removed `St.BoxLayout` property. The read is now guarded by an existence check and
+  the static guard checks for that guard, not just for the expression.
+
+### Notes
+- Animation is not verifiable in a VM: GNOME 51 calls
+  `St.Settings.inhibit_animations()` whenever the compositor is not hardware
+  accelerated (`js/ui/main.js` `_shouldEnableAnimations()`), which disables every
+  animation including the Shell's own. The fade was verified on the host (GNOME 50);
+  VM runs cover behaviour, not motion.
+- `compat.js` ships in the package: `tools/make-package.sh`, the CI syntax check and
+  the unit tests all know it.
+
 ## 0.22.1 - 2026-10-23
 
 ### Fixed
