@@ -73,7 +73,7 @@ menu, file monitor, `St.Settings` colour scheme). The analyzer cannot trace
 actor ownership; the objects it flags are destroyed through their owners.
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 271 unit
+24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 278 unit
 tests cover the storage layer
 (pure string-in/string-out functions, byte-identical round-trip) and the static
 guards; the UI layer
@@ -82,9 +82,14 @@ regression checklist (19 checks since 0.22.1), which includes an Orca
 accessibility pass.
 Drag-and-drop was additionally verified in the GNOME 46 (X11), 47 and 48 VMs.
 
-**Static analysis:** ego-lint reports no hard failures (its remaining findings
-are warnings, all pre-existing and explained in the repository); Shexli reports
-0 errors / 3 warnings, addressed above.
+**Static analysis:** ego-lint reports no hard failures (0 failed / 29 warnings on
+0.22.2; every finding is a warning, explained in the repository). Two of them are
+new in 0.22.2 and belong to `compat.js`: `R-SLOP-01` twice, on the JSDoc
+`@param {Type}` annotations of `popupArgs()`. The annotations are kept on purpose —
+the comment exists to record the two argument shapes the shim distinguishes
+(boolean up to GNOME 50, `{animate}` from 51), and the types are what makes that
+record readable. Shexli (0 errors / 3 warnings on 0.20.3) was not re-run for
+0.22.2; the JS changes since are additive.
 
 ---
 
@@ -215,15 +220,17 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 
 ## Upload checklist (pre-flight)
 
-- [ ] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
-      `dist/todo-md@ertugrulsefal.github.com-<version>.zip`)
-- [ ] ego-lint on the extracted zip: 0 failed
+- [x] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
+      `dist/todo-md@ertugrulsefal.github.com-<version>.zip`) — 0.22.2, 11 files
+- [x] ego-lint on the extracted zip: 0 failed (252 checks, 213 passed, 29 warnings)
 - [ ] Shexli on the zip: 0 errors (`pip install shexli 'tree-sitter==0.25.0'` —
       0.26 segfaults; verify with a broken fixture first, the tool is
-      version-gated and fails silently — see docs/verified-apis.md)
-- [ ] `metadata.json` version-name matches the CHANGELOG release
-- [ ] Notes above updated to the new version
-- [ ] Screenshot: `docs/screenshots/todo-md-<version>.png` present (real capture,
-      not a placeholder) and referenced by the README
+      version-gated and fails silently — see docs/verified-apis.md) — **NOT run
+      for 0.22.2** (tool not installed in this session; last run 0.20.3: 0 errors)
+- [x] `metadata.json` version-name matches the CHANGELOG release (0.22.2)
+- [x] Notes above updated to the new version
+- [x] Screenshot: `docs/screenshots/todo-md-0.20.3.png` present (real capture) and
+      referenced by the README — no new capture for 0.22.2 (a static image cannot
+      show the fade; the rule is to reuse the previous one)
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip
