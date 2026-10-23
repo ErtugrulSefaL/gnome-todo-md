@@ -56,11 +56,13 @@ The standard indicator pattern from the gjs.guide "Getting Started" guide, plus
 the Shell's own popup-menu and drag-and-drop modules. They live in GNOME Shell's
 JS internals with no stability guarantee, so `shell-version` declares only the
 versions this code has been regression-tested on: `["46", "47", "48", "49",
-"50"]`. Each one was validated individually — the API probe plus the same
-18-point manual regression checklist — each in its own environment: Ubuntu 24.04
+"50", "51"]`. Each one was validated individually — the API probe plus the same
+manual regression checklist — each in its own environment: Ubuntu 24.04
 (GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50), plus CachyOS
-(GNOME 51). A static guard pins the exact list, so adding a version is always a
-deliberate act that follows a test.
+(GNOME 51). The list has 19 checks since 0.22.1, which added the empty-todo-file
+case the GNOME 51 run had missed (the runs before it used 18). A static guard
+pins the exact shell-version list, so adding a version is always a deliberate act
+that follows a test.
 
 **Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
 `disable()` explicitly destroys every long-lived actor — the persistent scroll
@@ -71,11 +73,13 @@ menu, file monitor, `St.Settings` colour scheme). The analyzer cannot trace
 actor ownership; the objects it flags are destroyed through their owners.
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 270 unit
+24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 271 unit
 tests cover the storage layer
-(pure string-in/string-out functions, byte-identical round-trip); the UI layer
+(pure string-in/string-out functions, byte-identical round-trip) and the static
+guards; the UI layer
 was verified manually in every one of those shells against the same written
-regression checklist (18 checks), which includes an Orca accessibility pass.
+regression checklist (19 checks since 0.22.1), which includes an Orca
+accessibility pass.
 Drag-and-drop was additionally verified in the GNOME 46 (X11), 47 and 48 VMs.
 
 **Static analysis:** ego-lint reports no hard failures (its remaining findings

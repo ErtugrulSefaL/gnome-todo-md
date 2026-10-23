@@ -27,7 +27,7 @@ re-guess an already-proven API.
 
 | Source | Notes |
 |---|---|
-| **Installed Shell** (`tools/shell-api.sh`) | PRIMARY since 2026-10-11. The Shell's own JS via GResource (`libshell-<N>.so`), the GI typelibs (`St-<N>`, `Clutter-<N>`) and a 58-API probe. Always matches the version under test; `<N>` is auto-detected so it survives GNOME 51+. On GNOME 51 the mutter typelibs sit in a distro-specific directory (`/usr/lib/mutter-51` on Arch/CachyOS) that the script's Debian-shaped `MUTTER_BASE` does not cover, so `probe` needs `GI_TYPELIB_PATH` pointed at it. |
+| **Installed Shell** (`tools/shell-api.sh`) | PRIMARY since 2026-10-11. The Shell's own JS via GResource (`libshell-<N>.so`), the GI typelibs (`St-<N>`, `Clutter-<N>`) and a 59-API probe. Always matches the version under test; `<N>` is auto-detected so it survives GNOME 51+. On GNOME 51 the mutter typelibs sit in a distro-specific directory (`/usr/lib/mutter-51` on Arch/CachyOS) that the script's Debian-shaped `MUTTER_BASE` does not cover, so `probe` needs `GI_TYPELIB_PATH` pointed at it. |
 | `gjsdoc` (offline mirror) | FROZEN as of 2026-10-11: gjs-docs.gnome.org no longer serves the docset JSON (`/<slug>/index.json` and `/<slug>/db.json` both answer with the SPA HTML shell, for every slug), so the mirror cannot be extended. The `st14~14` set already on disk still works offline. |
 | gjs.guide | Authoritative extension development guide (ESM, topics, a porting page per release). |
 | GNOME Shell source, version tag | `js/ui/*.js` (PopupMenu, PanelMenu, Main) — JS UI modules are NOT in GIR docs; the source is the ground truth. Tags used so far: `46.0`, `50.1`. |
@@ -182,15 +182,24 @@ argument list.
 wheel scrolling, theme colours, Orca) all passed.
 
 **Tooling added:** `tools/shell-api.sh` — `info` / `list` / `extract` / `probe`.
-`probe` checks 56 APIs against the installed typelibs; run it after every GNOME
-upgrade.
+`probe` checks the APIs this extension relies on against the installed typelibs
+(59 as of 0.22.1); run it after every GNOME upgrade. It is a FIXED list, so a
+green run says those are present — not that every API the code calls still
+exists.
 
-**GNOME 51 measured (2026-10-23):** `PopupMenu.open()` / `close()` take a
-parameters object; event signals are deprecated in favour of controllers; St
-`vertical` is gone; `St.ButtonMask` members were renamed. On GNOME 51.1
-(CachyOS) `probe` reports all 58 checked APIs as present and the 18-check manual
-run passed, so no source change and no `compat.js` was needed — the names above
-belong to APIs this extension does not call. See `roadmap.md` §D.
+**GNOME 51 measured (2026-10-23):** `St.BoxLayout` **lost its `vertical`
+property** (`src/st/st-box-layout.c` @51.1 keeps only `PROP_ORIENTATION`; @50.1
+has both) — the empty-state row built its box with `vertical: true` and threw
+`No property vertical on StBoxLayout` at runtime (fixed in 0.22.1: use
+`orientation: Clutter.Orientation.VERTICAL`, present on 46-51). Also removed /
+changed and NOT used by this extension: event signals are deprecated in favour of
+controllers, `St.ButtonMask` members were renamed, `Shell.GLSLEffect` was dropped.
+`PopupMenu`/`PopupSubMenu` `open()`/`close()` now take an options object
+(`open(params = {})` vs `open(animate)` up to 50) — our two call sites pass a
+flag, which 51 tolerates by falling back to the default; see `roadmap.md` §D.
+Lesson: a green probe only means the FIXED list is present — the `vertical` case
+was invisible to it, so a static guard (`tests/run_tests.mjs`, no `vertical:` in
+shell-side JS) now covers the shape.
 
 ## Faz 7 (2026-10-10) — category action panel (design H)
 
