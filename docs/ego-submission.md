@@ -3,19 +3,20 @@
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload.
 
-**Current upload: 0.20.1** — drag-and-drop reordering, the insertion-line fix,
-GNOME 46–51 support and every fix from the 0.15.0 review window. It supersedes
-the 0.15.0 upload that is still waiting for review; uploading over a pending
-review is allowed (GNOME extensions maintainer, discourse.gnome.org/t/9205), and
-the reviewer is asked on the review page to look at this one instead:
+**Current upload: 0.22.2** (uploaded 2026-10-23) — drag-and-drop for tasks and
+categories, GNOME 46–51 support and every fix from the 0.15.0 review window. It
+supersedes the two uploads still waiting for review (0.15.0 and 0.20.1);
+uploading over a pending review is allowed (GNOME extensions maintainer,
+discourse.gnome.org/t/9205), and the reviewer is asked on the review pages to
+look at this one instead:
 
-> Version 0.20.1 supersedes 0.15.0 — please review this one instead. It contains
-> the fixes for everything reported so far, plus drag-and-drop reordering. The
-> notes on this upload describe what changed.
+> Version 0.22.2 supersedes 0.15.0 and 0.20.1 — please review this one instead.
+> It contains the fixes for everything reported so far, plus drag-and-drop for
+> tasks and categories. The notes on this upload describe what changed.
 
 ---
 
-**Todo MD 0.20.1 — notes for the reviewer**
+**Todo MD 0.22.2 — notes for the reviewer**
 
 **What it does:** A panel menu over a plain markdown checkbox file (`~/todo.md`
 by default, path configurable). Categories are `##` headings, rendered as tabs;
@@ -26,9 +27,16 @@ inline add per category.
 end of every row; the task moves inside its own category, with an insertion line
 and a no-drop cursor over another category's rows — and keyboard reordering with
 Alt+Up / Alt+Down on a focused row, which replaced the old per-row up/down
-buttons. `shell-version` now covers GNOME 46–51, and the findings from this
-review window (a colour-map wipe on an unreadable file, a blank line inventing a
-"General" category, theme-invisible controls and scrollbars) are all fixed here.
+buttons. Categories reorder the same way: a tab is dragged along the strip and
+the file's `##` order is rewritten to match; the tab bar is a segmented control
+now (a raised pill for the active tab, the strip scrolls itself, and its
+scrollbar appears only while the tabs actually overflow), the task list and the
+tab strip keep their scroll position across rebuilds, every icon-only button
+shares one flat round style, and the category action panel fades in — skipped
+under reduced motion. `shell-version` now covers GNOME 46–51, and the findings
+from this review window (a colour-map wipe on an unreadable file, a blank line
+inventing a "General" category, theme-invisible controls and scrollbars, an empty
+todo file on GNOME 51) are all fixed here.
 
 **Drag-and-drop integration (disclosure):** reordering uses GNOME Shell's own
 drag-and-drop module (`resource:///org/gnome/shell/ui/dnd.js`, `makeDraggable`)
@@ -88,8 +96,16 @@ new in 0.22.2 and belong to `compat.js`: `R-SLOP-01` twice, on the JSDoc
 `@param {Type}` annotations of `popupArgs()`. The annotations are kept on purpose —
 the comment exists to record the two argument shapes the shim distinguishes
 (boolean up to GNOME 50, `{animate}` from 51), and the types are what makes that
-record readable. Shexli (0 errors / 3 warnings on 0.20.3) was not re-run for
-0.22.2; the JS changes since are additive.
+record readable.
+
+Shexli on the same zip: 3 warnings (same dispositions as before) plus one error,
+`EGO-M-004`, which is only about `shell-version` containing `"51"`. That is the
+analyzer's own version table, which stops at GNOME 50
+(`shexli/analyzer/rules/metadata.py`: `if major > 50: future.append(raw)`), not a
+problem with the upload: GNOME 51.0 was released on 2026-09-16 and
+extensions.gnome.org itself serves `shell_version=51`. ego-lint's
+`metadata/future-shell-version` warning has the same cause. Dropping `51` from
+the list would hand GNOME 51 users the older 0.21.0 upload, so it stays.
 
 ---
 
@@ -223,14 +239,20 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 - [x] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
       `dist/todo-md@ertugrulsefal.github.com-<version>.zip`) — 0.22.2, 11 files
 - [x] ego-lint on the extracted zip: 0 failed (252 checks, 213 passed, 29 warnings)
-- [ ] Shexli on the zip: 0 errors (`pip install shexli 'tree-sitter==0.25.0'` —
-      0.26 segfaults; verify with a broken fixture first, the tool is
-      version-gated and fails silently — see docs/verified-apis.md) — **NOT run
-      for 0.22.2** (tool not installed in this session; last run 0.20.3: 0 errors)
+- [x] Shexli on the zip: **1 error + 3 warnings on 0.22.2** (`pip install shexli
+      'tree-sitter==0.25.0'` — 0.26 segfaults; verify with a broken fixture first,
+      the tool is version-gated and fails silently — see docs/verified-apis.md).
+      The error is `EGO-M-004` on `shell-version` containing `"51"` and is the
+      analyzer's version table (stops at 50), not the package — 0.20.3 and
+      0.21.0 produced 0 errors / 3 warnings with the same code paths
 - [x] `metadata.json` version-name matches the CHANGELOG release (0.22.2)
 - [x] Notes above updated to the new version
 - [x] Screenshot: `docs/screenshots/todo-md-0.20.3.png` present (real capture) and
       referenced by the README — no new capture for 0.22.2 (a static image cannot
       show the fade; the rule is to reuse the previous one)
+- [x] Zip verified byte-identical to the published release asset
+      (`releases/download/v0.22.2/…-0.22.2.zip`, md5 `80581fcf…`)
+- [x] Uploaded to extensions.gnome.org (2026-10-23, user); the uploads before
+      it (0.15.0, 0.20.1) are still in the review queue and are superseded
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip

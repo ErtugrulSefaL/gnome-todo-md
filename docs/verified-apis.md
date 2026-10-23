@@ -98,24 +98,36 @@ the section "GNOME 50 port (2026-10-11)" further down.
 | `overlay_scrollbars` mechanics (VERIFIED IN SOURCE, MEASURED AS A FAILURE) — `true` sets `account_for_hscrollbar/vscrollbar = FALSE` and zeroes the reserved size (`st-scroll-view.c` 46.0 :451, :458, :652), so an overlay bar overlaps the content instead of sitting beside it. Measured 2026-10-03 with `overlay_scrollbars: true` on both menu scrollers: the **vertical** bar drew OVER the task rows and took no pointer events (the user: "it moved on top of the task", "cannot be touched, as if it were behind"), and the **horizontal** bar on the tab strip never appeared at all. Visibility of an overlay bar is left to the theme: GNOME 46's `data/stylesheet.css` has no scrollbar rules (the appearance ships inside the theme's gresource). Conclusion: overlay is the wrong tool for this menu; `St.PolicyType.AUTOMATIC` with the theme's own styling is the working baseline | scrollbar appearance | gnome-shell `46.0` `src/st/st-scroll-view.c` (read) + user testing on this machine — the code behaved as documented and still failed the requirement | REJECTED (2026-10-03) |
 | `GLib.idle_add` returns a **source id**; store it and cancel with `GLib.Source.remove(id)` in `disable()` (and before re-arming the same source). A callback returning `GLib.SOURCE_REMOVE` frees itself but the guidelines still require the teardown path, and a pending idle would otherwise call back into a destroyed menu | audit S6 | GLib docs (`g_source_remove`); review-guidelines "Remove main loop sources"; runtime-proven in the running shell after `Alt+F2 → r` | OK (2026-10-02) |
 
-## External static analyzers (EGO-side evidence, 2026-10-10)
+## External static analyzers (EGO-side evidence, 2026-10-10; re-run 2026-10-23)
 
-Run on `dist/todo-md@ertugrulsefal.github.com-0.15.0.zip` (built by `tools/make-package.sh`).
+Run on `dist/todo-md@ertugrulsefal.github.com-0.22.2.zip` (built by
+`tools/make-package.sh`; the numbers below are from that run — the section
+started on the 0.15.0 zip, whose dispositions did not change).
+
+Both tools are run on the EXTRACTED zip (packaging findings only exist there).
 
 ### ego-lint (`.goose/tools/gnome-extension-reviewer/ego-lint`)
 
-0 FAILED, 190 passed, 25 warnings. Dispositions:
+0 FAILED, 213 passed, 29 warnings (252 checks). Dispositions:
 - `resource-tracking/no-destroy-method` ×20 (advisory) — row actors are destroyed
   with the menu tree on every rebuild (`menu.removeAll()` / `remove_all_children()`);
   long-lived actors are explicitly destroyed in `disable()` (extension.js:157-168).
-- `lifecycle/signal-balance` (8 connects / 6 disconnects) — verified clean by hand:
-  the 6 disconnects are exactly the signals on LONG-LIVED objects (4× `_settings`,
-  `_indicator.menu`, `_todoMonitor`); every remaining `.connect()` is on an actor
-  owned by the menu/prefs tree, whose handlers die with the actor.
+- `lifecycle/signal-balance` (12 connects / 7 disconnects on 0.22.2) — verified
+  clean by hand: the 7 disconnects are exactly the signals held on LONG-LIVED
+  objects (4× `_settings`, `_indicator.menu`, `_todoMonitor`,
+  `St.Settings.get()`); every remaining `.connect()` is on an actor owned by the
+  menu/prefs tree, whose handlers die with the actor. The count grew from 8 to 12
+  because the rule counts a line whenever `this._` appears in it, so the
+  empty-state button (extension.js:389) and the tab drag handler (tabBar.js:221)
+  both count even though each connects a LOCAL actor that the row/tab owns.
+- `metadata/future-shell-version` — the analyzer's own table stops at GNOME 50
+  (same cause as Shexli `EGO-M-004` below); `51` is a released version, so the
+  warning is accepted, not fixed.
 - `metadata/shell-version-current` — RESOLVED 2026-10-11: `shell-version` is now
   `["50"]` (the version this code was regression-tested on). Policy: only
   verified versions are declared (R3, `AGENTS.md`); 46–49 are added after the VM
-  regression runs, never optimistically.
+  regression runs, never optimistically. The list has since grown to `46`–`51`
+  by that same rule (each version behind its own probe + RC run).
 - `quality/private-api` (`Main.panel.addToStatusArea`, extension.js:122) — known,
   disclosed in the EGO submission notes.
 - `license` (repo dir lint only) — LICENSE lives at the repo root; the zip root
@@ -135,17 +147,30 @@ fixture (eval, `spawn_command_line_async`, `gschemas.compiled`): with
 `shell-version: ["3.2"]` → silent clean; with `["46"]` → the fixture is caught
 (EGO-P-006). Never trust a Shexli pass without a self-test fixture.
 
-Shexli result on our zip: 0 errors, 3 warnings —
-- `EGO-X-004` sync file IO (`Gio.File.load_contents`, storage.js:434): REAL,
+Shexli result on the 0.22.2 zip: 1 error, 3 warnings (0 errors on 0.20.3 and
+0.21.0 — the error arrived with `shell-version` listing `51`) —
+- `EGO-X-004` sync file IO (`Gio.File.load_contents`, storage.js:530): REAL,
   known design decision. Disclosed to the reviewer: small user file, read once
   per menu refresh, atomic `replace_contents` for writes. (An async refactor
   would be a major structural change; deferred.)
-- `EGO-L-002` (`_contentSection` not destroyed): FALSE POSITIVE —
-  `disable()` destroys the persistent wrapper that owns the section
-  (`this._scrollWrapper.destroy()`, extension.js:157-161) and nulls the field.
+- `EGO-L-002` (six fields reported as never destroyed: `_actionsDeleteItem`,
+  `_colorRow`, `_contentSection`, `_dropLine`, `_tabDropLine`, `_dragHint`):
+  FALSE POSITIVE — `disable()` disposes the owner of each one
+  (`this._actions.destroy()` owns the first two, `this._scrollWrapper.destroy()`
+  the section) or the actor by name (the two insertion lines and the hint are
+  iterated and destroyed). The analyzer cannot trace actor ownership.
 - `EGO-L-003` (`newCategoryButton.connect` never disconnected): FALSE POSITIVE —
-  `disable()` destroys the tab bar (`this._tabBar.bar.destroy()`,
-  extension.js:163-166), which destroys the button and its handlers.
+  `disable()` destroys the tab bar (`this._tabBar.bar.destroy()`), which destroys
+  the button and its handlers.
+- `EGO-M-004` (**error**, `shell-version` "implausible future releases"): TOOL
+  LIMIT, not the package — the rule hardcodes the newest plausible release
+  (`shexli/analyzer/rules/metadata.py` @ 0.2.1: `if major > 50:
+  future.append(raw)`). GNOME 51.0 was released on 2026-09-16
+  (`release.gnome.org/51`) and EGO itself serves 51
+  (`extension-query/?shell_version=51` → HTTP 200). Measured comparison: the
+  SAME code with `shell-version` capped at 50 → 0 errors; with `46`–`51` → this
+  single error. Nothing to fix: dropping `51` would serve GNOME 51 users the
+  older 0.21.0 upload (which carries the empty-todo-file crash).
 
 ## GNOME 50 port (2026-10-11) — re-verification, 46.0 vs 50.1
 
