@@ -171,6 +171,12 @@ Shexli result on the 0.22.2 zip: 1 error, 3 warnings (0 errors on 0.20.3 and
   SAME code with `shell-version` capped at 50 → 0 errors; with `46`–`51` → this
   single error. Nothing to fix: dropping `51` would serve GNOME 51 users the
   older 0.21.0 upload (which carries the empty-todo-file crash).
+- **EGO's own review page runs Shexli as well, and agrees with us**: the public
+  panel on `/review/77061` ("Shexli (experimental)") reports **3 warnings and no
+  error** for the same uploaded zip — precisely the three findings above and
+  nothing else. EGO's integration evidently knows GNOME 51, which confirms
+  `EGO-M-004` is produced by the locally installed `shexli 0.2.1` and its stale
+  table, not by the package.
 
 ## GNOME 50 port (2026-10-11) — re-verification, 46.0 vs 50.1
 

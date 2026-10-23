@@ -105,7 +105,9 @@ analyzer's own version table, which stops at GNOME 50
 problem with the upload: GNOME 51.0 was released on 2026-09-16 and
 extensions.gnome.org itself serves `shell_version=51`. ego-lint's
 `metadata/future-shell-version` warning has the same cause. Dropping `51` from
-the list would hand GNOME 51 users the older 0.21.0 upload, so it stays.
+the list would hand GNOME 51 users the older 0.21.0 upload, so it stays. The
+review page agrees: EGO's own "Shexli (experimental)" panel for this upload lists
+the three findings explained above and no error.
 
 ---
 
@@ -252,7 +254,11 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
       show the fade; the rule is to reuse the previous one)
 - [x] Zip verified byte-identical to the published release asset
       (`releases/download/v0.22.2/…-0.22.2.zip`, md5 `80581fcf…`)
-- [x] Uploaded to extensions.gnome.org (2026-10-23, user); the uploads before
-      it (0.15.0, 0.20.1) are still in the review queue and are superseded
+- [x] Uploaded to extensions.gnome.org (2026-10-23, user) → review page
+      **`/review/77061`**, status `Unreviewed` when this note was written; the
+      uploads before it (0.15.0 `/review/76160`, 0.20.1 `/review/76321`) are
+      still in the queue and are superseded
+- [x] EGO's own "Shexli (experimental)" panel for this upload: **3 warnings, no
+      error** — the three findings the notes above answer one by one
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip
