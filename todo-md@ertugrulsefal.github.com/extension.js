@@ -364,7 +364,8 @@ export default class TodoExtension extends Extension {
             accessible_name: 'Create your first category',
         });
         const box = new St.BoxLayout({
-            vertical: true,
+            // St.BoxLayout dropped `vertical` in GNOME 51.
+            orientation: Clutter.Orientation.VERTICAL,
             x_align: Clutter.ActorAlign.CENTER,
             y_align: Clutter.ActorAlign.CENTER,
         });

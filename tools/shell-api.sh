@@ -86,6 +86,12 @@ cmd_extract() {
 # --- probe: every API surface this extension relies on ----------------------
 # Kept in sync with docs/verified-apis.md. A MISSING line means the API was
 # renamed/removed in this Shell version — fix the code, not the probe.
+#
+# LIMIT: this is a FIXED list, not "every API the extension uses". An API the
+# code calls but nobody added here stays invisible even when the probe is green
+# (GNOME 51 removed St.BoxLayout's `vertical` property and the probe never
+# looked at it — the empty-state row threw at runtime). Add the check with the
+# code, and add a static guard in tests/run_tests.mjs for the shape itself.
 cmd_probe() {
     detect
     local js
@@ -120,6 +126,7 @@ chk('St.Side.TOP', () => St.Side.TOP !== undefined);
 chk('St.Label.accessible_role', () => has(St.Label.prototype, 'accessible_role'));
 chk('St.Label.label_actor', () => has(St.Label.prototype, 'label_actor'));
 chk('St.Label.add_accessible_state()', () => has(St.Label.prototype, 'add_accessible_state'));
+chk('St.BoxLayout.orientation', () => has(St.BoxLayout.prototype, 'orientation'));
 chk('St.ScrollView.enable_mouse_scrolling', () => has(St.ScrollView.prototype, 'enable_mouse_scrolling'));
 chk('St.ScrollView.clip_to_allocation', () => has(St.ScrollView.prototype, 'clip_to_allocation'));
 chk('St.ScrollView.hadjustment/vadjustment', () => has(St.ScrollView.prototype, 'hadjustment') && has(St.ScrollView.prototype, 'vadjustment'));

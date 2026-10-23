@@ -389,6 +389,17 @@ function testStaticChecks() {
         store, /open_output_stream|create_readwrite|create_sync|append_to|truncate|output_stream_write|write_bytes/,
         'use Gio.File.replace_contents (atomic temp+rename) only');
 
+    // Real incident (GNOME 51, 2026-10-23): St.BoxLayout dropped its `vertical`
+    // property, so constructing the empty-state box threw
+    // "No property vertical on StBoxLayout" and aborted the whole menu build —
+    // only visible with a todo file that has no category, which no VM round or
+    // probe check covered. `orientation: Clutter.Orientation.VERTICAL` exists
+    // on 46-51.
+    noMatch('static: no St.BoxLayout vertical: property (removed in GNOME 51)',
+        ui, /\bvertical\s*:/,
+        'St.BoxLayout has no `vertical` from 51 on; use orientation: '
+        + 'Clutter.Orientation.VERTICAL');
+
     // Project rules that must not drift. R3 (docs/roadmap.md §C): shell-version
     // lists ONLY versions verified by a manual regression run — widening it is a
     // deliberate act that follows a test, never an optimistic edit.

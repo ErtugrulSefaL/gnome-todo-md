@@ -4,6 +4,30 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.22.1 - 2026-10-23
+
+### Fixed
+- **GNOME 51: the empty-state row aborted the whole menu build.** With a todo file
+  that names no category, the guidance row's box was built with
+  `new St.BoxLayout({vertical: true})`. GNOME 51 removed that property from
+  `St.BoxLayout`, so the constructor threw `No property vertical on StBoxLayout`;
+  because the row is built in the middle of the menu rebuild, the rest of the
+  menu never appeared — nothing opened, the strip's `+` did nothing, and the
+  extension ended up in ERROR. It now uses `orientation:
+  Clutter.Orientation.VERTICAL`, which exists on 46 through 51. The 0.22.0
+  verification round missed it because its todo fixture has categories, so the
+  empty-state branch never ran.
+
+### Notes
+- A static guard now forbids `vertical:` in the shell-side JS, and the API probe
+  checks `St.BoxLayout.orientation`. The probe is a fixed list: a green run does
+  not mean every API the code uses still exists — that is what the static guards
+  and the manual pass are for.
+- 0.22.0's notes said the APIs this extension uses are identical on 51. That was
+  wrong for this one call; corrected above.
+- The manual regression checklist gained a 19th item: an empty todo file, which is
+  what this defect needed to show. Earlier runs are recorded as 18/18.
+
 ## 0.22.0 - 2026-10-23
 
 ### Added
@@ -11,8 +35,9 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   `["46", "47", "48", "49", "50", "51"]`, so the same zip still serves every
   supported release. GNOME 51 was validated on CachyOS (Arch, Wayland) with the
   API probe (58 checks, all present) plus the same 18-check manual regression run
-  the other versions went through. As for 46–50, no source change was needed: the
-  APIs this extension uses are identical on 51.
+  the other versions went through. As for 46–50, the extension needed no source
+  change to run on 51 — see 0.22.1 for the one API that regression run did not
+  reach.
 - The static guard now pins the declared list to exactly those six versions, and
   the metadata description names every one of them.
 
