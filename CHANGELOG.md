@@ -4,6 +4,25 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `.goosehints`).
 
+## 0.22.0 - 2026-10-23
+
+### Added
+- **Support for GNOME Shell 51.** `shell-version` now reads
+  `["46", "47", "48", "49", "50", "51"]`, so the same zip still serves every
+  supported release. GNOME 51 was validated on CachyOS (Arch, Wayland) with the
+  API probe (58 checks, all present) plus the same 18-check manual regression run
+  the other versions went through. As for 46–50, no source change was needed: the
+  APIs this extension uses are identical on 51.
+- The static guard now pins the declared list to exactly those six versions, and
+  the metadata description names every one of them.
+
+### Notes
+- GNOME 51 realigned mutter's introspection version with the GNOME major:
+  Clutter, Cogl, Meta, St and Shell go from 18 straight to 51 (19–50 never
+  exist). The probe therefore needs the distro-specific typelib directory for
+  51 — `/usr/lib/mutter-51` on Arch/CachyOS, not Debian's
+  `/usr/lib/<arch>/mutter-<N>`. Measured, see `docs/verified-apis.md`.
+
 ## 0.21.0 - 2026-10-22
 
 ### Added
