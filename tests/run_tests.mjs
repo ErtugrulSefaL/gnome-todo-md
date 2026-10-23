@@ -461,6 +461,18 @@ function testStaticChecks() {
         'pass popupArgs(menu, \'open\'|\'close\', flag) so the argument '
         + 'matches the Shell (boolean up to 50, {animate} from 51)');
 
+    // The action panel's fade is our own transition, so it has to skip itself
+    // when the user asked for reduced motion — the Shell's own animations do,
+    // and an extension that ignores the setting is an accessibility regression.
+    record('static: the panel fade honours the reduce-motion setting',
+        /(?:const|let)\s+reduceMotion\s*=\s*St\.ReducedMotion\s*!==\s*undefined\s*&&\s*St\.Settings\.get\(\)\.reducedMotion\s*===\s*St\.ReducedMotion\.REDUCE/
+            .test(ui)
+        && /duration:\s*reduceMotion\s*\?\s*0\s*:/.test(ui),
+        'derive the duration from St.Settings.get().reducedMotion === '
+        + 'St.ReducedMotion.REDUCE instead of animating unconditionally, '
+        + 'guarded by St.ReducedMotion !== undefined (the enum only exists '
+        + 'from GNOME 51 on)');
+
     // Project rules that must not drift. R3 (docs/roadmap.md §C): shell-version
     // lists ONLY versions verified by a manual regression run — widening it is a
     // deliberate act that follows a test, never an optimistic edit.

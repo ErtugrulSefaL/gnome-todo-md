@@ -15,6 +15,11 @@ import {TabBar} from './tabBar.js';
 import {popupArgs} from './compat.js';
 import {RowFactory, capWidth} from './rowFactory.js';
 
+// The Shell reveals a submenu with a fixed 250 ms height ease, which reads as
+// instant at the action panel's size. A fade on top of it makes the panel's
+// appearance legible; reduced motion skips it, as GNOME's own animations do.
+const PANEL_FADE_MS = 400;
+
 export default class TodoExtension extends Extension {
     enable() {
         // Single-edit invariant: at most one row is edited at a time. Reset on
@@ -996,6 +1001,19 @@ export default class TodoExtension extends Extension {
                 // header is the item the panel belongs to.
                 this._actions.sourceActor = header;
                 this._actions.focusActor = actionsBtn;
+                // Zero duration under reduced motion, as the Shell's own
+                // animations do. St.ReducedMotion only exists from GNOME 51
+                // on; earlier shells report undefined.
+                const reduceMotion =
+                    St.ReducedMotion !== undefined &&
+                    St.Settings.get().reducedMotion === St.ReducedMotion.REDUCE;
+                this._actions.actor.remove_transition('opacity');
+                this._actions.actor.opacity = 0;
+                this._actions.actor.ease({
+                    opacity: 255,
+                    duration: reduceMotion ? 0 : PANEL_FADE_MS,
+                    mode: Clutter.AnimationMode.EASE_OUT_QUAD,
+                });
                 this._actions.open(popupArgs(this._actions, 'open', true));
             }
 
