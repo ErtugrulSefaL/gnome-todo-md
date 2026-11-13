@@ -2,7 +2,7 @@
 
 All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
-assigned only when a phase is completed and approved (see `.goosehints`).
+assigned only when a phase is completed and approved (see `AGENTS.md`).
 
 ## 0.22.2 - 2026-10-23
 

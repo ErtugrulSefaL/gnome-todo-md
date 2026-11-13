@@ -9,7 +9,7 @@ editor, on any device.
 
 Compatible with GNOME Shell 46, 47, 48, 49, 50 and 51 — each release was verified
 by the same manual regression run (Ubuntu 24.04, 24.10, 25.04, 25.10, 26.04 and
-CachyOS), on Wayland. Written in JavaScript (ESModules, GJS).
+26.10), on Wayland. Written in JavaScript (ESModules, GJS).
 
 > **Status:** Todo MD is in review on extensions.gnome.org. Until it is published
 > there, GitHub is the only install and update path — see [Install](#install).
