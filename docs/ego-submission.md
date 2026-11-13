@@ -16,6 +16,13 @@ look at this one instead:
 
 ---
 
+## Coding criteria (the two pages the reviewer linked)
+
+The 0.22.2 rejection named `best-practices.html` and
+`review-guidelines.html#rules`. Both live in the local clone at
+`docs/gjs-guide/docs/extensions/review-guidelines/`; cite them by **file path +
+line number**. Every code change is measured against them.
+
 **Todo MD 0.22.2 — notes for the reviewer**
 
 **What it does:** A panel menu over a plain markdown checkbox file (`~/todo.md`

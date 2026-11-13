@@ -15,7 +15,7 @@
 # Both are taken straight from the INSTALLED Shell, so they always match the
 # version under test and never rot. (gjs-docs.gnome.org lags behind: as of
 # 2026-10 it publishes up to st17~17 = GNOME 49; GNOME 50 = st18 does not
-# exist there yet — see ~/.local/share/gjs-docs-offline/.)
+# exist there yet.)
 #
 # Version-agnostic on purpose: <N> is detected from the installed St typelib,
 # so this script keeps working on GNOME 51+ without edits.

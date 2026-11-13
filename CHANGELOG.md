@@ -304,7 +304,9 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   non-zero if an API has disappeared. Run it after every GNOME upgrade.
 - `tools/gjs-docs-mirror.sh` — refreshes the offline gjs-docs mirror. It
   currently fails for every slug: gjs-docs.gnome.org stopped serving the
-  docset JSON and answers with its SPA HTML shell instead.
+  docset JSON and answers with its SPA HTML shell instead. (Removed
+  2026-11-13 together with the mirror and the `gjsdoc` helper; the installed
+  Shell via `tools/shell-api.sh` is the only API source.)
 
 ### Notes
 - The multi-version release policy is now explicit: one code base, one zip, and
