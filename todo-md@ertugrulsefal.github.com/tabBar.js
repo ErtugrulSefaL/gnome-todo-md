@@ -21,8 +21,10 @@ import * as Storage from './storage.js';
 export class TabBar {
     /**
      * Build the strip once. Nothing is attached to a menu yet.
+     * `onNewCategory` is the '+' button's handler; the class owns the signal
+     * so its owner is the same object that owns the button.
      */
-    constructor() {
+    constructor({onNewCategory}) {
         this.bar = new St.BoxLayout({style_class: 'todo-tab-bar'});
         this.bar.set_x_expand(true);
         this.bar.set_reactive(true); // receive scroll events
@@ -85,6 +87,9 @@ export class TabBar {
         });
         this.newCategoryButton.set_x_align(Clutter.ActorAlign.END);
         this.newCategoryButton.set_y_align(Clutter.ActorAlign.CENTER);
+        this.newCategoryButton.connect('clicked', () => {
+            onNewCategory();
+        });
 
         this.bar.add_child(this.scroller);
         this.bar.add_child(this.newCategoryButton);

@@ -35,6 +35,12 @@ export default class TodoExtension extends Extension {
                 this._closeInteractions();
                 this._unwatchTodoFile();
                 this._watchTodoFile();
+                // The new file's content is not in the cache yet: clear it and
+                // read, so the refresh cannot show the old file's list.
+                this._raw = '';
+                this._readOk = true;
+                this._lastWritten = null;
+                this._loadTodo();
                 this._refreshTodoMenu();
             });
         // Re-render when the color map changes (prefs writes it live).
@@ -85,6 +91,10 @@ export default class TodoExtension extends Extension {
         this._openSignal = this._indicator.menu.connect('open-state-changed',
             (menu, open) => {
                 if (open) {
+                    // Re-read the file in the background: the menu opens on
+                    // the cached content, and the callback refreshes it. An
+                    // interaction the user just opened must survive it.
+                    this._loadTodo({closeInteractions: false});
                     // GLib.idle_add takes (priority, func); a one-argument call
                     // throws and the rebuild silently never runs. The id is
                     // kept so disable() can cancel it — a pending idle would
@@ -138,13 +148,23 @@ export default class TodoExtension extends Extension {
         this._colorSchemeSignal = St.Settings.get().connect(
             'notify::color-scheme', () => this._applyColorScheme());
 
-        // Pre-fill the menu so it is not empty on first open (an empty popup
-        // menu will not be shown by GNOME Shell).
-        this._refreshTodoMenu();
+        // The cache: the last read stays in memory so every interaction path
+        // stays synchronous; only the disk read below is async.
+        this._raw = '';
+        this._readOk = true;
+        this._readPending = false;
 
         // Watch ~/todo.md so externally-added tasks appear live, without
         // needing a Shell reload.
         this._watchTodoFile();
+
+        // Start the read first: the pre-fill below then shows the placeholder
+        // row, and the read's callback refreshes with the real content.
+        this._loadTodo();
+
+        // Pre-fill the menu so it is not empty on first open (an empty popup
+        // menu will not be shown by GNOME Shell).
+        this._refreshTodoMenu();
     }
 
     /**
@@ -217,30 +237,45 @@ export default class TodoExtension extends Extension {
         }
         this._dragging = null;
         this._stopAutoScroll();
-        for (const actor of [this._dropLine, this._tabDropLine, this._dragHint]) {
-            if (actor) {
-                actor.destroy();
-            }
+        if (this._dropLine) {
+            this._dropLine.destroy();
+            this._dropLine = null;
         }
-        this._dropLine = null;
-        this._tabDropLine = null;
-        this._dragHint = null;
+        if (this._tabDropLine) {
+            this._tabDropLine.destroy();
+            this._tabDropLine = null;
+        }
+        if (this._dragHint) {
+            this._dragHint.destroy();
+            this._dragHint = null;
+        }
+        // Children before owners: the popup's own destroy() tears down its
+        // actor subtree, so the named destroys below must not run after it.
+        if (this._actionsDeleteItem) {
+            this._actionsDeleteItem.destroy();
+            this._actionsDeleteItem = null;
+        }
+        if (this._colorRow) {
+            this._colorRow.destroy();
+            this._colorRow = null;
+        }
         // The panel's actor lives inside the content section, but the
         // PopupSubMenu owns shell-side state (a Main.sessionMode connection), so
         // it is destroyed before its actor's parent goes away.
         if (this._actions) {
             this._actions.destroy();
             this._actions = null;
-            this._actionsDeleteItem = null;
             this._actionsItems = null;
-            this._colorRow = null;
             this._swatches = null;
             this._colorPickerOpen = false;
+        }
+        if (this._contentSection) {
+            this._contentSection.destroy();
+            this._contentSection = null;
         }
         if (this._scrollWrapper) {
             this._scrollWrapper.destroy();
             this._scrollWrapper = null;
-            this._contentSection = null;
         }
         if (this._tabBar) {
             this._tabBar.bar.destroy();
@@ -263,17 +298,53 @@ export default class TodoExtension extends Extension {
         this._todoMonitor = Gio.File.new_for_path(this._todoPath())
             .monitor(Gio.FileMonitorFlags.NONE, null);
         this._monitorSignal = this._todoMonitor.connect('changed', () => {
-            // Our own writes fire the monitor too, and their refresh already
-            // happened; refreshing again would throw away what that refresh
-            // restored — the key focus after a keyboard move. Identical content
-            // is therefore ignored.
-            const current = Storage.readTodo(this._todoPath());
-            if (current.ok && current.raw === this._lastWritten) {
+            this._loadTodo();
+        });
+    }
+
+    /**
+     * The cached read: the last content the async read produced. Every
+     * interaction path works on this, so a click never waits for the disk.
+     */
+    _readTodo() {
+        return {raw: this._raw, ok: this._readOk};
+    }
+
+    /**
+     * Persist the updated document and keep the cache in step. The cache is the
+     * source for every interaction path, so a successful write must land in it
+     * before the refresh reads it.
+     */
+    _commit(updated) {
+        if (!Storage.writeTodo(this._todoPath(), updated)) {
+            return false;
+        }
+        this._raw = updated;
+        this._readOk = true;
+        return true;
+    }
+
+    /**
+     * Read the file off the main loop and refresh once it arrives. Our own
+     * writes fire the monitor too, and their refresh already happened, so
+     * identical content is ignored; an in-progress edit is closed because a
+     * write may shift line indexes.
+     */
+    _loadTodo({closeInteractions = true} = {}) {
+        this._readPending = true;
+        Storage.readTodoAsync(this._todoPath(), result => {
+            if (!this._indicator) {
                 return;
             }
-            // Any write may shift line indexes, so an in-progress edit cannot
-            // be trusted: close it and rebuild.
-            this._closeInteractions();
+            this._readPending = false;
+            if (result.ok && result.raw === this._lastWritten) {
+                return;
+            }
+            this._raw = result.raw;
+            this._readOk = result.ok;
+            if (closeInteractions) {
+                this._closeInteractions();
+            }
             this._refreshTodoMenu();
         });
     }
@@ -392,6 +463,26 @@ export default class TodoExtension extends Extension {
     }
 
     /**
+     * The row shown while the async read is in flight: GNOME Shell will not
+     * open an empty popup menu, so the first open needs a row before the file
+     * has arrived.
+     */
+    _makePlaceholderRow() {
+        const row = new PopupMenu.PopupBaseMenuItem({
+            activate: false,
+            can_focus: false,
+            reactive: false,
+            style_class: 'todo-empty-row',
+        });
+        row.add_child(new St.Label({
+            text: 'Loading…',
+            style_class: 'todo-empty-title',
+            x_align: Clutter.ActorAlign.CENTER,
+        }));
+        return row;
+    }
+
+    /**
      * Build the inline "new category" row: an empty entry. Enter commits via
      * Storage.addCategory; the new category becomes the active tab.
      *
@@ -408,7 +499,7 @@ export default class TodoExtension extends Extension {
         entry.connect('key-release-event', (e, event) => {
             if (event.get_key_symbol() === Clutter.KEY_Return) {
                 const name = e.get_text().trim();
-                const parsed = Storage.readTodo(this._todoPath());
+                const parsed = this._readTodo();
                 const updated = Storage.addCategory(parsed.raw, name);
                 if (updated === parsed.raw) {
                     // Rejected: empty, already taken, or a name that cannot be
@@ -416,7 +507,7 @@ export default class TodoExtension extends Extension {
                     // text — closing it here would make Enter look broken.
                     return Clutter.EVENT_STOP;
                 }
-                if (!Storage.writeTodo(this._todoPath(), updated)) {
+                if (!this._commit(updated)) {
                     // A failed write changes nothing: the entry stays open and
                     // no colour is stored for a category the file lacks.
                     return Clutter.EVENT_STOP;
@@ -466,14 +557,14 @@ export default class TodoExtension extends Extension {
                 return Clutter.EVENT_PROPAGATE;
             }
             const name = e.get_text().trim();
-            const parsed = Storage.readTodo(this._todoPath());
+            const parsed = this._readTodo();
             const updated = Storage.renameCategory(parsed.raw, categoryName, name);
             if (updated === parsed.raw) {
                 // Rejected: an unusable name, the unchanged name, or one
                 // already taken. The entry stays open with the typed text.
                 return Clutter.EVENT_STOP;
             }
-            if (!Storage.writeTodo(this._todoPath(), updated)) {
+            if (!this._commit(updated)) {
                 // A failed write changes nothing: the text stays.
                 return Clutter.EVENT_STOP;
             }
@@ -707,13 +798,13 @@ export default class TodoExtension extends Extension {
      *
      */
     _deleteCategory(categoryName) {
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.deleteCategory(parsed.raw, categoryName);
         if (updated === parsed.raw) {
             this._cancelEditing();
             return;
         }
-        if (!Storage.writeTodo(this._todoPath(), updated)) {
+        if (!this._commit(updated)) {
             // A failed write changes nothing: no colour is dropped for a
             // category the file still contains.
             this._cancelEditing();
@@ -807,10 +898,10 @@ export default class TodoExtension extends Extension {
             this._actions.actor.get_parent().remove_child(this._actions.actor);
         }
 
-        const todo = Storage.readTodo(this._todoPath());
+        const todo = this._readTodo();
         // What the menu now shows: the file monitor compares against this, so
         // our own writes never trigger a second rebuild.
-        this._lastWritten = todo.ok ? todo.raw : null;
+        this._lastWritten = todo.ok && !this._readPending ? todo.raw : null;
         const doc = Storage.parseDocument(todo.raw);
 
         // Every category renders as a non-clickable header row followed by its
@@ -836,10 +927,13 @@ export default class TodoExtension extends Extension {
         //
         const colors = this._settings.get_value('category-colors')
             .recursiveUnpack();
-        const prunedColors = todo.ok
+        // A pending read is not a read: the placeholder is not a document, so
+        // pruning against it would wipe the colour map on the first open.
+        const colorsAreAuthoritative = todo.ok && !this._readPending;
+        const prunedColors = colorsAreAuthoritative
             ? Storage.prunedColorsForDocument(colors, doc)
             : colors;
-        if (todo.ok && prunedColors !== colors) {
+        if (colorsAreAuthoritative && prunedColors !== colors) {
             this._settings.set_value('category-colors',
                 GLib.Variant.new('a{ss}', prunedColors));
         }
@@ -874,9 +968,8 @@ export default class TodoExtension extends Extension {
         if (!this._tabBar) {
             // The strip itself lives in tabBar.js; this file decides when it
             // exists, where it sits and what fills it.
-            this._tabBar = new TabBar();
-            this._tabBar.newCategoryButton.connect('clicked', () => {
-                this._toggleNewCategoryEntry();
+            this._tabBar = new TabBar({
+                onNewCategory: () => this._toggleNewCategoryEntry(),
             });
         } else {
             // Detach and clear the tab buttons; the strip and its hadjustment
@@ -926,7 +1019,9 @@ export default class TodoExtension extends Extension {
         // Nothing to list: the content area still shows, holding the guidance
         // row instead of category sections.
         if (emptyDocument) {
-            contentSection.addMenuItem(this._makeEmptyStateRow());
+            contentSection.addMenuItem(this._readPending
+                ? this._makePlaceholderRow()
+                : this._makeEmptyStateRow());
         }
 
         // The row a keyboard move produced takes the key focus back, so a second
@@ -1103,10 +1198,10 @@ export default class TodoExtension extends Extension {
             this._cancelEditing();
             return;
         }
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.editTask(parsed.raw, this._editingIndex, trimmed);
         // A failed write must not close the edit and discard the new text.
-        if (!Storage.writeTodo(this._todoPath(), updated)) {
+        if (!this._commit(updated)) {
             return;
         }
         this._closeInteractions();
@@ -1125,12 +1220,12 @@ export default class TodoExtension extends Extension {
             return;
         }
 
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.addTask(parsed.raw, trimmed, category);
         // The write result decides whether the entry may close: on failure
         // (disk full, read-only file) the typed text stays in the entry instead
         // of vanishing with a refresh that re-reads the old file.
-        if (!Storage.writeTodo(this._todoPath(), updated)) {
+        if (!this._commit(updated)) {
             return;
         }
         this._closeInteractions();
@@ -1158,9 +1253,9 @@ export default class TodoExtension extends Extension {
      */
     _toggleTask(index) {
         this._closeInteractions();
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.toggleTask(parsed.raw, index);
-        Storage.writeTodo(this._todoPath(), updated);
+        this._commit(updated);
         this._refreshTodoMenu();
     }
 
@@ -1170,9 +1265,9 @@ export default class TodoExtension extends Extension {
      */
     _deleteTask(index) {
         this._closeInteractions();
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.deleteTask(parsed.raw, index);
-        Storage.writeTodo(this._todoPath(), updated);
+        this._commit(updated);
         this._refreshTodoMenu();
     }
 
@@ -1240,7 +1335,7 @@ export default class TodoExtension extends Extension {
      * the write.
      */
     _onCategoryDragBegin(name, index) {
-        const content = Storage.readTodo(this._todoPath()).raw;
+        const content = this._readTodo().raw;
         this._dragging = {
             kind: 'category',
             name,
@@ -1288,12 +1383,12 @@ export default class TodoExtension extends Extension {
             || this._dragging.index === toIndex) {
             return false;
         }
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.moveTaskTo(parsed.raw, this._dragging.index, toIndex);
         if (updated === parsed.raw) {
             return false;
         }
-        Storage.writeTodo(this._todoPath(), updated);
+        this._commit(updated);
         return true;
     }
 
@@ -1308,12 +1403,12 @@ export default class TodoExtension extends Extension {
             || drag.blocked !== null || drag.toIndex < 0) {
             return false;
         }
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const updated = Storage.moveCategoryTo(parsed.raw, drag.name, drag.toIndex);
         if (!parsed.ok || updated === parsed.raw) {
             return false;
         }
-        Storage.writeTodo(this._todoPath(), updated);
+        this._commit(updated);
         return true;
     }
 
@@ -1550,7 +1645,7 @@ export default class TodoExtension extends Extension {
      * _refreshTodoMenu).
      */
     _moveTask(index, categoryName, direction) {
-        const parsed = Storage.readTodo(this._todoPath());
+        const parsed = this._readTodo();
         const section = Storage.renderSections(Storage.parseDocument(parsed.raw))
             .find(candidate => candidate.name === categoryName);
         const pos = section
@@ -1567,7 +1662,7 @@ export default class TodoExtension extends Extension {
         // Only once the move is known to happen: closing interactions without a
         // refresh would leave the menu showing a row that is already gone.
         this._closeInteractions();
-        Storage.writeTodo(this._todoPath(), updated);
+        this._commit(updated);
         // moveTaskTo lands the task in the target's slot, so it sits at `other`
         // in the new document; remember its line index for the focus hand-back.
         const moved = Storage.renderSections(Storage.parseDocument(updated))

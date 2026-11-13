@@ -519,33 +519,40 @@ export function serializeDocument(doc) {
 }
 
 /**
- * Read and parse the todo file at `path`.
+ * Read the todo file at `path` without blocking the Shell. The callback
+ * receives the same `{tasks, other, raw, ok}` shape `readTodo` used to return.
+ *
+ * A missing or unreadable file is not an error for rendering, but the caller
+ * must be able to tell "the file is empty" from "we could not read it": a
+ * failed read is transient (an editor's atomic save, a rename window), and
+ * treating it as "no categories" wipes the colour map for good.
  *
  */
-export function readTodo(path = TODO_PATH) {
+export function readTodoAsync(path, callback) {
     const file = Gio.File.new_for_path(path);
-
-    let content;
-    try {
-        const [, bytes] = file.load_contents(null);
-        // Decode the bytes with TextDecoder; Uint8Array.toString() is
-        // deprecated and mangles empty contents.
-        if (bytes) {
-            content = new TextDecoder().decode(bytes);
-        } else {
-            content = '';
+    file.load_contents_async(null, (source, result) => {
+        let content;
+        try {
+            const [, bytes] = source.load_contents_finish(result);
+            // Decode the bytes with TextDecoder; Uint8Array.toString() is
+            // deprecated and mangles empty contents.
+            content = bytes ? new TextDecoder().decode(bytes) : '';
+        } catch (err) {
+            callback({tasks: [], other: [], raw: '', ok: false});
+            return;
         }
-    } catch (err) {
-        // A missing or unreadable file is not an error for rendering, but the
-        // caller must be able to tell "the file is empty" from "we could not
-        // read it": a failed read is transient (an editor's atomic save, a
-        // rename window), and treating it as "no categories" wipes the colour
-        // map for good.
-        return {tasks: [], other: [], raw: '', ok: false};
-    }
+        callback(parseTodo(content));
+    });
+}
 
+/**
+ * Parse already-read todo content into the `{tasks, other, raw, ok}` shape.
+ * The caller owns the read: `ok` is the caller's read result.
+ *
+ */
+export function parseTodo(content, ok = true) {
     const {tasks, other} = splitLines(content);
-    return {tasks, other, raw: content, ok: true};
+    return {tasks, other, raw: content, ok};
 }
 
 /**

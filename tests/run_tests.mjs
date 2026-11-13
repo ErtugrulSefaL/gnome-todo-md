@@ -24,11 +24,26 @@ import Gio from 'gi://Gio';
 import * as Storage from '../todo-md@ertugrulsefal.github.com/storage.js';
 import {popupArgs} from '../todo-md@ertugrulsefal.github.com/compat.js';
 
+// The extension's storage module no longer reads the disk (the Shell's read
+// path is async), so the suite keeps its own synchronous read. This file is
+// not shipped, so the sync read is not a Shell concern.
+function readTodoSync(path) {
+    const file = Gio.File.new_for_path(path);
+    let content;
+    try {
+        const [, bytes] = file.load_contents(null);
+        content = bytes ? new TextDecoder().decode(bytes) : '';
+    } catch (e) {
+        return {tasks: [], other: [], raw: '', ok: false};
+    }
+    return Storage.parseTodo(content);
+}
+
 // Where the file-level tests write.
 const TODO = GLib.dir_make_tmp(null) + '/todo.md';
 // The user's real file: read-only for this suite, verified at teardown.
 const USER_TODO = GLib.get_home_dir() + '/todo.md';
-const USER_RAW_AT_START = Storage.readTodo(USER_TODO).raw;
+const USER_RAW_AT_START = readTodoSync(USER_TODO).raw;
 
 const results = []; // {name, ok, detail}
 let ORIGINAL_RAW = '';
@@ -39,7 +54,7 @@ function record(name, ok, detail) {
 
 // Snapshot the temporary test file once.
 function snapshotOriginal() {
-    ORIGINAL_RAW = Storage.readTodo(TODO).raw;
+    ORIGINAL_RAW = readTodoSync(TODO).raw;
 }
 
 // Restore the original file using the (tested) write API.
@@ -99,7 +114,7 @@ function testReadTodo() {
     const f = Gio.File.new_for_path(TODO);
     const enc = new TextEncoder();
     f.replace_contents(enc.encode('- [ ] A\n- [x] B\n'), null, false, Gio.FileCreateFlags.NONE, null);
-    const p = Storage.readTodo(TODO);
+    const p = readTodoSync(TODO);
     record('readTodo: reads current file, returns raw+parsed',
         p.raw === '- [ ] A\n- [x] B\n'
         && p.tasks.length === 2 && p.other.length === 0,
@@ -242,7 +257,7 @@ function testAddTaskCategorized() {
 
 function testWriteRead() {
     Storage.writeTodo(TODO, '- [ ] persisted\n');
-    const p = Storage.readTodo(TODO);
+    const p = readTodoSync(TODO);
     record('writeTodo -> readTodo: round-trip persists',
         p.raw === '- [ ] persisted\n' && p.tasks.length === 1
         && p.tasks[0].text === 'persisted' && p.tasks[0].done === false,
@@ -797,7 +812,7 @@ function testStaticChecks() {
     // counts — a comment length must not decide whether a guard holds.
     const addLine = uiLines.findIndex(line => line.includes('const updated = Storage.addCategory'));
     const rejectLine = uiLines.findIndex(line => line.includes('if (updated === parsed.raw) {'));
-    const writeLine = uiLines.findIndex(line => line.includes('if (!Storage.writeTodo(this._todoPath(), updated)) {'));
+    const writeLine = uiLines.findIndex(line => line.includes('if (!this._commit(updated)) {'));
     // Windowed on writeLine: a plain findIndex would match the FIRST
     // `this._addingNewCategory = false;` in the file — the one in enable(),
     // which is nowhere near this handler.
@@ -838,15 +853,15 @@ function testStaticChecks() {
     const addBody = handlerBody('_addTask(text, category) {');
     const editBody = handlerBody('_finishEditing(text) {');
     record('static: _addTask keeps the typed task when the write fails',
-        addBody !== null && /if \(!Storage\.writeTodo\(/.test(addBody)
-        && addBody.indexOf('if (!Storage.writeTodo(')
+        addBody !== null && /if \(!this\._commit\(/.test(addBody)
+        && addBody.indexOf('if (!this._commit(')
             < addBody.indexOf('this._closeInteractions();'),
         'a failed write must return BEFORE the inline entry closes, or the '
         + 'text the user typed is gone with no message');
 
     record('static: _finishEditing keeps the edited text when the write fails',
-        editBody !== null && /if \(!Storage\.writeTodo\(/.test(editBody)
-        && editBody.indexOf('if (!Storage.writeTodo(')
+        editBody !== null && /if \(!this\._commit\(/.test(editBody)
+        && editBody.indexOf('if (!this._commit(')
             < editBody.indexOf('this._closeInteractions();'),
         'same rule for the edit commit: the old text stays on disk, the new one '
         + 'stays on screen');
@@ -895,7 +910,7 @@ function testStaticChecks() {
     // Faz 7 mutations must write the file BEFORE touching the settings map.
     const deleteWrite = uiLines.findIndex(l => l.includes('Storage.deleteCategory('));
     const deleteFile = uiLines.findIndex((l, i) => i > deleteWrite
-        && l.includes('Storage.writeTodo(this._todoPath(), updated)'));
+        && l.includes('this._commit(updated)'));
     const deleteColour = uiLines.findIndex((l, i) => i > deleteFile
         && l.includes("set_value('category-colors'"));
     record('static: deleting writes the file before dropping the colour (L-018)',
@@ -905,7 +920,7 @@ function testStaticChecks() {
 
     const renameWrite = uiLines.findIndex(l => l.includes('Storage.renameCategory('));
     const renameFile = uiLines.findIndex((l, i) => i > renameWrite
-        && l.includes('Storage.writeTodo(this._todoPath(), updated)'));
+        && l.includes('this._commit(updated)'));
     const renameColour = uiLines.findIndex((l, i) => i > renameFile
         && l.includes('moveCategoryColor('));
     record('static: renaming writes the file before moving the colour (L-018)',
@@ -1108,21 +1123,29 @@ function testStaticChecks() {
     // writes the pruned result back through set_value. A failed read used to
     // look like "every category was deleted" and wiped it permanently.
     record('readTodo: reports whether the read actually succeeded',
-        Storage.readTodo('/nonexistent/todo.md').ok === false
-        && Storage.readTodo('/nonexistent/todo.md').raw === ''
+        readTodoSync('/nonexistent/todo.md').ok === false
+        && readTodoSync('/nonexistent/todo.md').raw === ''
         && (() => {
             Storage.writeTodo(TODO, '- [ ] ok probe\n');
-            const read = Storage.readTodo(TODO);
+            const read = readTodoSync(TODO);
             restoreOriginal();
             return read.ok === true && read.raw === '- [ ] ok probe\n';
         })(),
         'ok:false means "could not read", not "the file is empty"');
 
     record('color prune: a failed read must not be treated as "no categories"',
-        /todo\.ok\s*\?\s*Storage\.prunedColorsForDocument/.test(ui)
-        && /if \(todo\.ok && prunedColors !== colors\)/.test(ui),
+        /colorsAreAuthoritative\s*=\s*todo\.ok\s*&&\s*!this\._readPending/.test(ui)
+        && /colorsAreAuthoritative\s*&&\s*prunedColors !== colors/.test(ui),
         'an unreadable file (editor atomic save, rename window) produced an '
         + 'empty document, which pruned every category color away for good');
+
+    // Shexli EGO-X-004 (the review page's gate): the Shell's JS must not read
+    // the disk synchronously. prefs.js is exempt: it runs in the preferences
+    // process, not the Shell, and a sync read there is fine.
+    record('static: no synchronous file read in the shell-side modules',
+        !/load_contents\s*\(|load_bytes\s*\(/.test(ui),
+        'Shexli EGO-X-004 flags load_contents()/load_bytes() in Shell code; '
+        + 'the read path must be load_contents_async + load_contents_finish');
 }
 
 // ---- parseDocument (Faz 2 step 1: parser) --------------------------------
@@ -1948,7 +1971,7 @@ function testAtomicWritePath() {
     const CONTENT = '# My TODOs\n\n## General\n- [ ] alpha @due(mon)\n\n## Notes\n- keep me\n\n- [x] beta\n';
     Storage.writeTodo(TODO, CONTENT);
     record('atomicWrite: write → read back is byte-identical (complete file)',
-        Storage.readTodo(TODO).raw === CONTENT, JSON.stringify(Storage.readTodo(TODO).raw));
+        readTodoSync(TODO).raw === CONTENT, JSON.stringify(readTodoSync(TODO).raw));
 
     // The Document pipeline connects to the real write path: mutate the model
     // → serialize → writeTodo → read back must equal the serialized string.
@@ -1958,11 +1981,11 @@ function testAtomicWritePath() {
     const rewritten = Storage.serializeDocument(doc);
     Storage.writeTodo(TODO, rewritten);
     record('atomicWrite: Document mutation → serialize → write → read is consistent',
-        Storage.readTodo(TODO).raw === rewritten, '');
+        readTodoSync(TODO).raw === rewritten, '');
 
     restoreOriginal();
     record('atomicWrite: file restored to the original content after write tests',
-        Storage.readTodo(TODO).raw === ORIGINAL_RAW, '');
+        readTodoSync(TODO).raw === ORIGINAL_RAW, '');
 }
 
 // ---- explicit path support (Faz 3 step 2) --------------------------------
@@ -1976,20 +1999,20 @@ function testPathParams() {
     const CONTENT = '# T\n\n## General\n- [ ] path test\n';
     Storage.writeTodo(tmpPath, CONTENT);
     record('pathParams: write → read round-trip honors the explicit path',
-        Storage.readTodo(tmpPath).raw === CONTENT, '');
+        readTodoSync(tmpPath).raw === CONTENT, '');
 
     record('pathParams: todoPath() still returns the default ~/todo.md',
         Storage.todoPath() === GLib.get_home_dir() + '/todo.md', '');
 
     // Missing file → empty model, no throw (same contract as the default path).
-    const missing = Storage.readTodo(`${tmpDir}/missing.md`);
+    const missing = readTodoSync(`${tmpDir}/missing.md`);
     record('pathParams: missing file yields an empty model without throwing',
         missing.raw === '' && missing.tasks.length === 0, '');
 
     // Missing parent directory: write fails gracefully (caught, no crash).
     const orphan = `${tmpDir}/no/such/dir/todo.md`;
     Storage.writeTodo(orphan, '# x\n');
-    const orphanRead = Storage.readTodo(orphan);
+    const orphanRead = readTodoSync(orphan);
     record('pathParams: write to a missing parent dir fails gracefully',
         orphanRead.raw === '', '');
 
@@ -2261,7 +2284,7 @@ testCompatPopupArgs();
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
-const finalRead = Storage.readTodo(TODO);
+const finalRead = readTodoSync(TODO);
 record('teardown: the temporary test file is back to its pre-test state',
     finalRead.raw === ORIGINAL_RAW, '');
 record('teardown: the suite writes to a temp file, never to ~/todo.md',
@@ -2269,7 +2292,7 @@ record('teardown: the suite writes to a temp file, never to ~/todo.md',
     'writing fixtures to the real file fires the running extension\'s '
     + 'monitor; its refresh then pruned the whole category-colors map');
 record('teardown: ~/todo.md is untouched by the test suite',
-    Storage.readTodo(USER_TODO).raw === USER_RAW_AT_START,
+    readTodoSync(USER_TODO).raw === USER_RAW_AT_START,
     'the file must survive the suite byte-for-byte');
 
 // ---- output --------------------------------------------------------------

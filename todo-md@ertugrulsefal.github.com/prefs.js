@@ -111,7 +111,17 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         // Categories come from the configured todo file.
         const path = Storage.resolveTodoPath(
             settings.get_string('todo-file-path'));
-        const doc = Storage.parseDocument(Storage.readTodo(path).raw);
+        // The preferences window runs in its own process, not the Shell: a
+        // synchronous read here is fine. The extension's async read is what
+        // keeps the Shell responsive.
+        let raw = '';
+        try {
+            const [, bytes] = Gio.File.new_for_path(path).load_contents(null);
+            raw = bytes ? new TextDecoder().decode(bytes) : '';
+        } catch (e) {
+            raw = '';
+        }
+        const doc = Storage.parseDocument(raw);
         const categories = doc.categories.map(category => category.name);
         if (categories.length === 0) {
             categories.push(Storage.FALLBACK_CATEGORY);
