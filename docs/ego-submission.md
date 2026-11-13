@@ -53,11 +53,13 @@ no subprocesses, no clipboard use. Writes go through `Gio.File.replace_contents`
 edits live; the extension's own writes are recognised and do not trigger a
 second rebuild.
 
-**Synchronous file IO (Shexli EGO-X-004):** Deliberate. The todo file is small
-(a user's task list, typically < 100 lines); it is read once per menu refresh
-and written only on user actions. An async implementation would restructure
-every mutation path for no practical latency benefit at this size. Happy to
-change it if you consider it a requirement.
+**Synchronous file IO (Shexli EGO-X-004):** Previously argued as deliberate
+(small file, one read per menu refresh). **That disposition was wrong** — EGO's
+own review panel lists this warning and the reviewer will not start while any
+finding is shown; the 0.22.2 upload was rejected on exactly these three findings
+(2026-11-06). The read path is being made asynchronous; the sync
+`replace_contents` write is flagged by neither analyzer and stays. See
+`.goose/audits/2026-11-08-ego-rejection.md`.
 
 **Shell internals (`Main.panel.addToStatusArea`, popup menu, drag-and-drop):**
 The standard indicator pattern from the gjs.guide "Getting Started" guide, plus
@@ -72,13 +74,19 @@ case the GNOME 51 run had missed (the runs before it used 18). A static guard
 pins the exact shell-version list, so adding a version is always a deliberate act
 that follows a test.
 
-**Lifecycle (Shexli EGO-L-002/EGO-L-003, static-analyzer false positives):**
-`disable()` explicitly destroys every long-lived actor — the persistent scroll
-wrapper (owner of the content section), the persistent tab bar (owner of the
-new-category button and its signal), the indicator and the drag insertion line —
-and disconnects every signal held on long-lived objects (4× GSettings, indicator
-menu, file monitor, `St.Settings` colour scheme). The analyzer cannot trace
-actor ownership; the objects it flags are destroyed through their owners.
+**Lifecycle (Shexli EGO-L-002/EGO-L-003):** These are false positives *as
+leaks* — `disable()` explicitly destroys every long-lived actor (the persistent
+scroll wrapper, owner of the content section; the persistent tab bar, owner of
+the new-category button and its signal; the indicator; the drag insertion lines
+and hint) and disconnects every signal held on long-lived objects (4× GSettings,
+indicator menu, file monitor, `St.Settings` colour scheme); the flagged objects
+die with their owners. **They are nevertheless gates, and were the reason this
+upload was rejected.** The analyzer matches create→destroy by resource name
+within a scope and cannot trace ownership, so the fix is to make the cleanup
+explicit instead of arguing with the finding: unrolled named `destroy()` calls
+for the six fields (children before owners), and either a `connect()` owned by
+`tabBar.js` or a stored handler id disconnected in `disable()`. Both shapes were
+measured to clear the findings (`.goose/audits/2026-11-08-ego-rejection.md`).
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
 24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 278 unit
@@ -105,9 +113,12 @@ analyzer's own version table, which stops at GNOME 50
 problem with the upload: GNOME 51.0 was released on 2026-09-16 and
 extensions.gnome.org itself serves `shell_version=51`. ego-lint's
 `metadata/future-shell-version` warning has the same cause. Dropping `51` from
-the list would hand GNOME 51 users the older 0.21.0 upload, so it stays. The
-review page agrees: EGO's own "Shexli (experimental)" panel for this upload lists
-the three findings explained above and no error.
+the list would hand GNOME 51 users the older 0.21.0 upload, so it stays.
+**Correction (2026-11-08):** this section used to end by presenting EGO's panel as
+an agreement with us. It was the opposite — the panel *displayed* the three
+warnings above, and the reviewer refused to review because of them. EGO's build
+knows GNOME 51 (it does not show `EGO-M-004`), so the exit criterion is "**the
+panel shows 0 findings**", never "the local tool shows 0 findings".
 
 ---
 
@@ -260,5 +271,11 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
       still in the queue and are superseded
 - [x] EGO's own "Shexli (experimental)" panel for this upload: **3 warnings, no
       error** — the three findings the notes above answer one by one
+- [ ] **EXIT CRITERION (added 2026-11-08, after the rejection): the review page's
+      Shexli panel must show ZERO findings before an upload is considered done.**
+      "3 warnings, no error" is not a pass — the reviewer reads the panel, not the
+      notes, and rejected this upload on exactly those three warnings. The local
+      tool's `EGO-M-004` is not the criterion (EGO's build knows GNOME 51 and does
+      not show it); the panel is.
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip

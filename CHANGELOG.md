@@ -80,7 +80,7 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   Clutter, Cogl, Meta, St and Shell go from 18 straight to 51 (19–50 never
   exist). The probe therefore needs the distro-specific typelib directory for
   51 — `/usr/lib/mutter-51` on Arch/CachyOS, not Debian's
-  `/usr/lib/<arch>/mutter-<N>`. Measured, see `docs/verified-apis.md`.
+  `/usr/lib/<arch>/mutter-<N>`. Measured on the host.
 
 ## 0.21.0 - 2026-10-22
 
@@ -105,7 +105,7 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   ask the cursor theme for `dnd-unsupported-target`, which neither Adwaita nor
   Yaru ships, so the cursor there does not change. The refusal itself — nothing
   written, tab back in place — works on every version, and the hint label carries
-  the reason. Measured per version; see `docs/verified-apis.md`.
+  the reason. Measured per version.
 
 ## 0.20.3 - 2026-10-13
 
@@ -206,8 +206,8 @@ assigned only when a phase is completed and approved (see `.goosehints`).
   the Shell's own drag-and-drop framework
   (`resource:///org/gnome/shell/ui/dnd.js`) was proven to work inside a panel
   popup menu with an isolated headless shell driven by a virtual pointer; the
-  findings and the exact integration rules are recorded in
-  `docs/verified-apis.md`.
+  findings and the exact integration rules are recorded in the
+  project's API verification log.
 - GNOME 46/47/48 take the older internal path of that same module
   (`button-press-event` plus a stage grab, instead of `St.DndStartGesture`).
   The public API is identical, but drag-and-drop has NOT been regression-tested

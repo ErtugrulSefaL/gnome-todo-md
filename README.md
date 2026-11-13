@@ -275,7 +275,6 @@ see the manual checklists in the repository.
 | `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
 | `tools/make-package.sh` | Build the installable zip |
 | `tools/shell-api.sh` | Probe the installed Shell for every API the extension uses |
-| `docs/verified-apis.md` | API → source → verdict evidence log |
 | `docs/screenshots/` | Screenshots, named after the version they show |
 
 ## License
