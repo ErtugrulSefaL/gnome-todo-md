@@ -8,7 +8,7 @@
 # unit tests cannot (storage.js tests never exercise the UI layer).
 #
 # This is intentionally a lightweight check against the running Shell; deep
-# UI correctness comes from VERIFY-BEFORE-WRITE (see .goosehints), not from
+# UI correctness comes from VERIFY-BEFORE-WRITE (see AGENTS.md), not from
 # automated tests.
 #
 # Usage:  bash tests/smoke.sh
@@ -36,6 +36,19 @@ state="$(
 if [ "$state" = "ACTIVE" ]; then
     echo "OK: $UUID is $state"
     exit 0
+fi
+
+# The Shell runs user extensions in the "unlock-dialog" session mode, so a
+# locked screen reports every extension INACTIVE. That is not a failure of
+# this extension: check the lock before reporting one.
+if [ "$state" = "INACTIVE" ] && command -v loginctl >/dev/null 2>&1; then
+    session_id=$(loginctl show-user "$(id -un)" -p Display --value 2>/dev/null || true)
+    if [ -n "$session_id" ] \
+        && loginctl show-session "$session_id" -p LockedHint 2>/dev/null \
+        | grep -q 'LockedHint=yes'; then
+        echo "SKIP: session is locked; the Shell reports every extension INACTIVE (unlock and re-run)"
+        exit 0
+    fi
 fi
 
 echo "FAIL: $UUID state is '${state:-<unknown>}' (expected ACTIVE)" >&2
