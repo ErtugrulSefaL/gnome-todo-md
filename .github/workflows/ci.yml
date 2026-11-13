@@ -21,10 +21,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install GJS and GLib tools
+      - name: Install GJS, GLib tools and the EGO gate's inputs
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends gjs libglib2.0-dev-bin
+          sudo apt-get install -y --no-install-recommends \
+            gjs libglib2.0-dev-bin python3-venv zip
 
       - name: Compile the GSettings schema (strict)
         run: glib-compile-schemas --strict 'todo-md@ertugrulsefal.github.com/schemas/'
@@ -40,6 +41,14 @@ jobs:
       # code, so CI greps the verdict explicitly.
       - name: Unit + integration tests
         run: gjs -m tests/run_tests.mjs 2>&1 | tee /tmp/tests.log; grep -q 'RESULT_OK=true' /tmp/tests.log
+
+      # The EGO review gate: the 0.22.2 rejection was "Didn't review. Shexli
+      # issues need to be addressed first." A finding on the review page's
+      # Shexli panel stops the review, so the analyzer must be clean on the
+      # built zip. The only allowed finding is EGO-M-004 (a shexli 0.2.1
+      # metadata-table false positive; see docs/roadmap.md).
+      - name: EGO gate (Shexli)
+        run: bash tools/ego-gate.sh --install
 
   # A tag push publishes the installable release: the versioned zip (what the
   # EGO upload and the release page list) and todo-md.zip, the version-less name

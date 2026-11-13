@@ -75,8 +75,8 @@ JS internals with no stability guarantee, so `shell-version` declares only the
 versions this code has been regression-tested on: `["46", "47", "48", "49",
 "50", "51"]`. Each one was validated individually — the API probe plus the same
 manual regression checklist — each in its own environment: Ubuntu 24.04
-(GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49) and 26.04 (50), plus CachyOS
-(GNOME 51). The list has 19 checks since 0.22.1, which added the empty-todo-file
+(GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49), 26.04 (50) and 26.10 (51).
+The list has 19 checks since 0.22.1, which added the empty-todo-file
 case the GNOME 51 run had missed (the runs before it used 18). A static guard
 pins the exact shell-version list, so adding a version is always a deliberate act
 that follows a test.
@@ -96,7 +96,7 @@ for the six fields (children before owners), and either a `connect()` owned by
 measured to clear the findings (`.goose/audits/2026-11-08-ego-rejection.md`).
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on CachyOS. 278 unit
+24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on Ubuntu 26.10. 278 unit
 tests cover the storage layer
 (pure string-in/string-out functions, byte-identical round-trip) and the static
 guards; the UI layer
@@ -256,6 +256,11 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 
 ## Upload checklist (pre-flight)
 
+- [ ] **Gate: `bash tools/ego-gate.sh`** — builds the zip, runs the same
+      Shexli analyzer the review page uses, and fails on any finding outside
+      the documented allowlist (`EGO-M-004` only: the analyzer's metadata table
+      stops at GNOME 50). This is the CI gate; the review page's own panel is
+      the final criterion.
 - [x] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
       `dist/todo-md@ertugrulsefal.github.com-<version>.zip`) — 0.22.2, 11 files
 - [x] ego-lint on the extracted zip: 0 failed (252 checks, 213 passed, 29 warnings)
