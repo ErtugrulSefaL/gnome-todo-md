@@ -126,7 +126,8 @@ chk('St.Side.TOP', () => St.Side.TOP !== undefined);
 chk('St.Label.accessible_role', () => has(St.Label.prototype, 'accessible_role'));
 chk('St.Label.label_actor', () => has(St.Label.prototype, 'label_actor'));
 chk('St.Label.add_accessible_state()', () => has(St.Label.prototype, 'add_accessible_state'));
-chk('St.BoxLayout.orientation', () => has(St.BoxLayout.prototype, 'orientation'));
+chk('St.BoxLayout orientation setter (set_orientation 48+, set_vertical 46-50)', () =>
+    has(St.BoxLayout.prototype, 'set_orientation') || has(St.BoxLayout.prototype, 'set_vertical'));
 chk('St.ScrollView.enable_mouse_scrolling', () => has(St.ScrollView.prototype, 'enable_mouse_scrolling'));
 chk('St.ScrollView.clip_to_allocation', () => has(St.ScrollView.prototype, 'clip_to_allocation'));
 chk('St.ScrollView.hadjustment/vadjustment', () => has(St.ScrollView.prototype, 'hadjustment') && has(St.ScrollView.prototype, 'vadjustment'));

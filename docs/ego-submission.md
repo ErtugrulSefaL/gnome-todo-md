@@ -3,16 +3,27 @@
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload.
 
-**Current upload: 0.22.2** (uploaded 2026-10-23) — drag-and-drop for tasks and
-categories, GNOME 46–51 support and every fix from the 0.15.0 review window. It
-supersedes the two uploads still waiting for review (0.15.0 and 0.20.1);
-uploading over a pending review is allowed (GNOME extensions maintainer,
-discourse.gnome.org/t/9205), and the reviewer is asked on the review pages to
-look at this one instead:
+**Current upload: 0.23.0** (upload prepared 2026-11-15, user decision) — it closes
+the three Shexli findings the previous upload was rejected on, and carries
+drag-and-drop for tasks and categories, GNOME 46–51 support and every fix from
+the 0.15.0 review window, plus this release's own fixes. It supersedes the
+review is allowed (GNOME extensions maintainer, discourse.gnome.org/t/9205), and
+the reviewer is asked on the review pages to look at this one instead:
 
-> Version 0.22.2 supersedes 0.15.0 and 0.20.1 — please review this one instead.
-> It contains the fixes for everything reported so far, plus drag-and-drop for
-> tasks and categories. The notes on this upload describe what changed.
+> Version 0.23.0 supersedes 0.22.2 (rejected) and the still-pending 0.15.0 and
+> 0.20.1 — please review this one instead. It closes the three Shexli findings
+> the previous upload was rejected on, plus the fixes listed below. The notes on
+> this upload describe what changed.
+
+**Rejected: 0.22.2** (uploaded 2026-10-23, **rejected 2026-11-06**) — the
+reviewer never read the code ("Didn't review. Shexli issues need to be addressed
+first."). The rejection was the three Shexli gate findings (`EGO-X-004`
+synchronous read, `EGO-L-002` six actors, `EGO-L-003` one signal); all three are
+closed in 0.23.0 (see the notes below). **Exit criterion: the review page's
+Shexli panel must show 0 findings** (`L-060`).
+
+> The reviewer notes below are the 0.23.0 notes; the gate measurements are the
+> 2026-11-15 run on `dist/todo-md@ertugrulsefal.github.com-0.23.0.zip`.
 
 ---
 
@@ -23,27 +34,29 @@ The 0.22.2 rejection named `best-practices.html` and
 `docs/gjs-guide/docs/extensions/review-guidelines/`; cite them by **file path +
 line number**. Every code change is measured against them.
 
-**Todo MD 0.22.2 — notes for the reviewer**
+**Todo MD 0.23.0 — notes for the reviewer**
 
 **What it does:** A panel menu over a plain markdown checkbox file (`~/todo.md`
 by default, path configurable). Categories are `##` headings, rendered as tabs;
 tasks support check/uncheck, inline edit, delete, drag-and-drop reorder, and
-inline add per category.
+inline add per category. The source is split into 11 single-responsibility
+modules (the lifecycle file dropped from 1672 to 282 lines); behaviour is
+unchanged and `storage.js` keeps the pure string-in/string-out document logic.
 
-**New since the 0.15.0 upload:** drag-and-drop reordering — a grip handle at the
-end of every row; the task moves inside its own category, with an insertion line
-and a no-drop cursor over another category's rows — and keyboard reordering with
-Alt+Up / Alt+Down on a focused row, which replaced the old per-row up/down
-buttons. Categories reorder the same way: a tab is dragged along the strip and
-the file's `##` order is rewritten to match; the tab bar is a segmented control
-now (a raised pill for the active tab, the strip scrolls itself, and its
-scrollbar appears only while the tabs actually overflow), the task list and the
-tab strip keep their scroll position across rebuilds, every icon-only button
-shares one flat round style, and the category action panel fades in — skipped
-under reduced motion. `shell-version` now covers GNOME 46–51, and the findings
-from this review window (a colour-map wipe on an unreadable file, a blank line
-inventing a "General" category, theme-invisible controls and scrollbars, an empty
-todo file on GNOME 51) are all fixed here.
+**New since the 0.15.0 upload (shipped in 0.22.2):** drag-and-drop reordering — a
+grip handle at the end of every row; the task moves inside its own category, with
+an insertion line and a no-drop cursor over another category's rows — and
+keyboard reordering with Alt+Up / Alt+Down on a focused row, which replaced the
+old per-row up/down buttons. Categories reorder the same way: a tab is dragged
+along the strip and the file's `##` order is rewritten to match; the tab bar is a
+segmented control now (a raised pill for the active tab, the strip scrolls
+itself, and its scrollbar appears only while the tabs actually overflow), the
+task list and the tab strip keep their scroll position across rebuilds, every
+icon-only button shares one flat round style, and the category action panel fades
+in — skipped under reduced motion. `shell-version` now covers GNOME 46–51, and
+the findings from this review window (a colour-map wipe on an unreadable file, a
+blank line inventing a "General" category, theme-invisible controls and
+scrollbars, an empty todo file on GNOME 51) are all fixed here.
 
 **Drag-and-drop integration (disclosure):** reordering uses GNOME Shell's own
 drag-and-drop module (`resource:///org/gnome/shell/ui/dnd.js`, `makeDraggable`)
@@ -55,17 +68,21 @@ grab leak and `drag-end` never fires. The drop itself is handled by the row's
 
 **File access (disclosure):** The extension reads and writes exactly one
 user-configured markdown file plus its own GSettings schema. No network access,
-no subprocesses, no clipboard use. Writes go through `Gio.File.replace_contents`
+no subprocesses, no clipboard use. Reads are asynchronous (`load_contents_async`
++ `load_contents_finish`); writes go through `Gio.File.replace_contents`
 (temp-file + rename, atomic). A `Gio.FileMonitor` on the file picks up external
 edits live; the extension's own writes are recognised and do not trigger a
 second rebuild.
 
-**Synchronous file IO (Shexli EGO-X-004):** Previously argued as deliberate
-(small file, one read per menu refresh). **That disposition was wrong** — EGO's
-own review panel lists this warning and the reviewer will not start while any
-finding is shown; the 0.22.2 upload was rejected on exactly these three findings
-(2026-11-06). The read path is being made asynchronous; the sync
-`replace_contents` write is flagged by neither analyzer and stays. See
+**Asynchronous file IO (Shexli EGO-X-004) — closed in 0.23.0:** this was the one
+genuine defect of the three. `storage.js` now reads the file with
+`Gio.File.load_contents_async` + `load_contents_finish` and hands the parsed
+`{tasks, other, raw, ok}` to a callback; `extension.js` caches the last read
+(`_raw`/`_readOk`) so checking, editing, deleting and reordering stay
+synchronous, and the first open shows a placeholder row while the read is in
+flight. No call whose name ends in `load_contents`/`load_bytes` ships any more,
+so the finding is gone. The write path (`replace_contents`, atomic temp-file +
+rename) is synchronous by design and is flagged by neither analyzer. Context:
 `.goose/audits/2026-11-08-ego-rejection.md`.
 
 **Shell internals (`Main.panel.addToStatusArea`, popup menu, drag-and-drop):**
@@ -73,59 +90,88 @@ The standard indicator pattern from the gjs.guide "Getting Started" guide, plus
 the Shell's own popup-menu and drag-and-drop modules. They live in GNOME Shell's
 JS internals with no stability guarantee, so `shell-version` declares only the
 versions this code has been regression-tested on: `["46", "47", "48", "49",
-"50", "51"]`. Each one was validated individually — the API probe plus the same
-manual regression checklist — each in its own environment: Ubuntu 24.04
-(GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49), 26.04 (50) and 26.10 (51).
-The list has 19 checks since 0.22.1, which added the empty-todo-file
-case the GNOME 51 run had missed (the runs before it used 18). A static guard
-pins the exact shell-version list, so adding a version is always a deliberate act
-that follows a test.
+"50", "51"]`. The API probe plus the same manual regression checklist were run
+per environment: Ubuntu 24.04 (GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49),
+26.04 (50, host) and 26.10 (51). The 0.23.0 run re-verified the asynchronous read
+path on the host (GNOME 50) and in the 46, 47 and 51 VMs; 48 and 49 carry over
+from the 0.22.0/0.22.2 rounds (same code). The checklist has 20 checks since
+0.23.0 (0.22.1 had added the empty-todo-file case, for 19, and 0.23.0 added a
+disable → enable cycle, run twice). A static guard pins the exact shell-version
+list, so adding a version is always a deliberate act that follows a test.
 
-**Lifecycle (Shexli EGO-L-002/EGO-L-003):** These are false positives *as
-leaks* — `disable()` explicitly destroys every long-lived actor (the persistent
-scroll wrapper, owner of the content section; the persistent tab bar, owner of
-the new-category button and its signal; the indicator; the drag insertion lines
-and hint) and disconnects every signal held on long-lived objects (4× GSettings,
-indicator menu, file monitor, `St.Settings` colour scheme); the flagged objects
-die with their owners. **They are nevertheless gates, and were the reason this
-upload was rejected.** The analyzer matches create→destroy by resource name
-within a scope and cannot trace ownership, so the fix is to make the cleanup
-explicit instead of arguing with the finding: unrolled named `destroy()` calls
-for the six fields (children before owners), and either a `connect()` owned by
-`tabBar.js` or a stored handler id disconnected in `disable()`. Both shapes were
-measured to clear the findings (`.goose/audits/2026-11-08-ego-rejection.md`).
+**Lifecycle (Shexli EGO-L-002 / EGO-L-003) — closed in 0.23.0:** the analyzer
+matches create→destroy by resource name within a scope and cannot trace
+ownership, so the cleanup is now written the way the detector expects instead of
+argued against. `disable()` unrolls the destroy loop into named
+`if (this._x) { this._x.destroy(); this._x = null; }` blocks for
+`_actionsDeleteItem`, `_colorRow`, `_contentSection`, `_dropLine`, `_tabDropLine`
+and `_dragHint` (children before their owners), and `TabBar` owns its `+` button's
+`clicked` signal — its constructor takes `{onNewCategory}`, so the object that
+creates the button owns the handler and the button (with its signal) dies with
+the tab bar when `disable()` destroys it. Both findings are gone. Context:
+`.goose/audits/2026-11-08-ego-rejection.md`.
+
+**Other fixes in 0.23.0:**
+- **The empty-state row works on GNOME 46 and 47 again.** `menuView.js` passed
+  `orientation: Clutter.Orientation.VERTICAL` into the `St.BoxLayout` constructor,
+  but that property exists only from 48 on (`vertical` is the pre-48 name and is
+  removed in 51), so the empty-state box could not be built on 46/47 — the same
+  failure class 0.22.1 fixed for 51, from the other side. The box is now built
+  plain and `compat.setVerticalOrientation()` applies whichever setter exists.
+  Found by the 46/47/51 VM tour: the GNOME 46 probe went 58/59 → 59/59.
+- **A stale read can no longer overwrite newer content.** `fileSync.js` captures a
+  generation counter before an async read and drops the result when a write (or a
+  path change) bumped it in the meantime; without the guard an in-flight read
+  could restore pre-write content and the next interaction wrote it back.
+- **A task drag no longer leaves an inline editor anchored to the wrong line**, the
+  preferences window's first page is titled `General` again, and the module split's
+  stale identifiers (which stopped the extension from enabling at all) are fixed —
+  each covered by new static guards.
+
+**Animation and accessibility:** the Shell patches `Clutter.Actor.ease()` to route
+every duration through `enable-animations` / `slow-down-factor` automatically, so
+no animation-setting handling is added; the reduce-motion gate
+(`St.ReducedMotion`, GNOME 51+) stays, because that patch does not consult it. The
+category action panel fades over 250 ms, matching the Shell's own submenu reveal
+(it was 400 ms, which outlived the reveal and read as drift). Task rows keep the
+Shell's own checkable-menu-item a11y pattern (`Atk.Role.CHECK_MENU_ITEM`, a
+`label_actor`, and a `CHECKED` state when on), icon-only buttons carry accessible
+names, and the manual regression checklist includes an Orca pass.
 
 **Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on Ubuntu 26.10. 278 unit
-tests cover the storage layer
+24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on Ubuntu 26.10. 284
+unit tests cover the storage layer
 (pure string-in/string-out functions, byte-identical round-trip) and the static
 guards; the UI layer
 was verified manually in every one of those shells against the same written
-regression checklist (19 checks since 0.22.1), which includes an Orca
-accessibility pass.
+regression checklist (20 checks since 0.23.0), which includes an Orca
+accessibility pass. The 0.23.0 run covered the host (GNOME 50) and the 46, 47 and
+51 VMs; 48 and 49 carry over from the 0.22.0/0.22.2 rounds (same code).
 Drag-and-drop was additionally verified in the GNOME 46 (X11), 47 and 48 VMs.
 
-**Static analysis:** ego-lint reports no hard failures (0 failed / 29 warnings on
-0.22.2; every finding is a warning, explained in the repository). Two of them are
-new in 0.22.2 and belong to `compat.js`: `R-SLOP-01` twice, on the JSDoc
-`@param {Type}` annotations of `popupArgs()`. The annotations are kept on purpose —
-the comment exists to record the two argument shapes the shim distinguishes
-(boolean up to GNOME 50, `{animate}` from 51), and the types are what makes that
-record readable.
+**Static analysis (2026-11-15 run on the 0.23.0 zip):** ego-lint reports **0
+failed** — 214 passed, 56 warnings, 10 skipped (280 checks); every warning is
+advisory and explained in the repository. Three of them are new in 0.23.0 and
+follow directly from the Shexli fixes: `async/no-cancellable` +
+`async/missing-cancellable` (the asynchronous read has no `Gio.Cancellable`),
+`quality/constructor-resources` ×2 (`TabBar` connects in its constructor — the
+shape that clears `EGO-L-003`), and `quality/redundant-cleanup` (the explicit
+destroy guards that clear `EGO-L-002`). Each is a deliberate trade-off, not a
+defect; the 0.22.2 `R-SLOP-01` pair on the `compat.js` JSDoc annotations is gone.
 
-Shexli on the same zip: 3 warnings (same dispositions as before) plus one error,
-`EGO-M-004`, which is only about `shell-version` containing `"51"`. That is the
-analyzer's own version table, which stops at GNOME 50
-(`shexli/analyzer/rules/metadata.py`: `if major > 50: future.append(raw)`), not a
+The Shexli analyzer the review page uses reports **one finding, `EGO-M-004`, and
+nothing else** (0 warnings). `EGO-M-004` is the analyzer's own version table,
+which stops at GNOME 50 (`shexli/analyzer/rules/metadata.py`: `if major > 50:
+future.append(raw)`), so `"51"` reads as an implausible future release — not a
 problem with the upload: GNOME 51.0 was released on 2026-09-16 and
 extensions.gnome.org itself serves `shell_version=51`. ego-lint's
 `metadata/future-shell-version` warning has the same cause. Dropping `51` from
-the list would hand GNOME 51 users the older 0.21.0 upload, so it stays.
-**Correction (2026-11-08):** this section used to end by presenting EGO's panel as
-an agreement with us. It was the opposite — the panel *displayed* the three
-warnings above, and the reviewer refused to review because of them. EGO's build
-knows GNOME 51 (it does not show `EGO-M-004`), so the exit criterion is "**the
-panel shows 0 findings**", never "the local tool shows 0 findings".
+the list would hand GNOME 51 users the older 0.21.0 upload, so it stays. EGO's
+own build knows GNOME 51 (it does not show `EGO-M-004`), so the exit criterion is
+"**the review page's panel shows 0 findings**", never "the local tool shows 0
+findings". `tools/ego-gate.sh` runs the same analyzer on the built zip and fails
+on any finding outside the allowlist (`EGO-M-004` only); CI runs it after the
+unit tests.
 
 ---
 
@@ -244,6 +290,13 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
   prepares the path (a placeholder file if the README needs to reference it
   before the real capture exists) and wires it into the README. The agent never
   edits or crops the image itself.
+- **Amendment (2026-11-15, user decision):** when a release has no UI change, the
+  reused capture is **renamed to the shipping version** (`todo-md-0.20.3.png` →
+  `todo-md-0.23.0.png`) and the README/EGO reference is updated; the old name does
+  not stay behind. Rationale: the README and the EGO upload should point at the
+  version being shipped. The cost is that the earlier references to the old name
+  in the historical records (`docs/roadmap.md` §C "Public yüzey", `.goose/handoff.md`)
+  keep the old path.
 
 ### Candidates that were evaluated (2026-10-11, kept for the record)
 
@@ -254,7 +307,7 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
    touching the live one (used for the Faz 9 spike, headless + a virtual
    pointer), not for screenshots.
 
-## Upload checklist (pre-flight)
+## Upload checklist — 0.22.2 (rejected 2026-11-06), for the record
 
 - [ ] **Gate: `bash tools/ego-gate.sh`** — builds the zip, runs the same
       Shexli analyzer the review page uses, and fails on any finding outside
@@ -274,7 +327,9 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 - [x] Notes above updated to the new version
 - [x] Screenshot: `docs/screenshots/todo-md-0.20.3.png` present (real capture) and
       referenced by the README — no new capture for 0.22.2 (a static image cannot
-      show the fade; the rule is to reuse the previous one)
+      show the fade; the rule is to reuse the previous one). **Renamed to
+      `todo-md-0.23.0.png` on 2026-11-15** — 0.23.0 has no UI change, so the same
+      capture ships under the current name
 - [x] Zip verified byte-identical to the published release asset
       (`releases/download/v0.22.2/…-0.22.2.zip`, md5 `80581fcf…`)
 - [x] Uploaded to extensions.gnome.org (2026-10-23, user) → review page
@@ -289,5 +344,46 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
       notes, and rejected this upload on exactly those three warnings. The local
       tool's `EGO-M-004` is not the criterion (EGO's build knows GNOME 51 and does
       not show it); the panel is.
+- Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
+  · version auto-detected from the zip
+
+---
+
+## Upload checklist (pre-flight) — 0.23.0
+
+- [x] **Gate: `bash tools/ego-gate.sh`** — builds the zip, runs the same Shexli
+      analyzer the review page uses, and fails on any finding outside the
+      documented allowlist (`EGO-M-004` only: the analyzer's metadata table stops
+      at GNOME 50). Gate line on 2026-11-15: `OK: only the allowlisted
+      finding(s) remain`. This is the CI gate; the review page's own panel is the
+      final criterion.
+- [x] Zip rebuilt from HEAD: `bash tools/make-package.sh` (output:
+      `dist/todo-md@ertugrulsefal.github.com-0.23.0.zip`) — 44148 bytes, 16
+      entries (11 modules + metadata.json + LICENSE + stylesheet.css + `schemas/`
+      + `schemas/org.gnome.shell.extensions.todo-md.gschema.xml`), md5
+      `1a8da8a03f463fec59bc0fc33e6ae25c`
+- [x] ego-lint on the extracted zip: **0 failed** — 214 passed, 56 warnings, 10
+      skipped (280 checks); every warning is advisory (see the notes above)
+- [x] Shexli on the zip: **1 finding — `EGO-M-004` only, 0 warnings** (`shexli
+      0.2.1`, `tree-sitter==0.25.0` — 0.26 segfaults; verify with a broken fixture
+      first, the tool is version-gated and fails silently — see docs/verified-apis.md).
+      `EGO-M-004` is the analyzer's own version table (stops at GNOME 50), not the
+      package, and is the documented allowlist entry
+- [x] `metadata.json` version-name matches the CHANGELOG release (0.23.0)
+- [x] Reviewer notes above rewritten for 0.23.0 (the body had described 0.22.2)
+- [x] Screenshot: `docs/screenshots/todo-md-0.23.0.png` present (renamed from the
+      0.20.3 capture on 2026-11-15) and referenced by the README
+      (`![…](docs/screenshots/todo-md-0.23.0.png)`) — 0.23.0 has no UI change
+- [ ] Zip verified byte-identical to the published release asset
+      (`releases/download/v0.23.0/…-0.23.0.zip`) — still open: no `v0.23.0` tag /
+      GitHub release exists yet (the release is produced by CI on tag push)
+- [ ] Uploaded to extensions.gnome.org (0.23.0, user) → new review page
+- [ ] **EXIT CRITERION (added 2026-11-08, after the rejection): the review page's
+      Shexli panel must show ZERO findings before an upload is considered done.**
+      "warnings, no error" is not a pass — the reviewer reads the panel, not the
+      notes, and rejected the 0.22.2 upload on exactly those three warnings. The
+      local tool's `EGO-M-004` is not the criterion (EGO's build knows GNOME 51 and
+      does not show it); the panel is. Check the panel on the new review page after
+      the upload.
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip

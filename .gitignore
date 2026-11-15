@@ -10,6 +10,9 @@ docs/verified-apis.md
 # Local test journal.
 test.md
 
+# Personal run sheet for that journal (the canonical RC list is test.md §2).
+tests/rc-checklist.md
+
 # Local reference clone of gjs.guide (docs/extensions/review-guidelines/ is the
 # coding criteria). Untracked on purpose: 33 MB, refreshed with `git pull`.
 docs/gjs-guide/

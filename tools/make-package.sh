@@ -3,6 +3,7 @@
 #
 # The zip root must contain only runtime files (EGO review rules):
 #   extension.js metadata.json prefs.js storage.js tabBar.js rowFactory.js
+#   fileSync.js taskActions.js categoryPanel.js dragDrop.js menuView.js
 #   compat.js stylesheet.css schemas/<id>.gschema.xml  LICENSE
 # README.md / CHANGELOG.md / tests/ / docs/ / *.compiled are never packaged.
 #
@@ -39,6 +40,11 @@ FILES=(
     "$EXT_DIR/metadata.json"
     "$EXT_DIR/prefs.js"
     "$EXT_DIR/storage.js"
+    "$EXT_DIR/fileSync.js"
+    "$EXT_DIR/taskActions.js"
+    "$EXT_DIR/categoryPanel.js"
+    "$EXT_DIR/dragDrop.js"
+    "$EXT_DIR/menuView.js"
     "$EXT_DIR/tabBar.js"
     "$EXT_DIR/rowFactory.js"
     "$EXT_DIR/compat.js"
@@ -72,8 +78,9 @@ rm -f "$OUT"
 # --- Verification -----------------------------------------------------------
 # 1) Exact content check: the zip must contain exactly the expected entries.
 EXPECTED=$(printf '%s\n' \
-    extension.js metadata.json prefs.js storage.js tabBar.js rowFactory.js \
-    compat.js stylesheet.css "schemas/$(basename "$SCHEMA_FILE")" LICENSE | sort)
+    extension.js metadata.json prefs.js storage.js fileSync.js taskActions.js \
+    categoryPanel.js dragDrop.js menuView.js tabBar.js rowFactory.js compat.js \
+    stylesheet.css "schemas/$(basename "$SCHEMA_FILE")" LICENSE | sort)
 ACTUAL=$(unzip -Z1 "$OUT" | grep -v '/$' | sort)
 if [ "$EXPECTED" != "$ACTUAL" ]; then
     echo "ERROR: zip contents differ from the expected package list" >&2

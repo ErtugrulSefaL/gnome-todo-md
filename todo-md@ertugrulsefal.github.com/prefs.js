@@ -12,12 +12,28 @@ import * as Storage from './storage.js';
 // GNOME palette, matching the swatches in the preferences popover.
 const PALETTE = Storage.CATEGORY_PALETTE;
 
-/**
- * Preferences for the Todo MD extension (GTK4 + libadwaita). Uses
- * `ExtensionPreferences.fillPreferencesWindow(window)` and
- * `this.getSettings()`, which reads `settings-schema` from metadata.json and
- * loads `schemas/` from the extension directory.
- */
+// The display keeps every provider registered on it, so ours is registered once
+// per process instead of on every preferences-window open.
+let swatchCssRegistered = false;
+function ensureSwatchCss() {
+    if (swatchCssRegistered) {
+        return;
+    }
+    swatchCssRegistered = true;
+    // load_from_string needs GTK 4.12, which every supported shell is well past.
+    const provider = new Gtk.CssProvider();
+    provider.load_from_string(
+        PALETTE.map((hex, i) => `.todo-swatch-${i} { background: ${hex}; }`)
+            .join(' ')
+        + ' .todo-swatch { min-width: 20px; min-height: 20px; '
+        + 'border-radius: 10px; padding: 0; }');
+    // GJS exposes this as a class-static: Gtk.StyleContext.add_provider_for_display; the bare C name is undefined at runtime.
+    Gtk.StyleContext.add_provider_for_display(
+        Gdk.Display.get_default(), provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+}
+
+// Preferences for the Todo MD extension (GTK4 + libadwaita). Uses `ExtensionPreferences.fillPreferencesWindow(window)` and `this.getSettings()`, which reads `settings-schema` from metadata.json and loads `schemas/` from the extension directory.
 export default class TodoMDPreferences extends ExtensionPreferences {
     fillPreferencesWindow(window) {
         const settings = this.getSettings();
@@ -40,8 +56,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         });
         page.add(group);
 
-        // EntryRow shows `title` as its placeholder; the content lives in the
-        // Gtk.Editable `text` property.
+        // EntryRow shows `title` as its placeholder; the content lives in the Gtk.Editable `text` property.
         const row = new Adw.EntryRow({
             title: 'Todo file path',
         });
@@ -49,8 +64,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         group.add(row);
 
-        // Suffix button: reset the key to its schema default ('' means the
-        // default ~/todo.md); the bind syncs it back into the row.
+        // Suffix button: reset the key to its schema default ('' means the default ~/todo.md); the bind syncs it back into the row.
         const resetButton = new Gtk.Button({
             icon_name: 'view-refresh-symbolic',
             valign: Gtk.Align.CENTER,
@@ -76,8 +90,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             Gio.SettingsBindFlags.DEFAULT);
         group.add(heightRow);
 
-        // Fixed menu content width: long task texts truncate at this width and
-        // the tab bar scrolls horizontally.
+        // Fixed menu content width: long task texts truncate at this width and the tab bar scrolls horizontally.
         const widthRow = new Adw.SpinRow({
             title: 'Menu width',
             subtitle: 'Fixed menu width in pixels (default 500)',
@@ -127,19 +140,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
             categories.push(Storage.FALLBACK_CATEGORY);
         }
 
-        // Swatch styling for the quick-palette buttons (load_from_string needs
-        // GTK 4.12, which every supported shell is well past).
-        const provider = new Gtk.CssProvider();
-        provider.load_from_string(
-            PALETTE.map((hex, i) => `.todo-swatch-${i} { background: ${hex}; }`)
-                .join(' ')
-            + ' .todo-swatch { min-width: 20px; min-height: 20px; '
-            + 'border-radius: 10px; padding: 0; }');
-        // GJS exposes this as a class-static: Gtk.StyleContext.
-        // add_provider_for_display. The bare C name is undefined at runtime.
-        Gtk.StyleContext.add_provider_for_display(
-            Gdk.Display.get_default(), provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION);
+        ensureSwatchCss();
 
         for (const name of categories) {
             const row = new Adw.ActionRow({title: name});
@@ -161,8 +162,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         }
         let syncingRgba = false;
         dialogButton.connect('notify::rgba', () => {
-            // set_rgba below fires this handler too; the guard keeps the
-            // palette write from clobbering itself.
+            // set_rgba below fires this handler too; the guard keeps the palette write from clobbering itself.
             if (syncingRgba) {
                 return;
             }
@@ -177,8 +177,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         });
         row.add_suffix(dialogButton);
 
-        // Quick palette behind a menu button. Both pickers drive the same
-        // settings key, so a palette click also updates the dialog button.
+        // Quick palette behind a menu button. Both pickers drive the same settings key, so a palette click also updates the dialog button.
         const swatches = new Gtk.Box({
             orientation: Gtk.Orientation.HORIZONTAL,
             spacing: 4,
@@ -208,10 +207,7 @@ export default class TodoMDPreferences extends ExtensionPreferences {
         clearButton.connect('clicked', () => {
             const colors = this._readColors(settings);
             delete colors[name];
-            syncingRgba = true;
-            // The dialog button keeps its last colour when the map entry is
-            // removed; harmless.
-            syncingRgba = false;
+            // The dialog button keeps its last colour when the map entry is removed.
             this._writeColors(settings, colors);
             popover.popdown();
         });

@@ -1,37 +1,15 @@
 import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
-/*
- * Storage layer: reads and writes the todo markdown file, keeping every
- * non-checkbox line exactly as it was.
- *
- *   Task:     { index, text, done }   // index = 0-based line in the file
- *   Document: { title, categories: [{ name, items }] }
- *
- * `items` is an ordered list — the interleaving of notes and blank lines is
- * preserved for the byte-identical round-trip. Entries are either
- *   { type: 'task', raw, done, tags, text, index }   // tags: [[key, value], ...]
- *   { type: 'extra', raw }                           // non-task line, verbatim
- * Use categoryTasks(category) for the flat task list. A category created by the
- * parser fallback carries `implicit: true`; serializeDocument() writes its
- * heading only when it holds tasks, so an unchanged file round-trips.
- */
+// Storage layer: markdown todo file. Task: {index, text, done}; Document: {title, categories: [{name, items}]}. `items` preserves order for byte-identical round-trip; implicit categories carry `implicit: true`.
 
+// Todo Path
 const TODO_PATH = GLib.get_home_dir() + '/todo.md';
 
-/**
- * Absolute path of the todo file.
- */
 export function todoPath() {
     return TODO_PATH;
 }
 
-/**
- * Resolve a user-configured todo file path: an empty or whitespace value
- * falls back to the default, a leading '~' is expanded to the home directory,
- * anything else is used verbatim.
- *
- */
 export function resolveTodoPath(configured) {
     const trimmed = configured ? configured.trim() : '';
     if (!trimmed) {
@@ -46,12 +24,7 @@ export function resolveTodoPath(configured) {
     return trimmed;
 }
 
-/**
- * Inline CSS that colours a category header text, or '' when the category has
- * no colour. The value comes from user preferences, so it is validated
- * against a strict hex pattern before it reaches an inline style.
- *
- */
+// Category Color
 export function categoryColorCss(name, colors) {
     const color = colors ? colors[name] : null;
     if (typeof color !== 'string' || !/^#[0-9a-fA-F]{3,8}$/.test(color)) {
@@ -60,10 +33,6 @@ export function categoryColorCss(name, colors) {
     return `color: ${color};`;
 }
 
-/**
- * Validated hex colour of a category, or null when it has none. The done
- * checkbox is filled with it.
- */
 export function categoryColorHex(name, colors) {
     const color = colors ? colors[name] : null;
     return typeof color === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(color)
@@ -71,27 +40,11 @@ export function categoryColorHex(name, colors) {
         : null;
 }
 
-/**
- * 8-bit RGB values to a '#rrggbb' string (used by prefs when a Gdk.RGBA
- * changes).
- *
- */
 export function rgbToHex(r, g, b) {
     const hex = value => value.toString(16).padStart(2, '0');
     return `#${hex(r)}${hex(g)}${hex(b)}`;
 }
 
-/**
- * Palette shared by the prefs quick palette, the in-menu colour picker and
- * the automatic colour of a newly created category.
- *
- * Brown (#986a44) and gray (#9a9996) were dropped: they read poorly as header
- * text on the menu background. The teal and pink accents of the modern
- * Adwaita palette replace them.
- *
- * Order matters — nextCategoryColor() walks the list. Existing colours live in
- * the settings map as hex strings and are never migrated.
- */
 export const CATEGORY_PALETTE = [
     '#3584e4', // blue
     '#33d17a', // green
@@ -99,35 +52,20 @@ export const CATEGORY_PALETTE = [
     '#f6d32d', // yellow
     '#c061cb', // purple
     '#ff7800', // orange
-    '#2190a4', // teal (replaced brown)
-    '#d56199', // pink (replaced gray)
+    '#2190a4', // teal
+    '#d56199', // pink
 ];
 
-/**
- * Spoken names for the palette entries, index-aligned with CATEGORY_PALETTE.
- * They are the accessible names of the in-menu swatches; a test pins the
- * alignment.
- */
 export const CATEGORY_PALETTE_NAMES = [
     'blue', 'green', 'red', 'yellow', 'purple', 'orange', 'teal', 'pink',
 ];
 
-/**
- * Palette colour for a newly created category: assigned in order, wrapping
- * around after the last entry.
- *
- */
 export function nextCategoryColor(existingCategoryCount) {
     return CATEGORY_PALETTE[
         ((existingCategoryCount % CATEGORY_PALETTE.length) + CATEGORY_PALETTE.length)
             % CATEGORY_PALETTE.length];
 }
 
-/**
- * Drop colour entries for categories that no longer exist, so a later
- * category reusing a name cannot inherit the old colour. Pure.
- *
- */
 export function pruneCategoryColors(colors, validNames) {
     const keys = Object.keys(colors || {});
     if (keys.every(key => validNames.includes(key))) {
@@ -142,20 +80,6 @@ export function pruneCategoryColors(colors, validNames) {
     return pruned;
 }
 
-/**
- * Move a stored colour from one category name to another (the rename flow
- * rewrites the file first, then the map). Pure: the input map is never
- * mutated.
- *
- * No-op when `fromName` has no entry or the names are identical. An existing
- * `toName` entry is overwritten — the rename flow only runs this after the
- * category layer accepted the rename, so such an entry is a stale leftover.
- *
- * `__proto__` is refused as well: `map['__proto__'] = ...` is a prototype
- * write in JS, so the entry would vanish silently, and GSettings could not
- * carry such a key anyway.
- *
- */
 export function moveCategoryColor(colors, fromName, toName) {
     if (!colors
         || !Object.prototype.hasOwnProperty.call(colors, fromName)
@@ -173,18 +97,6 @@ export function moveCategoryColor(colors, fromName, toName) {
     return moved;
 }
 
-/**
- * Drop the stored colour of ONE category (the delete flow). Pure: the input
- * map is never mutated, and it is returned unchanged when it has no entry for
- * `name`.
- *
- * The delete flow does this explicitly instead of leaving it to the refresh
- * prune: pruning keeps the whole map when the file loses its LAST heading
- * ("the headings may come back"), which is right for a file that lost them by
- * accident but wrong here — a later category reusing the name would inherit
- * the old colour.
- *
- */
 export function removeCategoryColor(colors, name) {
     if (!colors || !Object.prototype.hasOwnProperty.call(colors, name)) {
         return colors;
@@ -198,15 +110,6 @@ export function removeCategoryColor(colors, name) {
     return kept;
 }
 
-/**
- * Set (or replace) the stored colour of ONE category, returning a NEW map.
- * Pure: the input map is never mutated.
- *
- * The input is returned unchanged for an invalid hex colour (the palette is
- * ours, but this is a public function) and for a `__proto__` name, which would
- * be a prototype write and which GSettings cannot hold anyway.
- *
- */
 export function setCategoryColor(colors, name, hex) {
     if (name === '__proto__' || !/^#[0-9a-fA-F]{3,8}$/.test(hex)) {
         return colors;
@@ -219,16 +122,12 @@ export function setCategoryColor(colors, name, hex) {
     return next;
 }
 
-/**
- * Split the content into lines, detecting checkbox tasks. Every other line
- * (heading, note, blank) is kept verbatim in `other`.
- *
- */
+// Content Operations
+// Split content into lines, detecting checkbox tasks; every other line is kept verbatim in `other`.
 export function splitLines(content) {
     const tasks = [];
     const other = [];
 
-    // Keep a trailing newline so blank lines survive round-trip.
     const lines = content.split('\n');
     if (lines.length > 0 && lines[lines.length - 1] === '') {
         lines.pop();
@@ -248,22 +147,13 @@ export function splitLines(content) {
             other.push({index: i, line});
         }
     }
-
     return {tasks, other};
 }
 
-/**
- * Name of the implicit category for lines that appear before the first '##'
- * heading. Always serialized as a real '## General' heading.
- */
+// Name of the implicit category for lines before the first '##' heading.
 export const FALLBACK_CATEGORY = 'General';
 
-/**
- * Free-form `@key(value)` tags of a raw task text, as an ordered
- * [key, value] pair list. There is no whitelist: every match is kept and
- * unknown keys are written back verbatim.
- *
- */
+// Free-form `@key(value)` tags of a raw task text, as an ordered [key, value] list
 const extractTags = raw => {
     const tagRe = /@(\w+)\(([^)]+)\)/g;
     const tags = [];
@@ -274,19 +164,10 @@ const extractTags = raw => {
     return tags;
 };
 
-/**
- * Display text of a task: tags removed, whitespace collapsed, trimmed. Only
- * for display and editing — `raw` stays the authoritative form for the
- * byte-identical round-trip.
- *
- */
 const deriveText = raw =>
     raw.replace(/@(\w+)\(([^)]+)\)/g, '').replace(/\s+/g, ' ').trim();
 
-/**
- * Build a task item from raw text and checkbox state.
- *
- */
+// Build a task item from raw text and checkbox state.
 const makeTaskItem = (raw, done) => ({
     type: 'task',
     raw,
@@ -295,23 +176,13 @@ const makeTaskItem = (raw, done) => ({
     text: deriveText(raw),
 });
 
-/**
- * Parse raw markdown content into the Document model.
- *
- * - The first '# ' line is the document title; the raw line is kept for the
- *   round-trip. Any further '# ' line is an extra.
- * - Every '##' heading starts a category ('###' or deeper is not one).
- * - Checkbox lines become task items carrying their 0-based line index
- *   (`index`) for the line-based helpers. Tags are free-form and kept as an
- *   ordered pair list.
- * - Everything else (notes, blank lines, plain list items) is an extra kept
- *   verbatim, in original order.
- * - Lines before the first '##' land in the FALLBACK_CATEGORY ('General').
- *
- */
+/*
+Parse markdown into a Document. First '#' line is the title; '##' starts a category;
+checkbox lines are tasks carrying their 0-based `index`; everything else is an extra kept
+verbatim; lines before the first '##' go to FALLBACK_CATEGORY.
+*/
 export function parseDocument(content) {
-    // Line endings belong to the file: every mutating helper rewrites the
-    // whole document, so a CRLF file would silently become LF otherwise.
+    // Line endings belong to the file; a CRLF file would otherwise become LF.
     const doc = {
         title: null,
         categories: [],
@@ -335,16 +206,11 @@ export function parseDocument(content) {
     for (let i = 0; i < lines.length; i++) {
         const line = lines[i].replace(/\r$/, '');
 
-        // '##' category heading ('###' or deeper is not a category).
         const h2 = line.match(/^##(?!#)\s?(.*)$/);
         if (h2) {
             const name = h2[1].trim();
             if (name === FALLBACK_CATEGORY && current !== null && current.implicit) {
-                // An explicit '## General' takes over the fallback bucket, so
-                // the model never holds two 'General' categories. Everything
-                // parsed so far came BEFORE the heading: record that boundary
-                // as `preCount`, and keep all items in ONE list — a separate
-                // list for them was invisible to the flat task helpers.
+                // An explicit '## General' takes over the fallback bucket; `preCount` records the boundary.
                 current.implicit = false;
                 current.preCount = current.items.length;
             } else {
@@ -354,9 +220,7 @@ export function parseDocument(content) {
             continue;
         }
 
-        // Only a '# ' line that OPENS the file is the title; one further down
-        // belongs to the section it sits in, so it cannot jump to the top of
-        // the file on the next write.
+        // Only a '# ' line that opens the file is the title; a later one belongs to its section.
         if (/^#\s.*$/.test(line)) {
             if (doc.title === null && current === null) {
                 doc.title = line;
@@ -375,15 +239,10 @@ export function parseDocument(content) {
             continue;
         }
 
-        // Any other line (note, blank, plain list item) — keep verbatim.
         ensureCategory().items.push({type: 'extra', raw: line});
     }
 
-    // A fallback category that only ever collected blank lines is layout, not
-    // content: a blank line between the title and the first heading would
-    // otherwise render as an implicit 'General' section that can be neither
-    // renamed nor deleted. The lines are kept as `preamble`, emitted directly
-    // after the title, so the file still round-trips byte-identically.
+    // A fallback category holding only blank lines is layout: keep it as `preamble`, emitted right after the title.
     const first = doc.categories[0];
     if (first !== undefined && first.implicit
         && first.items.length > 0
@@ -391,26 +250,16 @@ export function parseDocument(content) {
         doc.preamble = first.items;
         doc.categories.shift();
     }
-
     return doc;
 }
 
-/**
- * Flat task view of a category — the `tasks` the UI and the mutations work on.
- *
- */
+// Flat task view of a category.
 export function categoryTasks(category) {
     return category.items.filter(item => item.type === 'task');
 }
 
-/**
- * The category list the menu renders, and the single source of truth for
- * "which categories exist right now": both the rows and the colour pruning go
- * through it. `doc.categories` is `[]` for an empty file, so deriving the list
- * from it made an empty file look category-less and the prune then wrote the
- * whole colour map away. Do not re-derive it elsewhere.
- *
- */
+// The category list the menu renders, and the single source of truth for "which categories
+// exist". A category-less document gets a synthesized 'General' entry.
 export function renderSections(doc) {
     const sections = doc.categories.map(category => ({
         name: category.name,
@@ -422,33 +271,13 @@ export function renderSections(doc) {
     return sections;
 }
 
-/**
- * Whether the document names NO category at all: a brand-new file, or one that
- * only has a '# title'. The menu answers that with its empty state instead of a
- * 'General' section the user never asked for.
- *
- * This is deliberately NOT a question for renderSections(): that one keeps
- * synthesizing the fallback so the colour pruning never sees a category-less
- * document (D1). Asking this must not change what pruning sees.
- *
- */
+// Whether the document names no category at all. Deliberately not asked of renderSections():
+// pruning must keep seeing the fallback.
 export function hasNoCategories(doc) {
     return doc.categories.length === 0;
 }
 
-/**
- * The colour map as it should be STORED after reading `doc`. The decision
- * lives here, not in the UI, so it is unit-testable.
- *
- * 1. Pruning runs against `renderSections(doc)` — the same list the menu rows
- *    come from, never the raw `doc.categories` (which is `[]` for an empty
- *    file).
- * 2. A document with no '##' heading has LOST its category list rather than
- *    changed it: the headings may come back, so pruning would write the
- *    colours away for good. With at least one heading left, genuinely deleted
- *    categories are pruned as usual.
- *
- */
+// The colour map as it should be stored after reading `doc`.
 export function prunedColorsForDocument(colors, doc) {
     const hasHeading = doc.categories.some(category => !category.implicit);
     if (!hasHeading) {
@@ -456,28 +285,6 @@ export function prunedColorsForDocument(colors, doc) {
     }
     return pruneCategoryColors(colors, renderSections(doc).map(s => s.name));
 }
-
-/**
- * Serialize a Document model back to markdown content.
- *
- * - Task lines are rebuilt from `raw` verbatim (raw is authoritative: it keeps
- *   the original tag positions and spacing). Mutations that change text or
- *   tags keep `raw` in sync.
- * - An implicit 'General' category (parser fallback, no heading seen) gets its
- *   '## General' heading written only when it holds at least one task;
- *   extras-only implicit content stays headingless, so an unchanged file
- *   round-trips byte-identically. Explicit categories always get a heading.
- * - When an explicit '## General' heading took over the fallback bucket, the
- *   first `preCount` items are emitted verbatim before it, mirroring the
- *   original layout. One list, one boundary.
- * - A missing document title gains a '# TODO' line.
- * - Line endings are preserved: the file is written back with the ending it
- *   was read with.
- * - Deliberate normalizations (see README.md): '[X]' → '[x]', '##Name' →
- *   '## Name', the canonical '- [ ] ' task prefix, and exactly one trailing
- *   newline.
- *
- */
 export function serializeDocument(doc) {
     const lines = [];
 
@@ -491,15 +298,11 @@ export function serializeDocument(doc) {
         }
     };
 
-    // Blank lines that sat between the title and the first heading — held
-    // outside the category list by parseDocument — belong directly under the
-    // title, which is where the parser took them from.
+    // `preamble` lines are emitted directly under the title, where the parser took them from.
     pushItems(doc.preamble ?? []);
 
     for (const category of doc.categories) {
-        // `preCount` leading items belong before the heading (see
-        // parseDocument); everything after it belongs below. The heading is
-        // written unless the category is implicit and holds no task.
+        // `preCount` items go before the heading; the heading is written unless the category is implicit and holds no task.
         const preCount = category.preCount ?? 0;
         const withHeading = category.preCount !== undefined
             || !category.implicit
@@ -518,24 +321,13 @@ export function serializeDocument(doc) {
     return lines.join(eol) + eol;
 }
 
-/**
- * Read the todo file at `path` without blocking the Shell. The callback
- * receives the same `{tasks, other, raw, ok}` shape `readTodo` used to return.
- *
- * A missing or unreadable file is not an error for rendering, but the caller
- * must be able to tell "the file is empty" from "we could not read it": a
- * failed read is transient (an editor's atomic save, a rename window), and
- * treating it as "no categories" wipes the colour map for good.
- *
- */
 export function readTodoAsync(path, callback) {
     const file = Gio.File.new_for_path(path);
     file.load_contents_async(null, (source, result) => {
         let content;
         try {
             const [, bytes] = source.load_contents_finish(result);
-            // Decode the bytes with TextDecoder; Uint8Array.toString() is
-            // deprecated and mangles empty contents.
+            // Uint8Array.toString() is deprecated and mangles empty contents; use TextDecoder.
             content = bytes ? new TextDecoder().decode(bytes) : '';
         } catch (err) {
             callback({tasks: [], other: [], raw: '', ok: false});
@@ -545,21 +337,13 @@ export function readTodoAsync(path, callback) {
     });
 }
 
-/**
- * Parse already-read todo content into the `{tasks, other, raw, ok}` shape.
- * The caller owns the read: `ok` is the caller's read result.
- *
- */
+// Parse already-read content into the `{tasks, other, raw, ok}` shape.
 export function parseTodo(content, ok = true) {
     const {tasks, other} = splitLines(content);
     return {tasks, other, raw: content, ok};
 }
 
-/**
- * Toggle the checkbox state of the line at `index`. Lines that are not
- * checkboxes are left untouched.
- *
- */
+// Task operations
 export function toggleTask(content, index) {
     const lines = content.split('\n');
     const line = lines[index];
@@ -567,8 +351,7 @@ export function toggleTask(content, index) {
         return content;
     }
 
-    // A CRLF file keeps a trailing '\r' on every line, and `.` in a JS regex
-    // does not match it: match without the CR, then put it back.
+    // A CRLF line keeps a trailing '\r'; match without it, then put it back.
     const cr = line.endsWith('\r') ? '\r' : '';
     const match = (cr ? line.slice(0, -1) : line)
         .match(/^(\s*-\s+\[)([ xX])(\]\s+.*)$/);
@@ -581,19 +364,13 @@ export function toggleTask(content, index) {
     return lines.join('\n');
 }
 
-/**
- * Replace the text of the task line at `index`, keeping its checkbox state.
- * Non-checkbox lines are replaced verbatim.
- *
- */
 export function editTask(content, index, text) {
     const lines = content.split('\n');
     if (index < 0 || index >= lines.length) {
         return content;
     }
 
-    // See toggleTask: the CR comes off before matching, or a CRLF file falls
-    // into the plain-text branch below and loses its checkbox.
+    // CR stripped before matching, or a CRLF file loses its checkbox.
     const raw = lines[index];
     const cr = raw.endsWith('\r') ? '\r' : '';
     const match = (cr ? raw.slice(0, -1) : raw)
@@ -601,17 +378,12 @@ export function editTask(content, index, text) {
     if (match) {
         lines[index] = match[1] + text + cr;
     } else {
-        // Not a checkbox line: replace with plain text (keeps it a line).
         lines[index] = text + cr;
     }
 
     return lines.join('\n');
 }
 
-/**
- * Delete the line at `index`.
- *
- */
 export function deleteTask(content, index) {
     const lines = content.split('\n');
     if (index < 0 || index >= lines.length) {
@@ -622,13 +394,6 @@ export function deleteTask(content, index) {
     return lines.join('\n');
 }
 
-/**
- * Append a new incomplete task to `categoryName` (default "General"), after
- * the category's last task so trailing blank/note lines stay at the end of the
- * block. A missing category is created at the end of the document: 'General'
- * as implicit, anything else as an explicit category.
- *
- */
 export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     const doc = parseDocument(content);
     let target = doc.categories.find(category => category.name === categoryName);
@@ -639,8 +404,7 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
         doc.categories.push(target);
     }
 
-    // Insert after the last task item (or at the very end when the category
-    // holds only extras so far).
+    // Insert after the last task item, or at the end when the category holds only extras.
     let insertAt = target.items.length;
     for (let i = target.items.length - 1; i >= 0; i--) {
         if (target.items[i].type === 'task') {
@@ -653,22 +417,6 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     return serializeDocument(doc);
 }
 
-
-/**
- * Move the task at line `fromIndex` into the slot of the task at line
- * `toIndex`. Both are 0-based line indices, the same ones toggleTask /
- * editTask / deleteTask use.
- *
- * - The moved task ends up where the target task was, in the category's task
- *   sequence; interleaved extras (blank/note lines) keep their slots.
- * - A move never crosses a category boundary: when the two indices belong to
- *   different categories, or either one is not a task, the content is returned
- *   unchanged.
- * - A move across the `## General` heading boundary keeps `preCount` in step
- *   (it counts the items written before the heading), so the round-trip stays
- *   byte-identical.
- *
- */
 export function moveTaskTo(content, fromIndex, toIndex) {
     const doc = parseDocument(content);
     for (const category of doc.categories) {
@@ -684,17 +432,13 @@ export function moveTaskTo(content, fromIndex, toIndex) {
         const target = tasks[toPos];
         const ia = items.indexOf(moving);
 
-        // Land the item next to the target in the array WITHOUT the moving
-        // item: after the target when moving down, before it when moving up.
-        // Either way the task sequence ends up with the moved task at `toPos`.
+        // Re-insert after the target when moving down, before it when moving up.
         items.splice(ia, 1);
         const targetAt = items.indexOf(target);
         const insertAt = fromPos < toPos ? targetAt + 1 : targetAt;
         items.splice(insertAt, 0, moving);
 
-        // preCount counts the items emitted BEFORE the heading. Work out the
-        // boundary position in the array that no longer holds the moving item,
-        // then re-derive preCount from whether the item landed above it.
+        // Re-derive `preCount` from where the item landed relative to the boundary.
         if (category.preCount !== undefined) {
             const wasPre = ia < category.preCount;
             const boundary = category.preCount - (wasPre ? 1 : 0);
@@ -713,8 +457,7 @@ export function moveTaskTo(content, fromIndex, toIndex) {
     return content;
 }
 
-// Real content above a heading: not a blank layout line, so a move would have
-// to drag it across the heading boundary.
+// Category Operations
 const _hasContentAboveHeading = category =>
     category.items.slice(0, category.preCount ?? 0)
         .some(item => item.type !== 'extra' || item.raw.trim() !== '');
@@ -726,50 +469,18 @@ const _moveBlocker = category => {
     return _hasContentAboveHeading(category) ? 'carrier' : null;
 };
 
-/**
- * Why a category may not be reordered, or null when it may. The menu needs the
- * REASON for its drop feedback, and this is the same predicate moveCategoryTo
- * refuses on, so the two cannot drift apart.
- *
- * - 'implicit': the fallback 'General' bucket has no heading of its own;
- * - 'carrier': it holds real (non-blank) content above its heading, so that
- *   boundary can only hold while the category stays first;
- * - 'unknown': no category of that name.
- *
- */
 export function categoryMoveBlocker(content, name) {
     const doc = parseDocument(content);
     const category = doc.categories.find(item => item.name === name);
     return category ? _moveBlocker(category) : 'unknown';
 }
 
-/**
- * Why position 0 is a fixed anchor — null when it is free. A first category
- * that is implicit or carries content above its heading cannot be displaced,
- * so nothing may be dropped in front of it.
- */
 export function firstCategoryMoveBlocker(content) {
     const doc = parseDocument(content);
     const first = doc.categories[0];
     return first ? _moveBlocker(first) : null;
 }
 
-/**
- * Move a whole category — heading, tasks and extras — to `toIndex` in the
- * document's category order. The file IS the order, so the drop rewrites the
- * document. `toIndex` is the category's index AFTER it has been lifted out of
- * the list, i.e. 0 is the first category.
- *
- * Rejected paths return the content byte-identically: see categoryMoveBlocker
- * for the category itself and firstCategoryMoveBlocker for position 0, plus a
- * `toIndex` outside the list.
- *
- * Blank `preCount` lines are layout, not content: they are handed to
- * `doc.preamble`, which is emitted right under the title, so the output stays
- * byte-identical. The colour map is keyed by category name and follows a move
- * on its own.
- *
- */
 export function moveCategoryTo(content, name, toIndex) {
     const doc = parseDocument(content);
     const fromIndex = doc.categories.findIndex(category => category.name === name);
@@ -787,8 +498,7 @@ export function moveCategoryTo(content, name, toIndex) {
         return content;
     }
 
-    // Blank preCount lines are layout: hand them to the preamble so they stay
-    // under the title instead of sliding under a heading they do not own.
+    // Blank `preCount` lines are layout: hand them to the preamble.
     const preCount = category.preCount ?? 0;
     if (preCount > 0) {
         doc.preamble = (doc.preamble ?? []).concat(category.items.slice(0, preCount));
@@ -801,27 +511,10 @@ export function moveCategoryTo(content, name, toIndex) {
     return serializeDocument(doc);
 }
 
-/**
- * A category name is written as `## <name>`, so it has to survive a re-read as
- * a heading: no line breaks, which would escape the heading, and no leading
- * '#', which would nest one. Such names are rejected rather than rewritten —
- * quietly storing a different name would hide what the user typed.
- *
- */
 export function isUsableCategoryName(name) {
     return name.length > 0 && !/[\r\n]/.test(name) && !name.startsWith('#');
 }
 
-/**
- * Append a new empty, explicit category at the end of the document. Called by
- * the in-menu "+" flow, which assigns the palette colour and switches to the
- * new tab.
- *
- * No-op when the name is unusable (see isUsableCategoryName) or a category of
- * that name already exists — an implicit 'General' counts as existing, so
- * there can never be two.
- *
- */
 export function addCategory(content, name) {
     const trimmed = name.trim();
     if (!isUsableCategoryName(trimmed)) {
@@ -835,16 +528,6 @@ export function addCategory(content, name) {
     return serializeDocument(doc);
 }
 
-/**
- * Delete a category with everything in it: heading, tasks and extras. The
- * two-step confirmation lives in the UI, not here.
- *
- * No-op when no category of that name exists or the category is the implicit
- * 'General' bucket, which has no heading of its own to delete. When the
- * explicit '## General' carries the preamble from before the first heading
- * (see parseDocument), deleting it removes that preamble too.
- *
- */
 export function deleteCategory(content, name) {
     const doc = parseDocument(content);
     const idx = doc.categories.findIndex(category => category.name === name);
@@ -855,22 +538,6 @@ export function deleteCategory(content, name) {
     return serializeDocument(doc);
 }
 
-/**
- * Rename a category by rewriting its `## <name>` heading in place; the tasks
- * and extras under it are untouched.
- *
- * No-op when the new name is unusable, no category of `oldName` exists, the
- * category is the implicit 'General' bucket, the names are equal, or another
- * category already uses the new name (an implicit 'General' counts as
- * existing). Rejections return the content byte-identically.
- *
- * A category that carries the preamble from before the first heading (the
- * explicit '## General' takeover, see parseDocument) is renamed with its
- * items: they move below the new heading, because the takeover relationship
- * cannot survive a different name — leaving them above would orphan them into
- * a fresh implicit 'General' bucket on the next read.
- *
- */
 export function renameCategory(content, oldName, newName) {
     const trimmed = newName.trim();
     if (!isUsableCategoryName(trimmed)) {
@@ -888,24 +555,11 @@ export function renameCategory(content, oldName, newName) {
         return content;
     }
     category.name = trimmed;
-    // A category that carried the preamble from before the first heading (the
-    // explicit '## General' takeover, see parseDocument) keeps its items, but
-    // they must now sit BELOW the renamed heading: the takeover relationship
-    // is gone, and leaving them above would orphan them into a fresh implicit
-    // 'General' bucket on the next read.
+    // Items must move below the new heading: the takeover relationship is gone.
     delete category.preCount;
     return serializeDocument(doc);
 }
 
-/**
- * Append an `@key(value)` tag to the task at line `index`. No UI calls this
- * yet; the behaviour is pinned by tests. `raw` is kept in sync, since it is
- * the authoritative serialized form.
- *
- * No-op when no task owns the index, `key` does not match /^\w+$/ (such a tag
- * could not be parsed back), or `value` is empty or contains ')' or a newline.
- *
- */
 export function addTaskTag(content, index, key, value) {
     if (!/^\w+$/.test(key) || value.length === 0 || /[)\n\r]/.test(value)) {
         return content;
@@ -924,15 +578,9 @@ export function addTaskTag(content, index, key, value) {
     return content;
 }
 
-/**
- * Write content back to the todo file at `path`.
- *
- */
+// Write content back to the file at `path`.
 export function writeTodo(path, content) {
-    // Reject `undefined` loudly instead of encoding it into an empty file, and
-    // reject empty content too: GJS marshals an empty Uint8Array to NULL and
-    // g_file_replace_contents then aborts on 'contents != NULL' — a silent
-    // no-op. An empty todo file is not a valid state; delete the file instead.
+    // Reject undefined and empty content: GJS marshals an empty Uint8Array to NULL and the write is a silent no-op.
     if (content === undefined || content === '') {
         throw new Error('todo: writeTodo requires a non-empty content string');
     }
@@ -944,9 +592,7 @@ export function writeTodo(path, content) {
         file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
         return true;
     } catch (e) {
-        // Surface failures (disk full, permissions) without crashing the
-        // extension: the next refresh keeps showing the on-disk content, and
-        // the false return lets the caller keep the user's input.
+        // Surface failures without crashing; the false return lets the caller keep the user's input.
         console.error(`todo: failed to write ${path}: ${e}`);
         return false;
     }

@@ -32,7 +32,9 @@ jobs:
 
       - name: JS syntax checks
         run: |
-          for f in extension.js prefs.js storage.js compat.js; do
+          for f in extension.js prefs.js storage.js compat.js fileSync.js \
+            taskActions.js categoryPanel.js dragDrop.js menuView.js \
+            rowFactory.js tabBar.js; do
             cp "todo-md@ertugrulsefal.github.com/$f" "/tmp/$f.mjs"
             node --check "/tmp/$f.mjs"
           done

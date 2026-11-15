@@ -6,24 +6,7 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 import * as Storage from './storage.js';
 
-/**
- * The persistent category tab strip: the `All` tab, one tab per category, and
- * the far-right "new category" button on a horizontally scrollable rail.
- *
- * The strip is added to `menu.box` as a PLAIN actor, never as a menu item:
- * `menu.removeAll()` destroys every `menu.box` child whose `_delegate` is a
- * PopupBaseMenuItem, which crashed the Shell. So no PopupMenuItem, no
- * PopupBaseMenuItem and no menu.addMenuItem in this file; a test pins it.
- *
- * The actors are built once in `attach()`; `refill()` only replaces the
- * buttons inside `tabsBox`, which keeps the horizontal scroll position.
- */
 export class TabBar {
-    /**
-     * Build the strip once. Nothing is attached to a menu yet.
-     * `onNewCategory` is the '+' button's handler; the class owns the signal
-     * so its owner is the same object that owns the button.
-     */
     constructor({onNewCategory}) {
         this.bar = new St.BoxLayout({style_class: 'todo-tab-bar'});
         this.bar.set_x_expand(true);
@@ -31,35 +14,19 @@ export class TabBar {
 
         this.tabsBox = new St.BoxLayout({style_class: 'todo-tab-strip'});
         this.scroller = new St.ScrollView({
-            // Both must stay AUTOMATIC: StScrollView compares the content
-            // WIDTH against the rail's HEIGHT whenever vscrollbar_policy is
-            // not AUTOMATIC (st-scroll-view.c, st_scroll_view_allocate), which
-            // kept the horizontal scrollbar visible even when the tabs fit.
             hscrollbar_policy: St.PolicyType.AUTOMATIC,
             vscrollbar_policy: St.PolicyType.AUTOMATIC,
-            // St's own wheel handler consumes scroll events and routes them to
-            // the vertical adjustment only; the strip needs horizontal wheel
-            // handling, so it is disabled and handled below.
             enable_mouse_scrolling: false,
         });
         this.scroller.add_child(this.tabsBox);
         this.scroller.set_x_expand(true);
-        // No min-width/max-width here: menu.box is force-sized, and a
-        // min-width on the scroller would eat the full menu width and push the
-        // '+' button out of view. The scroller expands into the remaining
-        // space, and the horizontal scrollbar engages once the tabs' minimum
-        // width exceeds it.
-
-        // Mouse wheel anywhere on the strip scrolls it horizontally: UP left,
-        // DOWN right, smooth deltas included.
-        this.bar.connect('scroll-event', (actor, event) => {
+        this.bar.connect('scroll-event', (_actor, event) => {
             const adj = this.scroller.hadjustment;
             if (!adj) {
                 return Clutter.EVENT_PROPAGATE;
             }
             const direction = event.get_scroll_direction();
             if (direction === Clutter.ScrollDirection.SMOOTH) {
-                // Vertical wheel produces dy; horizontal wheel/trackpad dx.
                 const [dx, dy] = event.get_scroll_delta();
                 adj.value += (dx + dy) * adj.step_increment;
                 return Clutter.EVENT_STOP;
@@ -94,47 +61,25 @@ export class TabBar {
         this.bar.add_child(this.scroller);
         this.bar.add_child(this.newCategoryButton);
 
-        // The whole strip is one drop target for a category drag: the slot is
-        // computed from the pointer in dragMotion, so acceptDrop only has to
-        // confirm it. The Shell walks up from the picked actor looking for
-        // `_delegate.acceptDrop`, and this actor sits above every tab.
+        // The whole strip is one drop target for a category drag: the slot is computed from the pointer in dragMotion,
+        // so acceptDrop only confirms it. The Shell walks up from the picked actor looking for `_delegate.acceptDrop`.
         this._drag = null;
         this.bar._delegate = {
             acceptDrop: () => this._drag !== null && this._drag.onDrop() === true,
         };
     }
 
-    /**
-     * Put the strip on the menu as its FIRST row. Refill-only: the scroller and
-     * its adjustments survive, so the horizontal scroll position does too.
-     *
-     */
+    // Put the strip on the menu as its FIRST row. Refill-only: the scroller and its adjustments survive, so the horizontal scroll position does too.
     attach(menuBox) {
         menuBox.add_child(this.bar);
     }
 
-    /**
-     * Take the strip off the menu without destroying it (called before a
-     * rebuild; the actor is re-attached by `attach`).
-     *
-     */
+    // Take the strip off the menu without destroying it; re-attached by `attach`.
     detach(menuBox) {
         menuBox.remove_child(this.bar);
     }
 
-    /**
-     * Drop the tab buttons; the strip and its scroll position stay.
-     */
-    clearTabs() {
-        this.tabsBox.remove_all_children();
-    }
-
-    /**
-     * Build the buttons for the current sections. `drag`, when given, carries
-     * `onBegin(name, index)` / `onEnd()` / `onDrop()`; only then does a
-     * category tab become draggable.
-     *
-     */
+    // Build the buttons for the current sections. `drag`, when given, carries `onBegin(name, index)` / `onEnd()` / `onDrop()`; only then does a category tab become draggable.
     refill(sections, colors, activeCategory, onSelect, onActions, drag) {
         this._drag = drag ?? null;
         this.tabsBox.remove_all_children();
@@ -171,16 +116,14 @@ export class TabBar {
             {name: sections[0].name, label: sections[0].name},
             colors, activeCategory);
         button.set_checked(true);
+        // Invariant: every category tab carries this identity.
+        button._todoCategoryName = sections[0].name;
+        button._todoCategoryIndex = 0;
         this._connectActions(button, sections[0].name, onActions);
         this.tabsBox.add_child(button);
     }
 
-    /**
-     * Ring the '+' while the file has no categories: it is then the strip's only
-     * control, so it has to be findable. The class carries the ring's colours,
-     * scoped per colour scheme in stylesheet.css.
-     *
-     */
+    // Ring the '+' while the file has no categories: it is then the strip's only control
     setEmptyState(on) {
         if (on) {
             this.newCategoryButton.add_style_class_name('todo-tab-add-hint');
@@ -189,17 +132,12 @@ export class TabBar {
         }
     }
 
-    /**
-     * Right-click on a category tab opens the same action panel the header's ⋮
-     * button opens. St.Button's default button mask is BUTTON1, so a
-     * right-click never fires 'clicked' and cannot switch the tab.
-     *
-     */
+    // Right-click on a category tab opens the same action panel the header's ⋮ button opens.
     _connectActions(button, categoryName, onActions) {
         if (categoryName === null) {
-            return; // the 'All' tab is not a category
+            return;
         }
-        button.connect('button-press-event', (actor, event) => {
+        button.connect('button-press-event', (_actor, event) => {
             if (event.get_button() !== 3) {
                 return Clutter.EVENT_PROPAGATE;
             }
@@ -208,13 +146,6 @@ export class TabBar {
         });
     }
 
-    /**
-     * A category tab drags itself — the whole tab is the handle. A plain click
-     * on it still fires 'clicked': the Shell's drag gesture only takes the
-     * sequence once the pointer moves past the drag threshold. The clone keeps
-     * the tab in place while it moves.
-     *
-     */
     _connectDrag(button, categoryName) {
         button._delegate = {
             getDragActor: () => new Clutter.Clone({source: button}),
@@ -226,14 +157,6 @@ export class TabBar {
         draggable.connect('drag-end', () => this._drag.onEnd());
     }
 
-    /**
-     * One tab button: a toggle-mode St.Button whose text lives in a child
-     * St.Label (St.Button has no clutter_text of its own). The label keeps
-     * EllipsizeMode.NONE: an ellipsized label reports a small minimum width, so
-     * the scroll cap would never engage and the tabs would be squeezed instead
-     * of scrolling.
-     *
-     */
     _makeButton(tab, colors, activeCategory) {
         const button = new St.Button({
             style_class: 'todo-tab button',

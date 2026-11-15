@@ -5,7 +5,7 @@ checkbox** file (`~/todo.md` by default) and shows them in the panel menu. No
 database, no proprietary format, no cloud — the file stays readable in any
 editor, on any device.
 
-![Todo MD in the GNOME Shell panel menu](docs/screenshots/todo-md-0.20.3.png)
+![Todo MD in the GNOME Shell panel menu](docs/screenshots/todo-md-0.23.0.png)
 
 Compatible with GNOME Shell 46, 47, 48, 49, 50 and 51 — each release was verified
 by the same manual regression run (Ubuntu 24.04, 24.10, 25.04, 25.10, 26.04 and
@@ -242,14 +242,15 @@ gjs -m tests/run_tests.mjs
 ./tests/smoke.sh
 ```
 
-The test suite exercises `storage.js` against a temporary file; it never reads
-or writes your `~/todo.md`, and it verifies that at teardown. CI runs the same
-suite (plus a strict `glib-compile-schemas` and `node --check` on every module)
-on every push.
+The test suite exercises `storage.js` against a temporary file; it reads your
+`~/todo.md` once at startup and once at teardown to prove the run left it
+untouched, and never writes it. CI runs the same suite (plus a strict
+`glib-compile-schemas` and `node --check` on every module) on every push.
 
 All state-changing logic lives in `storage.js` as pure functions returning the
 new document text, which is what the unit tests cover. Layout and interaction
-(`extension.js`, `rowFactory.js`, `tabBar.js`, `prefs.js`) is verified by hand —
+(`extension.js`, `rowFactory.js`, `tabBar.js`, `menuView.js`, `categoryPanel.js`,
+`taskActions.js`, `dragDrop.js`, `prefs.js`) is verified by hand —
 see the manual checklists in the repository.
 
 ## Planned
@@ -267,6 +268,11 @@ see the manual checklists in the repository.
 | `todo-md@ertugrulsefal.github.com/tabBar.js` | The persistent category tab strip |
 | `todo-md@ertugrulsefal.github.com/rowFactory.js` | Row builders (task rows, inline add/edit) |
 | `todo-md@ertugrulsefal.github.com/compat.js` | Version shims for Shell APIs that changed shape |
+| `todo-md@ertugrulsefal.github.com/menuView.js` | Menu view assembly: sections, scroll wrapper, rebuilds |
+| `todo-md@ertugrulsefal.github.com/categoryPanel.js` | The ⋮ category action panel (delete arm, colour picker) |
+| `todo-md@ertugrulsefal.github.com/taskActions.js` | Inline task interactions: edit / add / toggle / delete |
+| `todo-md@ertugrulsefal.github.com/dragDrop.js` | Drag and drop for tasks and category tabs, plus the keyboard task move |
+| `todo-md@ertugrulsefal.github.com/fileSync.js` | The todo file: cached read, async load, atomic write, monitor |
 | `todo-md@ertugrulsefal.github.com/prefs.js` | GTK preferences window |
 | `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version 46–51) |

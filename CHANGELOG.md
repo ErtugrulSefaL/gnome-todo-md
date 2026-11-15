@@ -4,6 +4,127 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `AGENTS.md`).
 
+## 0.23.0 - 2026-11-15
+
+### Changed
+- **`TabBar.clearTabs()` is gone.** `refill()` clears the strip itself, so the
+  caller's `detach()` + `clearTabs()` + `refill()` sequence did the same clearing
+  twice; the menu now calls `detach()` + `refill()`.
+- **`extension.js` is split into 11 single-responsibility modules** (2695 lines
+  total): `extension.js` drops from 1672 to 282 lines, next to `menuView.js`
+  (431), `dragDrop.js` (351), `storage.js` (638), `prefs.js` (220),
+  `rowFactory.js` (218), `categoryPanel.js` (197), `tabBar.js` (195),
+  `fileSync.js` (80), `taskActions.js` (77) and `compat.js` (6). The new modules
+  are `fileSync` (a thin `Gio` wrapper), `menuView`, `categoryPanel`,
+  `taskActions` and `dragDrop`; behaviour is unchanged and `storage.js` keeps the
+  pure string-in/string-out document logic. A comment pass keeps only comments
+  that state a fact the code cannot (an API quirk, an invariant, a format).
+  `tools/ego-gate.sh --install` is idempotent: it reuses an existing venv instead
+  of deleting and recreating it.
+- **The todo file is read asynchronously.** `storage.js` replaces `readTodo()` with
+  `readTodoAsync(path, callback)`, which reads with `load_contents_async` +
+  `load_contents_finish` and hands the parsed `{tasks, other, raw, ok}` to the
+  callback; `parseTodo(content, ok)` is exported for callers that read the file
+  themselves. `extension.js` caches the last read in `_raw`/`_readOk`, so checking,
+  editing, deleting and reordering stay synchronous: `_loadTodo()` starts the read
+  and refreshes the menu from its callback, `_readTodo()` returns the cache and
+  `_commit()` updates it. The first open shows a placeholder row while the read is
+  in flight (GNOME Shell does not display an empty popup menu). The settings
+  path-change handler clears the cache and re-reads, so a refresh cannot show the
+  old file's list. External edits still refresh live through the file monitor. The
+  write path (`replace_contents`) stays synchronous and atomic.
+- **`prefs.js` reads the file itself** with `load_contents(null)` in its own process
+  instead of calling into the storage layer.
+
+### Fixed
+- **The empty-state row works on GNOME 46 and 47 again.** `menuView.js` passed
+  `orientation: Clutter.Orientation.VERTICAL` into the `St.BoxLayout` constructor,
+  but that property exists only from 48 on (`vertical` is the pre-48 name and is
+  removed in 51), so the empty-state box could not be built on 46/47 — the same
+  class of failure 0.22.1 fixed for 51, from the other side. The box is now built
+  plain and `compat.setVerticalOrientation()` applies whichever setter exists.
+  Found by the VM tour: the GNOME 46 probe went 58/59 → 59/59 (it is 59/59 on 46,
+  47 and 51 now). The probe check is version-agnostic and a static guard bans both
+  constructor properties; the old guard's claim that `orientation` "exists on
+  46-51" was the very assumption that hid this.
+- **The preferences window's first page is titled `General` again.** The split had
+  renamed the page title to `Unnamed category` — a wrong label in the prefs
+  sidebar (`prefs.js`). A systematic check of every string literal in the tree
+  against the pre-split revision found no other silently changed label. Two
+  further prefs cleanups: the dead `syncingRgba` flag pair in the colour "None"
+  handler is gone, and the swatch CSS provider is registered once per process
+  instead of once per preferences-window open (the display keeps every provider).
+- **A task drag no longer leaves an inline editor anchored to the wrong task.**
+  Moving a task shifts the file's line indexes, but `_editingIndex` kept its old
+  value, so the rebuilt menu attached the open editor to whatever task had landed
+  on that line — typing then wrote to the wrong line. The task drop now closes the
+  open interaction before committing, exactly like the keyboard move already did.
+  Pre-existing behaviour (`extension.js:1324/1377` before the split), not a split
+  regression. `positionTabDropLine` also gained the missing `_tabDropLine` guard
+  that `hideTabDrop` already had.
+- **A category tab in a one-category document now carries its identity too.**
+  The multi-tab branch set `_todoCategoryName`/`_todoCategoryIndex` on every
+  category tab, the single-category branch did not — unreachable today (that tab
+  never starts a drag), but a silent `undefined` for the next reader of that
+  identity (`dragDrop` reads it from the strip).
+- **The split's stale names are fixed — the extension can be enabled again.**
+  Three mechanical leftovers made `enable()` throw a `TypeError`, so this
+  working tree could not load at all: `menuView.js` used `PANEL_FADE_MS`, which
+  had been left private to `extension.js` (`ReferenceError`); 21 call sites used
+  `_menu.refresh()` while the module defines `refreshTodoMenu()`; and
+  `extension.js` called `_dnd.setup()` instead of `setupDragAndDrop()`. The
+  constant now lives with its only user, and both call-site classes are covered
+  by two new static guards (call resolution on injected sub-objects, including
+  `this._ext.*`, and cross-module use of a private binding) — proven to fail on
+  the broken tree before the fix.
+- **The panel fade matches the Shell's submenu reveal (250 ms, was 400).** The
+  Shell's `PopupSubMenu` reveal is a hard-coded 250 ms ease, so a 400 ms fade
+  outlived the reveal by ~150 ms and read as drift. The Shell patches
+  `Clutter.Actor.ease()` to route every duration through `enable-animations` /
+  `slow-down-factor`, so no animation-setting handling is added; the reduce-motion
+  gate (`St.ReducedMotion`, GNOME 51+) stays, because that patch does not consult
+  it.
+- **A stale read can no longer overwrite newer content (`fileSync.js`).** `load()`
+  captures a generation counter before it starts the async read and drops the
+  result when `commit()` or `clear()` bumped it in the meantime — the read then
+  started before a write (or a path change), so its content is older than what is
+  on screen. Without the guard, an in-flight read restored the pre-write content
+  in 2 of 10 adversarial runs (a write in the same tick the read started) and the
+  next interaction wrote that stale content back, losing the earlier change. The
+  own-write suppression (`noteShown()`/`_lastWritten`) is unchanged and verified
+  still working.
+- **`disable()` destroys each named actor before its owner.** The destroy loop over
+  `_dropLine`, `_tabDropLine` and `_dragHint` is unrolled into named
+  `if (this._x) { this._x.destroy(); this._x = null; }` blocks, and
+  `_actionsDeleteItem`, `_colorRow` and `_contentSection` are destroyed and nulled
+  the same way. Children are destroyed before their owners (`_actions`,
+  `_scrollWrapper`, `_tabBar.bar`, `_indicator`).
+- **`TabBar` owns its `+` button's `clicked` signal.** The constructor takes
+  `{onNewCategory}`, so the object that owns the button owns the handler instead of
+  `extension.js`.
+
+### Added
+- **Two async read-path regression tests** (`tests/run_tests.mjs`, `fileSync.js`):
+  one deterministic — a read in flight must not resurrect content that a
+  `clear()` (path change) dropped — and one adversarial, 20 rounds — a read in
+  flight must not undo a write. Removing the generation guard makes both fail
+  (`raw` restored to the old content, `callback=true`; `stale=8/20`), so they are
+  detectors, not decoration. The suite now runs an async phase on a `GLib.MainLoop`
+  with a watchdog, so a failure there is a `FAIL`, never a hang.
+- **`tools/ego-gate.sh`:** builds the zip, runs the Shexli analyzer on it and fails
+  on any finding outside the allowlist (`EGO-M-004` only — shexli 0.2.1's metadata
+  table stops at GNOME 50). `.github/workflows/ci.yml` runs it after the unit tests.
+- **RC-20 in the manual checklist:** a disable → enable cycle, run twice.
+
+### Notes
+- The 0.22.2 upload was rejected with "Didn't review. Shexli issues need to be
+  addressed first." The three findings on the review page's Shexli panel
+  (`EGO-X-004` synchronous read, `EGO-L-002` six actors, `EGO-L-003` one signal) are
+  closed by this release; the analyzer's output is now empty outside the allowlist.
+- No EGO upload for this version (user decision, 2026-11-14); the release is the
+  GitHub zip only.
+- 279 unit tests; `tests/smoke.sh` and `tools/ego-gate.sh` green on GNOME 50.1.
+
 ## 0.22.2 - 2026-10-23
 
 ### Added

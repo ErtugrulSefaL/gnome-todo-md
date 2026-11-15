@@ -22,6 +22,7 @@ import GLib from 'gi://GLib';
 import Gio from 'gi://Gio';
 
 import * as Storage from '../todo-md@ertugrulsefal.github.com/storage.js';
+import {TodoFile} from '../todo-md@ertugrulsefal.github.com/fileSync.js';
 import {popupArgs} from '../todo-md@ertugrulsefal.github.com/compat.js';
 
 // The extension's storage module no longer reads the disk (the Shell's read
@@ -462,10 +463,20 @@ function testStaticChecks() {
     // only visible with a todo file that has no category, which no VM round or
     // probe check covered. `orientation: Clutter.Orientation.VERTICAL` exists
     // on 46-51.
-    noMatch('static: no St.BoxLayout vertical: property (removed in GNOME 51)',
-        ui, /\bvertical\s*:/,
-        'St.BoxLayout has no `vertical` from 51 on; use orientation: '
-        + 'Clutter.Orientation.VERTICAL');
+    // Same class as 0.22.1's 51 breakage, from the other side: `orientation` does
+    // not exist before 48 and `vertical` is gone from 51 on, so NEITHER may be
+    // passed to the constructor across 46-51. Measured: GNOME 46 has set_vertical
+    // only, GNOME 50 has both. compat.verticalBox() applies the existing setter.
+    noMatch('static: no St.BoxLayout orientation/vertical constructor property',
+        ui, /(?:vertical|orientation)\s*:\s*(?:Clutter\.Orientation|true|false)\b/,
+        'neither property exists across 46-51; the box goes through '
+        + 'compat.setVerticalOrientation(), which applies the setter that exists');
+
+    record('static: the vertical box goes through compat.setVerticalOrientation()',
+        /export function setVerticalOrientation/.test(readFileText(`${EXT_DIR}/compat.js`))
+        && /setVerticalOrientation\(/.test(ui),
+        'orientation exists only from 48 and vertical only to 50 — a shim is the '
+        + 'only shape that works on all six releases');
 
     // Same class of defect: GNOME 51 changed PopupMenu/PopupSubMenu
     // open()/close() from a boolean to an options object. A raw flag still
@@ -641,6 +652,99 @@ function testStaticChecks() {
         unimported.length === 0,
         unimported.join(', ') || 'every namespace used is imported');
 
+    // A1-split regression class (found 2026-11-15): a mechanical rename left 21
+    // call sites at `_menu.refresh()` while the module defines `refreshTodoMenu()`
+    // — enable() threw, and this suite never noticed, because the UI layer is
+    // never executed here and the guard above only looks at namespaces.
+    const subObjects = {
+        _menu: 'menuView.js', _file: 'fileSync.js', _tasks: 'taskActions.js',
+        _panel: 'categoryPanel.js', _dnd: 'dragDrop.js',
+        _rowFactory: 'rowFactory.js', _tabBar: 'tabBar.js',
+    };
+    const memberNames = src => {
+        const names = new Set();
+        for (const line of src.split('\n')) {
+            if (line.trimStart().startsWith('//'))
+                continue;
+            const call = line.match(/^\s+(?:get\s+|set\s+|static\s+)?([A-Za-z_$][\w$]*)\s*\(/);
+            if (call && !['if', 'for', 'while', 'switch', 'catch', 'return', 'function']
+                .includes(call[1]))
+                names.add(call[1]);
+            const prop = line.match(/^\s+this\.([A-Za-z_$][\w$]*)\s*=/);
+            if (prop)
+                names.add(prop[1]);
+        }
+        return names;
+    };
+    const subMembers = {};
+    for (const [obj, file] of Object.entries(subObjects))
+        subMembers[obj] = memberNames(readFileText(`${EXT_DIR}/${file}`));
+    const unknownCalls = [];
+    const callRe = new RegExp(
+        `\\.(?:this\\._ext\\.|this\\.)?(${Object.keys(subObjects).join('|')})`
+        + '\\.([A-Za-z_$][\\w$]*)\\s*\\(', 'g');
+    for (const file of uiNames) {
+        readFileText(`${EXT_DIR}/${file}`).split('\n').forEach((line, index) => {
+            if (line.trimStart().startsWith('//'))
+                return;
+            for (const m of line.matchAll(callRe)) {
+                if (!subMembers[m[1]].has(m[2]))
+                    unknownCalls.push(`${file}:${index + 1} ${m[1]}.${m[2]}()`);
+            }
+        });
+    }
+    // `this._ext.<method>()` calls resolve against extension.js the same way.
+    const extMembers = memberNames(readFileText(`${EXT_DIR}/extension.js`));
+    const extCallRe = /this\._ext\.([A-Za-z_$][\w$]*)\s*\(/g;
+    for (const file of uiNames) {
+        readFileText(`${EXT_DIR}/${file}`).split('\n').forEach((line, index) => {
+            if (line.trimStart().startsWith('//'))
+                return;
+            for (const m of line.matchAll(extCallRe)) {
+                if (!extMembers.has(m[1]))
+                    unknownCalls.push(`${file}:${index + 1} _ext.${m[1]}()`);
+            }
+        });
+    }
+    record('static: every call on an injected sub-object names a member it defines',
+        unknownCalls.length === 0,
+        unknownCalls.join(', ') || 'each call resolves to a member of the owning module');
+
+    // Same split, second gap: `PANEL_FADE_MS` stayed in extension.js while its
+    // only use moved to menuView.js — valid-looking code that throws a
+    // ReferenceError the moment that panel opens.
+    const privateDecls = new Map();
+    const exportedNames = new Set();
+    for (const file of [...uiNames, 'prefs.js']) {
+        const src = readFileText(`${EXT_DIR}/${file}`);
+        for (const m of src.matchAll(
+            /^(export\s+)?(?:const|let|var|function|class)\s+([A-Za-z_$][\w$]*)/gm))
+            privateDecls.set(m[2], {file, exported: Boolean(m[1])});
+        for (const m of src.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+            for (const part of m[1].split(','))
+                exportedNames.add(part.split(' as ').pop().trim());
+        }
+    }
+    const privateUses = [];
+    for (const [name, where] of privateDecls) {
+        if (where.exported || exportedNames.has(name))
+            continue;
+        for (const file of [...uiNames, 'prefs.js']) {
+            if (file === where.file)
+                continue;
+            readFileText(`${EXT_DIR}/${file}`).split('\n').forEach((line, index) => {
+                const trimmed = line.trimStart();
+                if (trimmed.startsWith('//') || trimmed.startsWith('import'))
+                    return;
+                if (new RegExp(`(^|[^.\\w$])${name}([^\\w$]|$)`).test(line))
+                    privateUses.push(`${file}:${index + 1} ${name} (private to ${where.file})`);
+            });
+        }
+    }
+    record('static: no module uses a binding that is private to another module',
+        privateUses.length === 0,
+        privateUses.join(', ') || 'every cross-module name is exported by its module');
+
     record('static: no unused imports in any source file',
         unusedImports.length === 0,
         unusedImports.join(', ') || 'every import is referenced');
@@ -654,8 +758,8 @@ function testStaticChecks() {
         !/(PopupMenu\s*\.\s*Popup\w*MenuItem)|(\bPopupMenuItem\b)|(\baddMenuItem\b)/
             .test(stripComments(tabBarSrc))
         && /menuBox\.add_child\(this\.bar\)/.test(tabBarSrc)
-        && /this\._tabBar\.attach\(menu\.box\)/.test(ui)
-        && /this\._tabBar\.detach\(menu\.box\)/.test(ui),
+        && /this\._ext\._tabBar\.attach\(menu\.box\)/.test(ui)
+        && /this\._ext\._tabBar\.detach\(menu\.box\)/.test(ui),
         'menu.box children with a PopupBaseMenuItem _delegate are DESTROYED by '
         + 'menu.removeAll() (popupMenu.js :827-850) — shell SEGV, 2026-09-26');
     record('static: schema declares menu-width with a described default',
@@ -728,7 +832,7 @@ function testStaticChecks() {
         'St.Label defaults to END (st-label.c :336); an ellipsized label has '
         + 'a small min width so the scroll cap never engages (user test)');
     record('static: text actors are width-capped (ellipsize needs constraint)',
-        /max-width: \$\{this\._settings\.get_int\('menu-width'\)\}px/.test(ui)
+        /max-width: \$\{this\._ext\._settings\.get_int\('menu-width'\)\}px/.test(ui)
             && !/max-width:\s*28em/.test(css)
             && !/max-width:\s*28em/.test(ui),
         'width cap comes from the menu-width setting, not a fixed value');
@@ -750,7 +854,7 @@ function testStaticChecks() {
         !/this\._editingIndex = -1;\n(?![ ]*this\._addingCategory)/.test(ui),
         'reset both fields together (single-interaction rule)');
     record('static: opening an edit closes the other interactions (_startEditing)',
-        /_startEditing\(index\) \{\n\s*this\._closeInteractions\(\);\n\s*this\._editingIndex = index;/.test(ui),
+        /startEditing\(index\) \{\n\s*this\._ext\._closeInteractions\(\);\n\s*this\._ext\._editingIndex = index;/.test(ui),
         'an edit replaces any open add entry, rename row or action panel');
 
     // Audit D3 + Faz 7: the guards above only ever looked at two of the
@@ -777,7 +881,8 @@ function testStaticChecks() {
             // The helper closes all five; _cancelEditing() delegates to it.
             const before = uiLines.slice(i - 2, i).join('\n');
             if (before.includes('this._closeInteractions();')
-                || before.includes('this._cancelEditing();')) {
+                || before.includes('this._cancelEditing();')
+                || before.includes('this._tasks.cancelEditing();')) {
                 continue;
             }
             unpaired.push(`line ${i + 1} opens ${field} without closing the others`);
@@ -794,7 +899,7 @@ function testStaticChecks() {
     record('static: the interaction fields are reset ONLY in that helper',
         (ui.match(/this\._editingIndex = -1;/g) || []).length === 1
         && (ui.match(/this\._addingCategory = null;/g) || []).length === 1
-        && (ui.match(/this\._addingNewCategory = false;/g) || []).length === 2
+        && (ui.match(/(?:this\._ext\.)?_addingNewCategory = false;/g) || []).length === 2
         && (ui.match(/this\._renamingCategory = null;/g) || []).length === 1
         && (ui.match(/this\._actionsCategory = null;/g) || []).length === 1,
         'a partial reset elsewhere is how two interactions end up open at once; '
@@ -811,18 +916,20 @@ function testStaticChecks() {
     // against the exact bug it was written for. Line windows, not character
     // counts — a comment length must not decide whether a guard holds.
     const addLine = uiLines.findIndex(line => line.includes('const updated = Storage.addCategory'));
-    const rejectLine = uiLines.findIndex(line => line.includes('if (updated === parsed.raw) {'));
-    const writeLine = uiLines.findIndex(line => line.includes('if (!this._commit(updated)) {'));
+    const rejectLine = uiLines.findIndex((line, i) =>
+        i > addLine && line.includes('if (updated === parsed.raw) {'));
+    const writeLine = uiLines.findIndex((line, i) =>
+        i > rejectLine && line.includes('if (!this._ext._file.commit(updated)) {'));
     // Windowed on writeLine: a plain findIndex would match the FIRST
     // `this._addingNewCategory = false;` in the file — the one in enable(),
     // which is nowhere near this handler.
     const closeLine = uiLines.findIndex((line, i) =>
-        i > writeLine && line.includes('this._addingNewCategory = false;'));
+        i > writeLine && line.includes('_addingNewCategory = false;'));
     record('static: the new-category entry closes only after BOTH guards',
         addLine !== -1 && rejectLine > addLine && writeLine > rejectLine
         && closeLine > writeLine
         && !uiLines.slice(addLine, closeLine)
-            .some(line => line.includes('this._addingNewCategory = false;')),
+            .some(line => line.includes('_addingNewCategory = false;')),
         'close the entry only AFTER the rejection check (D5) and AFTER the '
         + 'failed-write check (N4), so a name addCategory refuses — or a file '
         + 'that cannot be written — leaves the typed text on screen. Order, '
@@ -850,19 +957,19 @@ function testStaticChecks() {
         }
         return null;
     };
-    const addBody = handlerBody('_addTask(text, category) {');
-    const editBody = handlerBody('_finishEditing(text) {');
+    const addBody = handlerBody('addTask(text, category) {');
+    const editBody = handlerBody('finishEditing(text) {');
     record('static: _addTask keeps the typed task when the write fails',
-        addBody !== null && /if \(!this\._commit\(/.test(addBody)
-        && addBody.indexOf('if (!this._commit(')
-            < addBody.indexOf('this._closeInteractions();'),
+        addBody !== null && /if \(!this\._ext\._file\.commit\(/.test(addBody)
+        && addBody.indexOf('if (!this._ext._file.commit(')
+            < addBody.indexOf('this._ext._closeInteractions();'),
         'a failed write must return BEFORE the inline entry closes, or the '
         + 'text the user typed is gone with no message');
 
     record('static: _finishEditing keeps the edited text when the write fails',
-        editBody !== null && /if \(!this\._commit\(/.test(editBody)
-        && editBody.indexOf('if (!this._commit(')
-            < editBody.indexOf('this._closeInteractions();'),
+        editBody !== null && /if \(!this\._ext\._file\.commit\(/.test(editBody)
+        && editBody.indexOf('if (!this._ext._file.commit(')
+            < editBody.indexOf('this._ext._closeInteractions();'),
         'same rule for the edit commit: the old text stays on disk, the new one '
         + 'stays on screen');
 
@@ -874,9 +981,9 @@ function testStaticChecks() {
     // exact shape of the 2026-09-26 SEGV.
     record('static: the action panel is a PopupSubMenu, never a menu item',
         /new PopupMenu\.PopupSubMenu\(/.test(ui)
-        && /this\._actions\.box\.add_child\(item\.actor\)/.test(ui)
+        && /this\._ext\._actions\.box\.add_child\(item\.actor\)/.test(ui)
         && !/PopupSubMenuMenuItem/.test(ui)
-        && !/this\._actions\.addMenuItem\(/.test(ui),
+        && !/this\._ext\._actions\.addMenuItem\(/.test(ui),
         'addMenuItem() also wires activate -> itemActivated(), which closes the '
         + 'menu on the FIRST click (popupMenu.js :694-701) — the two-step delete '
         + 'needs the panel to survive it, so the items are added directly');
@@ -902,7 +1009,7 @@ function testStaticChecks() {
         + 'scene-graph propagation, Clutter.Actor docs)');
 
     record('static: the panel sourceActor is a menu item (Left-key path)',
-        /this\._actions\.sourceActor = header;/.test(ui),
+        /this\._ext\._actions\.sourceActor = header;/.test(ui),
         'PopupSubMenu\'s own Left-key handler dereferences '
         + 'sourceActor._delegate.active (popupMenu.js :1160-1164)');
 
@@ -910,7 +1017,7 @@ function testStaticChecks() {
     // Faz 7 mutations must write the file BEFORE touching the settings map.
     const deleteWrite = uiLines.findIndex(l => l.includes('Storage.deleteCategory('));
     const deleteFile = uiLines.findIndex((l, i) => i > deleteWrite
-        && l.includes('this._commit(updated)'));
+        && l.includes('this._ext._file.commit(updated)'));
     const deleteColour = uiLines.findIndex((l, i) => i > deleteFile
         && l.includes("set_value('category-colors'"));
     record('static: deleting writes the file before dropping the colour (L-018)',
@@ -920,7 +1027,7 @@ function testStaticChecks() {
 
     const renameWrite = uiLines.findIndex(l => l.includes('Storage.renameCategory('));
     const renameFile = uiLines.findIndex((l, i) => i > renameWrite
-        && l.includes('this._commit(updated)'));
+        && l.includes('this._ext._file.commit(updated)'));
     const renameColour = uiLines.findIndex((l, i) => i > renameFile
         && l.includes('moveCategoryColor('));
     record('static: renaming writes the file before moving the colour (L-018)',
@@ -933,7 +1040,7 @@ function testStaticChecks() {
     // active category the file no longer has — so the new name has to be in
     // place BEFORE the colour write.
     const renameActive = uiLines.findIndex((l, i) => i > renameWrite
-        && l.includes('this._activeCategory = name;'));
+        && l.includes('this._ext._activeCategory = name;'));
     const renameSet = uiLines.findIndex((l, i) => i > renameFile
         && l.includes("set_value('category-colors'"));
     record('static: renaming keeps the active tab (order vs the sync signal)',
@@ -942,7 +1049,7 @@ function testStaticChecks() {
         + 'synchronous refresh drops it and the menu falls back to All');
 
     record('static: right-click on a category header row opens the panel',
-        /header\.connect\('button-press-event', \(actor, event\) => \{\n\s*if \(event\.get_button\(\) !== 3\) \{\n\s*return Clutter\.EVENT_PROPAGATE;\n\s*\}\n\s*this\._toggleActions\(categoryName\);\n\s*return Clutter\.EVENT_STOP;/.test(ui),
+        /header\.connect\('button-press-event', \(_actor, event\) => \{\n\s*if \(event\.get_button\(\) !== 3\) \{\n\s*return Clutter\.EVENT_PROPAGATE;\n\s*\}\n\s*this\._ext\._panel\.toggleActions\(categoryName\);\n\s*return Clutter\.EVENT_STOP;/.test(ui),
         'the category NAME row is the practical trigger inside the menu, '
         + 'matching the tab right-click');
 
@@ -950,7 +1057,7 @@ function testStaticChecks() {
     // (`if (false && ...)`) is caught — mutation-tested: the call alone stayed
     // green while the guard was effectively off.
     record('static: the panel actor is detached on every refresh',
-        /if \(this\._actions\.actor\.get_parent\(\)\) \{\n\s*this\._actions\.actor\.get_parent\(\)\.remove_child\(this\._actions\.actor\);\n\s*\}/.test(ui),
+        /if \(this\._ext\._actions\.actor\.get_parent\(\)\) \{\n\s*this\._ext\._actions\.actor\.get_parent\(\)\.remove_child\(this\._ext\._actions\.actor\);\n\s*\}/.test(ui),
         'the panel is untracked by removeAll(): without an unconditional detach '
         + 'a stale copy would stack up on every refresh');
     record('static: the panel is destroyed in disable()',
@@ -963,15 +1070,15 @@ function testStaticChecks() {
     // The picker is a panel SUB-STATE (a row inside the PopupSubMenu), not a
     // sixth interaction field: the five-field invariant stays intact and
     // _hideActionsPanel() resets it right next to the delete arm.
-    const colorPickerBody = handlerBody('_makeColorRow() {');
-    const applyColorBody = handlerBody('_applyCategoryColor(hex) {');
+    const colorPickerBody = handlerBody('makeColorRow() {');
+    const applyColorBody = handlerBody('applyColor(hex) {');
     record('static: Change color is active and opens the picker',
-        /const colorItem = new PopupMenu\.PopupMenuItem\('Change color'\);\n\s*colorItem\.connect\('activate', \(\) => \{\n\s*this\._openColorPicker\(\);/.test(ui)
+        /const colorItem = new PopupMenu\.PopupMenuItem\('Change color'\);\n\s*colorItem\.connect\('activate', \(\) => this\.openColorPicker\(\)\)/.test(ui)
         && !/colorItem\.setSensitive\(false\)/.test(ui),
         'Faz 8 turned the placeholder entry on; the picker opens INSIDE the panel');
 
     record('static: the picker is a panel sub-state, reset with the panel',
-        /_hideActionsPanel\(\) \{\n\s*this\._resetDeleteConfirm\(\);\n\s*if \(this\._colorPickerOpen\) \{/.test(ui),
+        /hide\(\) \{\n\s*this\.resetDeleteConfirm\(\);\n\s*if \(this\._ext\._colorPickerOpen\) \{/.test(ui),
         'the picker row and the delete arm are reset in one place, so the '
         + 'five-field single-interaction invariant does not grow');
 
@@ -1055,7 +1162,7 @@ function testStaticChecks() {
         'a scheme falling back to the mid-grey fallback is only half a fix');
 
     record('static: the picker rings the colour the category actually has',
-        /_markSelectedSwatch\(\) \{[\s\S]{0,400}?Storage\.categoryColorHex\(this\._actionsCategory, colors\)/.test(ui)
+        /markSelectedSwatch\(\) \{[\s\S]{0,400}?Storage\.categoryColorHex\(\s*this\._ext\._actionsCategory, colors\)/.test(ui)
         && /button\.set_checked\(hex === current\)/.test(ui),
         'the picker must show the current colour, not just offer choices');
 
@@ -1134,7 +1241,7 @@ function testStaticChecks() {
         'ok:false means "could not read", not "the file is empty"');
 
     record('color prune: a failed read must not be treated as "no categories"',
-        /colorsAreAuthoritative\s*=\s*todo\.ok\s*&&\s*!this\._readPending/.test(ui)
+        /colorsAreAuthoritative\s*=\s*todo\.ok\s*&&\s*!this\._ext\._file\.pending/.test(ui)
         && /colorsAreAuthoritative\s*&&\s*prunedColors !== colors/.test(ui),
         'an unreadable file (editor atomic save, rename window) produced an '
         + 'empty document, which pruned every category color away for good');
@@ -2295,11 +2402,102 @@ record('teardown: ~/todo.md is untouched by the test suite',
     readTodoSync(USER_TODO).raw === USER_RAW_AT_START,
     'the file must survive the suite byte-for-byte');
 
-// ---- output --------------------------------------------------------------
-let pass = 0, fail = 0;
-for (const r of results) {
-    if (r.ok) pass++; else fail++;
-    console.log(`[${r.ok ? 'PASS' : 'FAIL'}] ${r.name}${r.detail ? ' — ' + r.detail : ''}`);
+// ---- fileSync: a read in flight must not clobber newer state -------------
+// F1 (found while reviewing 0.23.0's async read; docs/lessons.md L-062). A read
+// result is only valid if no write and no clear() happened after the read
+// started; comparing content cannot see staleness, only the generation can.
+// Phase A is deterministic: clear() is a state change, not a disk race, so the
+// in-flight result is stale with respect to it every time. Phase B is
+// adversarial: whether the read captures the bytes before the write depends on
+// scheduling, so it is a regression detector (stale in 2 of 10 rounds without
+// the guard, 0 of 40 with it), not a proof.
+function testFileSyncRace(done) {
+    const dir = GLib.dir_make_tmp('todo-fsync-XXXXXX');
+    const p1 = `${dir}/one.md`;
+    const p2 = `${dir}/two.md`;
+    const put = (p, s) => Gio.File.new_for_path(p)
+        .replace_contents(new TextEncoder().encode(s), null, false,
+            Gio.FileCreateFlags.NONE, null);
+
+    const X1 = '# T\n- [ ] one\n';
+    const C0 = '# T\n- [ ] old\n';
+    const C1 = '# T\n- [ ] old\n- [ ] NEW\n';
+
+    put(p1, X1);
+    const a = new TodoFile(() => p1);
+    let aCallback = false;
+    a.load(() => {
+        aCallback = true;
+    });                                    // read in flight
+    a.clear();                             // what a path change does to the cache
+    GLib.timeout_add(GLib.PRIORITY_DEFAULT, 60, () => {
+        record('fileSync: a read in flight cannot resurrect cleared content',
+            a.read().raw === '' && !aCallback,
+            `clear() then the in-flight read: raw=${JSON.stringify(a.read().raw)}, `
+            + `callback=${aCallback}`);
+
+        let stale = 0, round = 0;
+        const nextRound = () => {
+            if (round === 20) {
+                record('fileSync: a read in flight cannot undo a write (20 rounds)',
+                    stale === 0, `stale=${stale}/20`);
+                // Best-effort cleanup: a throw here must not eat the completion.
+                try {
+                    Gio.File.new_for_path(p1).delete(null);
+                    Gio.File.new_for_path(p2).delete(null);
+                    Gio.File.new_for_path(dir).delete(null);
+                } catch (e) {
+                    // The files may already be gone; the dir lives in the tmp dir.
+                }
+                done();
+                return;
+            }
+            round++;
+            put(p2, C0);
+            const b = new TodoFile(() => p2);
+            b.load(() => {});              // read in flight
+            b.commit(C1);                  // the write lands in the same tick
+            b.noteShown();                 // menuView calls this after a refresh
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 20, () => {
+                if (b.read().raw !== C1) {
+                    stale++;
+                }
+                nextRound();
+                return GLib.SOURCE_REMOVE;
+            });
+        };
+        nextRound();
+        return GLib.SOURCE_REMOVE;
+    });
 }
-console.log(`\nSUMMARY: ${pass} passed, ${fail} failed (out of ${results.length})`);
-console.log(`RESULT_OK=${fail === 0}`);
+
+// The async phase needs the main loop (gjs does not run it for a plain script);
+// the watchdog makes a failure in the phase a FAIL instead of a hang.
+const fsyncLoop = new GLib.MainLoop(null, false);
+let fsyncDone = false;
+const fsyncWatchdog = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 10, () => {
+    if (!fsyncDone) {
+        record('fileSync: the async phase finished', false, 'timed out after 10s');
+    }
+    fsyncLoop.quit();
+    return GLib.SOURCE_REMOVE;
+});
+testFileSyncRace(() => {
+    fsyncDone = true;
+    GLib.Source.remove(fsyncWatchdog);
+    fsyncLoop.quit();
+});
+fsyncLoop.run();
+
+report();
+
+// ---- output --------------------------------------------------------------
+function report() {
+    let pass = 0, fail = 0;
+    for (const r of results) {
+        if (r.ok) pass++; else fail++;
+        console.log(`[${r.ok ? 'PASS' : 'FAIL'}] ${r.name}${r.detail ? ' — ' + r.detail : ''}`);
+    }
+    console.log(`\nSUMMARY: ${pass} passed, ${fail} failed (out of ${results.length})`);
+    console.log(`RESULT_OK=${fail === 0}`);
+}

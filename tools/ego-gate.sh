@@ -30,6 +30,8 @@ VERSION=$(read_meta version-name)
 ALLOWLIST="EGO-M-004"
 
 if [ "${1:-}" = "--install" ]; then
+    # A half-created venv makes `venv --clear` fail on its own lib64 symlink.
+    rm -rf /tmp/shexli-gate
     python3 -m venv /tmp/shexli-gate
     /tmp/shexli-gate/bin/pip install --quiet 'shexli' 'tree-sitter==0.25.0'
     SX=/tmp/shexli-gate/bin/shexli
