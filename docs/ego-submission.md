@@ -15,6 +15,16 @@ the reviewer is asked on the review pages to look at this one instead:
 > the previous upload was rejected on, plus the fixes listed below. The notes on
 > this upload describe what changed.
 
+**Uploaded: 2026-11-15** (user) → review page
+**`https://extensions.gnome.org/review/78478`** (extension ID **11199**), version
+**0.23.0 (4)**, status **`Unreviewed`**. That page's "Diff Against" list offers
+`0.22.2 (3)`, `0.20.1 (2)` and `0.15.0 (1)` — all three `Rejected`; there are **no
+comments** from the reviewer yet. EGO's own "Shexli (experimental)" panel for this
+upload reports **"Shexli did not find any issues."** → **0 findings**, so the exit
+criterion is met (`L-060`). The local tool's `EGO-M-004` does **not** appear on the
+panel (independent confirmation of the allowlist decision). The extension is not
+listed to users yet — it awaits review.
+
 **Rejected: 0.22.2** (uploaded 2026-10-23, **rejected 2026-11-06**) — the
 reviewer never read the code ("Didn't review. Shexli issues need to be addressed
 first."). The rejection was the three Shexli gate findings (`EGO-X-004`
@@ -374,16 +384,24 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 - [x] Screenshot: `docs/screenshots/todo-md-0.23.0.png` present (renamed from the
       0.20.3 capture on 2026-11-15) and referenced by the README
       (`![…](docs/screenshots/todo-md-0.23.0.png)`) — 0.23.0 has no UI change
-- [ ] Zip verified byte-identical to the published release asset
-      (`releases/download/v0.23.0/…-0.23.0.zip`) — still open: no `v0.23.0` tag /
-      GitHub release exists yet (the release is produced by CI on tag push)
-- [ ] Uploaded to extensions.gnome.org (0.23.0, user) → new review page
-- [ ] **EXIT CRITERION (added 2026-11-08, after the rejection): the review page's
+- [x] Zip checked against the published release asset
+      (`releases/download/v0.23.0/…-0.23.0.zip`, md5
+      `b30fa1a441ec97fdb8686ee90e69a809`): the uploaded file is the **local build**
+      (`md5 1a8da8a03f463fec59bc0fc33e6ae25c`), **content-identical but NOT
+      byte-identical** — all 16 zip entries share the same CRC32 and every
+      extracted file's md5 matches; the only difference is the zip **entry
+      timestamps** (CI checkout mtimes). Byte-identity was never the right
+      invariant here; content-identity is what "the release users download equals
+      the upload" actually means
+- [x] Uploaded to extensions.gnome.org (2026-11-15, user) → review page
+      **`/review/78478`** (extension ID **11199**), version **0.23.0 (4)**,
+      status **`Unreviewed`**
+- [x] **EXIT CRITERION (added 2026-11-08, after the rejection): the review page's
       Shexli panel must show ZERO findings before an upload is considered done.**
       "warnings, no error" is not a pass — the reviewer reads the panel, not the
       notes, and rejected the 0.22.2 upload on exactly those three warnings. The
       local tool's `EGO-M-004` is not the criterion (EGO's build knows GNOME 51 and
-      does not show it); the panel is. Check the panel on the new review page after
-      the upload.
+      does not show it); the panel is. **MET (2026-11-15):** the panel on
+      `/review/78478` reads **"Shexli did not find any issues."** → **0 findings**.
 - Form fields: Name `Todo MD` · URL `https://github.com/ErtugrulSefaL/gnome-todo-md`
   · version auto-detected from the zip
