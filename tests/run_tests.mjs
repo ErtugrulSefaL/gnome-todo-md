@@ -485,9 +485,17 @@ function testStaticChecks() {
         all, /key::(release|press)/, 'GObject signals use dashes: key-release-event');
     noMatch('static: no legacy imports.* API',
         all, /\bimports\./, 'GNOME 45+ is ESM; imports.* is removed in Shell');
+    const actorAddSources = uiSources.map(source => {
+        const sets = source.matchAll(/\bconst ([A-Za-z_]\w*)\s*=\s*new Set\(/g);
+        let guarded = source.replaceAll('Main.messageTray.add(', '');
+        for (const [, name] of sets) {
+            guarded = guarded.replace(new RegExp(`(?<![\\w.$])${name}\\.add\\(`, 'g'), '');
+        }
+        return guarded;
+    });
     noMatch('static: no legacy .add( child call in the Shell-side UI',
-        ui.replaceAll('Main.messageTray.add(', ''), /\.add\(/,
-        'use add_child() on Clutter/St actors; the Shell message tray uses add()');
+        actorAddSources.join('\n'), /\.add\(/,
+        'use add_child() on Clutter/St actors; Set and the Shell message tray use add()');
 
     // Faz 2 step 3: the write path must stay atomic (temp + rename) — the
     // ONLY permitted write mechanism is Gio.File.replace_contents.

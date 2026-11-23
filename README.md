@@ -86,6 +86,9 @@ the coverage recorded for 0.23.0. Written in JavaScript (ESModules, GJS).
 - **Task tags (v0.25.0)**. Edit start dates, deadlines with optional times,
   reminder rules and recurring schedules in the task editor. Toggle the star
   on the second line of a task.
+- **Reminder delivery (v0.26.0)**. Renaming a task preserves its delivery
+  history, and the next reminder uses the new title. Simultaneous and missed
+  occurrences are combined into one notification per task.
 - Completed tasks get a strikethrough and faded text
 - **Live reload**: edits made outside the Shell (vim, atomic writes, anything)
   are picked up instantly
@@ -130,7 +133,8 @@ in another terminal shows why.
 Run the same command again — it ends with `Todo MD installed.` when it worked.
 `--force` replaces the installed copy (without it the installer refuses to touch
 an existing extension), and your settings and `~/todo.md` are untouched. Log out
-and back in afterwards.
+and back in afterwards. Starting with v0.26.0, Todo MD assigns
+[reminder identities](#reminder-identity) when it reads a writable task file.
 
 ### From source, one line (needs `git` and `zip`)
 
@@ -205,6 +209,16 @@ gnome-extensions prefs todo-md@ertugrulsefal.github.com
 Anything that is not a `##` heading or a checkbox line (notes, blank lines,
 plain list items, other markers) is preserved verbatim on every rewrite — the
 file stays hand-editable.
+
+### Reminder identity
+
+Todo MD adds an `@notifyid(...)` tag to tasks with a valid reminder rule when
+their Markdown file is writable.
+Keep that tag when renaming a task in an external editor. Each task has its own
+delivery history, including tasks with identical titles and rules. On upgrade
+from v0.25.0, Todo MD carries over delivery records that still match the task's
+title and rule. Tasks in a read-only file keep using the earlier delivery
+identity until Todo MD can write the tag.
 
 ### Deliberate normalizations
 

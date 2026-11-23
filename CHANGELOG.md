@@ -4,6 +4,17 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0). A version is assigned
 when a work unit is completed and approved.
 
+## 0.26.0 - 2026-11-23
+
+### Fixed
+
+- Keep reminder delivery history when a task title changes. The next scheduled
+  reminder uses the updated title, and tasks with identical titles and rules
+  keep separate delivery histories.
+- Add a persistent `@notifyid(...)` tag to tasks with reminders and migrate
+  matching v0.25.0 delivery records. An interrupted migration resumes when
+  Todo MD next reads the file.
+
 ## 0.25.0 - 2026-11-23
 
 ### Added

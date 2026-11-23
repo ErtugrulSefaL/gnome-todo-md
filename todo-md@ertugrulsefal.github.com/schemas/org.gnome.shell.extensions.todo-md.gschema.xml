@@ -45,7 +45,7 @@
       <default>@a{ss} {}</default>
       <summary>Last handled reminder occurrences</summary>
       <description>
-        Maps hashed reminder identities to occurrence timestamps in milliseconds
+        Stores reminder occurrence timestamps and pending task ID migrations
         so reminders already handled do not repeat after signing back in.
       </description>
     </key>

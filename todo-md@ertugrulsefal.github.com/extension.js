@@ -24,7 +24,7 @@ export default class TodoExtension extends Extension {
         this._notifications = new NotificationScheduler(this._settings);
         this._file = new TodoFile(
             () => this._settings.get_string('todo-file-path'),
-            (snapshot, path) => this._notifications.refresh(snapshot, path));
+            (snapshot, path) => this._refreshNotifications(snapshot, path));
         this._tasks = new TaskActions(this);
         this._panel = new CategoryPanel(this);
         this._dnd = new DragDrop(this);
@@ -273,11 +273,21 @@ export default class TodoExtension extends Extension {
             if (!this._indicator) {
                 return;
             }
-            this._notifications.refresh(snapshot, path);
+            this._refreshNotifications(snapshot, path);
             if (closeInteractions) {
                 this._closeInteractions();
             }
             this._menu.refreshTodoMenu();
+        });
+    }
+
+    _refreshNotifications(snapshot, path) {
+        this._notifications.refresh(snapshot, path, raw => {
+            const result = this._file.commitDraft(raw, snapshot, {notify: false});
+            if (result === 'conflict') {
+                this._loadTodo();
+            }
+            return result;
         });
     }
 

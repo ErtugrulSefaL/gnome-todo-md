@@ -628,6 +628,15 @@ export function getTaskTagValues(raw, key) {
     return taskTagSpans(raw).filter(tag => tag.key === key).map(tag => tag.value);
 }
 
+export const REMINDER_ID_TAG = 'notifyid';
+
+export function getReminderTaskId(raw) {
+    const ids = getTaskTagValues(raw, REMINDER_ID_TAG);
+    return ids.length === 1 &&
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(ids[0])
+        ? ids[0] : null;
+}
+
 export function mapTaskTagValues(raw, key, update) {
     let next = raw;
     for (const tag of taskTagSpans(raw).reverse()) {
@@ -765,21 +774,27 @@ export function updateTaskDueText(text, date, options) {
 
 // expectedRaw is the task text from the displayed snapshot.
 export function replaceTaskText(content, index, expectedRaw, nextRaw) {
-    if (!Number.isInteger(index) || typeof expectedRaw !== 'string' || typeof nextRaw !== 'string') {
-        return content;
-    }
+    return replaceTaskTexts(content, [{index, expectedRaw, nextRaw}]);
+}
+
+export function replaceTaskTexts(content, changes) {
     const lines = content.split('\n');
-    const line = lines[index];
-    if (line === undefined) {
-        return content;
+    for (const {index, expectedRaw, nextRaw} of changes) {
+        if (!Number.isInteger(index) || typeof expectedRaw !== 'string' || typeof nextRaw !== 'string') {
+            return content;
+        }
+        const line = lines[index];
+        if (line === undefined) {
+            return content;
+        }
+        const cr = line.endsWith('\r') ? '\r' : '';
+        const match = (cr ? line.slice(0, -1) : line)
+            .match(/^(\s*-\s+\[[ xX]\]\s+)(.*)$/);
+        if (!match || match[2] !== expectedRaw) {
+            return content;
+        }
+        lines[index] = match[1] + normalizeTaskText(nextRaw) + cr;
     }
-    const cr = line.endsWith('\r') ? '\r' : '';
-    const match = (cr ? line.slice(0, -1) : line)
-        .match(/^(\s*-\s+\[[ xX]\]\s+)(.*)$/);
-    if (!match || match[2] !== expectedRaw) {
-        return content;
-    }
-    lines[index] = match[1] + normalizeTaskText(nextRaw) + cr;
     return lines.join('\n');
 }
 

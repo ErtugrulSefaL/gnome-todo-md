@@ -39,6 +39,10 @@ function write(text) {
         new TextEncoder().encode(text), null, false, Gio.FileCreateFlags.NONE, null);
 }
 
+function reminderIds(raw) {
+    return raw.match(/ @notifyid\([0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}\)/g) ?? [];
+}
+
 function actors(root) {
     return [root, ...root.get_children().flatMap(actors)];
 }
@@ -168,6 +172,10 @@ async function testEditors(ext, keyboard) {
     write(fixture);
     await until(() => row(ext, 2) && labels(row(ext, 2)).includes('Reminders'),
         'The monitor did not rebuild the list after replacing the fixture');
+    const reminderDraft = read();
+    const [identity] = reminderIds(reminderDraft);
+    assert(identity && reminderDraft.replace(identity, '') === fixture,
+        'Assigning the reminder identity changed authored Markdown');
     button(row(ext, 2), /^Edit reminder/).emit('clicked', 1);
     const entries = actors(content).filter(actor => actor.accessible_name === 'Reminder rule');
     assert(entries.length === 2, 'The two notification rules did not get separate controls');
@@ -176,12 +184,12 @@ async function testEditors(ext, keyboard) {
     entries[1].set_text('before=due,offset=5h & before=due,offset=6h');
     entries[1].grab_key_focus();
     await press(keyboard, Clutter.KEY_Return);
-    assert(read() === fixture && labels(content).includes('Use Add reminder rule'),
+    assert(read() === reminderDraft && labels(content).includes('Use Add reminder rule'),
         'One rule field silently accepted two pasted rules');
     entries[1].set_text('before=due,offset=6h');
     entries[1].grab_key_focus();
     await press(keyboard, Clutter.KEY_Return);
-    assert(read() === fixture.replace('offset=5h', 'offset=6h'),
+    assert(read() === reminderDraft.replace('offset=5h', 'offset=6h'),
         'Editing one notification rule altered other rules or tags');
     button(row(ext, 2), 'Edit task').emit('clicked', 1);
     const rawEntry = button(content, 'Task text');
@@ -249,6 +257,19 @@ async function testNotifications(ext, manager) {
     assert(scheduler._timer > 0, 'No timer for a future reminder');
     check('real Shell catch-up notification, coalescing, completed and future task suppression');
 
+    const identified = read();
+    const taskIds = reminderIds(identified);
+    assert(taskIds.length === 3 && new Set(taskIds).size === 3 &&
+        taskIds.reduce((raw, id) => raw.replace(id, ''), identified) === fixture,
+    'Identities were missing, shared, or altered authored Markdown');
+    const renamed = identified.replace('Missed @due(', 'Renamed @due(');
+    write(renamed);
+    await until(() => ext._file.read().raw === renamed && !ext._file.pending,
+        'The monitor did not read the title-only edit');
+    assert(source.count === 1 && source.notifications[0].body === 'Missed',
+        'A title-only edit replayed a delivered reminder');
+    check('title-only Markdown edit preserves the delivery identity');
+
     for (let index = 0; index < 2; index++) {
         const oldFile = ext._file;
         const oldScheduler = ext._notifications;
@@ -262,7 +283,7 @@ async function testNotifications(ext, manager) {
         assert(!oldScheduler._timer && !oldScheduler._source && !Main.messageTray.getSources().includes(source),
             'Disable retained a timer or Shell notification source');
         assert(manager.enableExtension(UUID), 'The isolated extension failed to re-enable');
-        await until(() => ext._indicator && ext._file.read().raw === fixture,
+        await until(() => ext._indicator && ext._file.read().raw === renamed,
             'The re-enabled extension failed to read its fixture');
         assert(!ext._notifications._source, 'Re-enable replayed an already delivered reminder');
     }

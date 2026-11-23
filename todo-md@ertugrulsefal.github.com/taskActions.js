@@ -90,6 +90,13 @@ export class TaskActions {
             }
             raw = next;
         }
+        const reminderId = Storage.getReminderTaskId(task.raw);
+        if (reminderId && !Storage.getTaskTagValues(raw, Storage.REMINDER_ID_TAG).length) {
+            raw = Storage.updateTaskTagText(raw, Storage.REMINDER_ID_TAG, reminderId);
+            if (raw === null) {
+                return 'The edit would invalidate the task reminder ID.';
+            }
+        }
         const updated = Storage.replaceTaskText(snapshot.raw, task.index, task.raw, raw);
         const error = draftWriteError(this._ext._file.commitDraft(updated, snapshot));
         if (error) {

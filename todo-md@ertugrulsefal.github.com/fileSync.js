@@ -56,7 +56,7 @@ export class TodoFile {
         return this._replace(updated, null) === 'saved';
     }
 
-    commitDraft(updated, snapshot) {
+    commitDraft(updated, snapshot, {notify = true} = {}) {
         if (snapshot.epoch !== this._epoch || snapshot.raw !== this._raw ||
             snapshot.ok !== this._readOk) {
             return 'conflict';
@@ -72,10 +72,10 @@ export class TodoFile {
         }
         // Local Gio replacement creates a missing file and checks the ETag if it exists.
         const etag = this._missing ? 'todo-md-missing-file' : this._etag;
-        return this._replace(updated, etag);
+        return this._replace(updated, etag, notify);
     }
 
-    _replace(updated, etag) {
+    _replace(updated, etag, notify = true) {
         const path = this._resolved();
         const result = Storage.replaceTodo(path, updated, etag);
         if (!result.ok) {
@@ -86,7 +86,9 @@ export class TodoFile {
         this._cancelRead();
         this._missing = false;
         this._etag = result.etag;
-        this._onCommitted?.(this.read(), path);
+        if (notify) {
+            this._onCommitted?.(this.read(), path);
+        }
         return 'saved';
     }
 
