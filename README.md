@@ -7,12 +7,13 @@ editor, on any device.
 
 ![Todo MD in the GNOME Shell panel menu](docs/screenshots/todo-md-0.23.0.png)
 
-Compatible with GNOME Shell 46, 47, 48, 49, 50 and 51 — each release was verified
-by the same manual regression run (Ubuntu 24.04, 24.10, 25.04, 25.10, 26.04 and
-26.10), on Wayland. Written in JavaScript (ESModules, GJS).
+Supports GNOME Shell 46 through 51 on Wayland. See the
+[release verification notes](docs/ego-submission.md#release-verification) for
+the coverage recorded for 0.23.0. Written in JavaScript (ESModules, GJS).
 
-> **Status:** Todo MD is in review on extensions.gnome.org. Until it is published
-> there, GitHub is the only install and update path — see [Install](#install).
+> **Status (2026-11-15):** The 0.23.0 upload was awaiting review on
+> extensions.gnome.org. You can install and update from GitHub Releases. See
+> [Install](#install).
 
 ## Why Todo MD?
 
@@ -82,15 +83,17 @@ by the same manual regression run (Ubuntu 24.04, 24.10, 25.04, 25.10, 26.04 and
 - **Fixed menu width**: the frame never widens or shrinks with the content; long
   texts truncate with an ellipsis
 - Inline editing (Enter saves), delete, check/uncheck by clicking the row
+- **Task tags (v0.25.0)**. Edit start dates, deadlines with optional times,
+  reminder rules and recurring schedules in the task editor. Toggle the star
+  on the second line of a task.
 - Completed tasks get a strikethrough and faded text
 - **Live reload**: edits made outside the Shell (vim, atomic writes, anything)
   are picked up instantly
 
 ## Install
 
-Todo MD is under review on extensions.gnome.org, so GitHub is currently the only
-install and update path. One command is enough — nothing to build, nothing to
-hunt for.
+Install the prebuilt ZIP from GitHub Releases. The command below downloads and
+installs it.
 
 ### Install
 
@@ -155,14 +158,13 @@ gnome-extensions install --force ~/Downloads/todo-md.zip && echo "Todo MD instal
   through `~/.cache` first and then moves the result into `~/.local/share`,
   which fails when those two are on different filesystems (known Shell
   behaviour, [issue #2821](https://gitlab.gnome.org/GNOME/gnome-shell/-/issues/2821)).
-  Unpack straight into the extension directory instead — the last line only
-  needs to run once, because a reload keeps the compiled schema:
+  Unpack straight into the extension directory and compile the installed schema:
 
   ```bash
   DEST=~/.local/share/gnome-shell/extensions/todo-md@ertugrulsefal.github.com
   mkdir -p "$DEST"
   unzip -o /tmp/todo-md.zip -d "$DEST"
-  glib-compile-schemas "$DEST/schemas"
+  glib-compile-schemas --strict "$DEST/schemas"
   ```
 
 > [!NOTE]
@@ -228,36 +230,47 @@ temp file + rename), and the `Gio.FileMonitor` on the file recognises the
 extension's own writes so they do not trigger a second rebuild.
 
 Like most panel extensions, Todo MD builds on GNOME Shell's internal JavaScript
-modules (panel menu, popup menu, drag-and-drop) and on St/Clutter. Those are not
-a stable public API, which is why `shell-version` lists only the releases this
-code has actually been regression-tested on.
+modules (panel menu, popup menu, drag-and-drop) and on St/Clutter. These APIs may
+change across Shell releases, so compatibility checks are part of release
+verification.
 
 ## Development
 
 ```bash
-# storage logic — no GNOME Shell needed
+# Automated checks (GJS, no running GNOME Shell needed)
 gjs -m tests/run_tests.mjs
 
-# extension state check (after a UI change and a Shell restart)
+# Extension state check (after logging out and back in to load a UI change)
 ./tests/smoke.sh
 ```
 
-The test suite exercises `storage.js` against a temporary file; it reads your
-`~/todo.md` once at startup and once at teardown to prove the run left it
-untouched, and never writes it. CI runs the same suite (plus a strict
-`glib-compile-schemas` and `node --check` on every module) on every push.
+The suite covers document logic, file synchronization, compatibility helpers
+and static source checks. It writes fixtures in a temporary directory and reads
+`~/todo.md` at startup and teardown for an integrity comparison. Look for
+`RESULT_OK=true`. CI also checks the schema and each module's syntax, then runs
+the Shexli gate on the package.
 
-All state-changing logic lives in `storage.js` as pure functions returning the
-new document text, which is what the unit tests cover. Layout and interaction
-(`extension.js`, `rowFactory.js`, `tabBar.js`, `menuView.js`, `categoryPanel.js`,
-`taskActions.js`, `dragDrop.js`, `prefs.js`) is verified by hand —
-see the manual checklists in the repository.
+The smoke check should print `OK` with `ACTIVE`. For a locked-session `SKIP`,
+unlock and rerun it. If `gnome-extensions` is unavailable, use a GNOME session
+with the command installed. The maintainer verifies layout and interaction
+manually.
+
+For a development install symlinked to this checkout, run
+`glib-compile-schemas --strict todo-md@ertugrulsefal.github.com/schemas/`
+after a schema change, then log out and back in to load it on GNOME 50.
+
+For the targeted headless Wayland test on GNOME 50.1, build the package with
+`bash tools/make-package.sh` and pass its ZIP path to
+`bash tests/shell-tags.sh`. The script starts a Shell with an isolated home
+directory and settings.
 
 ## Planned
 
-- [ ] Tags in the UI (add and remove `@key(value)` without editing the task text)
-- [ ] Date tags (`@due`, `@start`) with badges, and reminders built on them
-- [ ] Notifications and archiving
+- [ ] Notification follow-up
+- [ ] Task views
+- [ ] Interface and usability improvements
+- [ ] Keyboard shortcut
+- [ ] Desktop widget
 
 ## File layout
 
@@ -277,8 +290,9 @@ see the manual checklists in the repository.
 | `todo-md@ertugrulsefal.github.com/stylesheet.css` | Menu styling |
 | `todo-md@ertugrulsefal.github.com/metadata.json` | Extension metadata (shell-version 46–51) |
 | `todo-md@ertugrulsefal.github.com/schemas/` | GSettings schema |
-| `tests/run_tests.mjs` | Unit/integration tests for `storage.js` (run with `gjs`) |
-| `tests/smoke.sh` | Check the extension is `State: ACTIVE` |
+| `tests/run_tests.mjs` | GJS unit, integration and static checks |
+| `tests/smoke.sh` | Check the extension state in the running Shell |
+| `tests/shell-tags.sh` | Run packaged tag and reminder checks in a headless Wayland Shell |
 | `tools/make-package.sh` | Build the installable zip |
 | `tools/shell-api.sh` | Probe the installed Shell for every API the extension uses |
 | `docs/screenshots/` | Screenshots, named after the version they show |

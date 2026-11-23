@@ -1,8 +1,8 @@
 # Changelog
 
 All notable changes to the Todo extension are documented in this file.
-The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
-assigned only when a phase is completed and approved (see `AGENTS.md`).
+The project uses Semantic Versioning (0.y.z until 1.0.0). A version is assigned
+when a work unit is completed and approved.
 
 ## 0.25.0 - 2026-11-23
 
@@ -163,9 +163,10 @@ assigned only when a phase is completed and approved (see `AGENTS.md`).
   addressed first." The three findings on the review page's Shexli panel
   (`EGO-X-004` synchronous read, `EGO-L-002` six actors, `EGO-L-003` one signal) are
   closed by this release; the analyzer's output is now empty outside the allowlist.
-- No EGO upload for this version (user decision, 2026-11-14); the release is the
-  GitHub zip only.
-- 279 unit tests; `tests/smoke.sh` and `tools/ego-gate.sh` green on GNOME 50.1.
+- Uploaded to EGO on 2026-11-15. The review page showed `Unreviewed` and zero
+  Shexli findings that day. The installable zip is available from GitHub Releases.
+- The final recorded run passed 284 automated checks. The host smoke check
+  reported `ACTIVE`, and the packaged release passed the local Shexli gate.
 
 ## 0.22.2 - 2026-10-23
 

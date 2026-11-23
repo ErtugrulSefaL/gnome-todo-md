@@ -3,34 +3,28 @@
 Notes for the "Comments for reviewer" field on extensions.gnome.org. Update the
 version line before each upload.
 
-**Current upload: 0.23.0** (upload prepared 2026-11-15, user decision) — it closes
-the three Shexli findings the previous upload was rejected on, and carries
-drag-and-drop for tasks and categories, GNOME 46–51 support and every fix from
-the 0.15.0 review window, plus this release's own fixes. It supersedes the
-review is allowed (GNOME extensions maintainer, discourse.gnome.org/t/9205), and
-the reviewer is asked on the review pages to look at this one instead:
+**Upload 0.23.0** closes the three Shexli findings that blocked 0.22.2. It
+includes drag-and-drop for tasks and categories, GNOME 46–51 support, and the
+fixes made since the 0.15.0 review window.
 
-> Version 0.23.0 supersedes 0.22.2 (rejected) and the still-pending 0.15.0 and
-> 0.20.1 — please review this one instead. It closes the three Shexli findings
-> the previous upload was rejected on, plus the fixes listed below. The notes on
-> this upload describe what changed.
+> Please review 0.23.0, which supersedes the rejected 0.22.2, 0.20.1 and 0.15.0
+> uploads. This upload resolves the three Shexli findings from 0.22.2. The notes
+> below describe the fixes.
 
 **Uploaded: 2026-11-15** (user) → review page
 **`https://extensions.gnome.org/review/78478`** (extension ID **11199**), version
-**0.23.0 (4)**, status **`Unreviewed`**. That page's "Diff Against" list offers
-`0.22.2 (3)`, `0.20.1 (2)` and `0.15.0 (1)` — all three `Rejected`; there are **no
-comments** from the reviewer yet. EGO's own "Shexli (experimental)" panel for this
-upload reports **"Shexli did not find any issues."** → **0 findings**, so the exit
-criterion is met (`L-060`). The local tool's `EGO-M-004` does **not** appear on the
-panel (independent confirmation of the allowlist decision). The extension is not
-listed to users yet — it awaits review.
+**0.23.0 (4)**. The status on the upload date was **`Unreviewed`**, with no
+reviewer comments. The page's "Diff Against" list showed `0.22.2 (3)`, `0.20.1 (2)`
+and `0.15.0 (1)` as `Rejected`. EGO's own Shexli panel reported **0 findings**,
+meeting the upload criterion and confirming that `EGO-M-004` was local to the
+packaging check. The extension had no approved listing at the time.
 
 **Rejected: 0.22.2** (uploaded 2026-10-23, **rejected 2026-11-06**) — the
 reviewer never read the code ("Didn't review. Shexli issues need to be addressed
 first."). The rejection was the three Shexli gate findings (`EGO-X-004`
 synchronous read, `EGO-L-002` six actors, `EGO-L-003` one signal); all three are
 closed in 0.23.0 (see the notes below). **Exit criterion: the review page's
-Shexli panel must show 0 findings** (`L-060`).
+Shexli panel must show 0 findings**.
 
 > The reviewer notes below are the 0.23.0 notes; the gate measurements are the
 > 2026-11-15 run on `dist/todo-md@ertugrulsefal.github.com-0.23.0.zip`.
@@ -92,22 +86,15 @@ genuine defect of the three. `storage.js` now reads the file with
 synchronous, and the first open shows a placeholder row while the read is in
 flight. No call whose name ends in `load_contents`/`load_bytes` ships any more,
 so the finding is gone. The write path (`replace_contents`, atomic temp-file +
-rename) is synchronous by design and is flagged by neither analyzer. Context:
-`.goose/audits/2026-11-08-ego-rejection.md`.
+rename) is synchronous by design and is flagged by neither analyzer. Context: that analysis is an internal log and is not part of this repository.
 
 **Shell internals (`Main.panel.addToStatusArea`, popup menu, drag-and-drop):**
 The standard indicator pattern from the gjs.guide "Getting Started" guide, plus
 the Shell's own popup-menu and drag-and-drop modules. They live in GNOME Shell's
-JS internals with no stability guarantee, so `shell-version` declares only the
-versions this code has been regression-tested on: `["46", "47", "48", "49",
-"50", "51"]`. The API probe plus the same manual regression checklist were run
-per environment: Ubuntu 24.04 (GNOME 46), 24.10 (47), 25.04 (48), 25.10 (49),
-26.04 (50, host) and 26.10 (51). The 0.23.0 run re-verified the asynchronous read
-path on the host (GNOME 50) and in the 46, 47 and 51 VMs; 48 and 49 carry over
-from the 0.22.0/0.22.2 rounds (same code). The checklist has 20 checks since
-0.23.0 (0.22.1 had added the empty-todo-file case, for 19, and 0.23.0 added a
-disable → enable cycle, run twice). A static guard pins the exact shell-version
-list, so adding a version is always a deliberate act that follows a test.
+JS internals with no stability guarantee. The 0.23.0 package declares GNOME
+Shell 46 through 51. A static guard pins the declared list. The
+[release verification record](#release-verification) details the evidence by
+Shell version.
 
 **Lifecycle (Shexli EGO-L-002 / EGO-L-003) — closed in 0.23.0:** the analyzer
 matches create→destroy by resource name within a scope and cannot trace
@@ -118,8 +105,7 @@ argued against. `disable()` unrolls the destroy loop into named
 and `_dragHint` (children before their owners), and `TabBar` owns its `+` button's
 `clicked` signal — its constructor takes `{onNewCategory}`, so the object that
 creates the button owns the handler and the button (with its signal) dies with
-the tab bar when `disable()` destroys it. Both findings are gone. Context:
-`.goose/audits/2026-11-08-ego-rejection.md`.
+the tab bar when `disable()` destroys it. Both findings are gone. Context: that analysis is an internal log and is not part of this repository.
 
 **Other fixes in 0.23.0:**
 - **The empty-state row works on GNOME 46 and 47 again.** `menuView.js` passed
@@ -148,21 +134,26 @@ Shell's own checkable-menu-item a11y pattern (`Atk.Role.CHECK_MENU_ITEM`, a
 `label_actor`, and a `CHECKED` state when on), icon-only buttons carry accessible
 names, and the manual regression checklist includes an Orca pass.
 
-**Testing:** GNOME Shell 46 (Wayland and X11), 47, 48, 49 and 50 on Ubuntu
-24.04, 24.10, 25.04, 25.10 and 26.04, and GNOME Shell 51 on Ubuntu 26.10. 284
-unit tests cover the storage layer
-(pure string-in/string-out functions, byte-identical round-trip) and the static
-guards; the UI layer
-was verified manually in every one of those shells against the same written
-regression checklist (20 checks since 0.23.0), which includes an Orca
-accessibility pass. The 0.23.0 run covered the host (GNOME 50) and the 46, 47 and
-51 VMs; 48 and 49 carry over from the 0.22.0/0.22.2 rounds (same code).
-Drag-and-drop was additionally verified in the GNOME 46 (X11), 47 and 48 VMs.
+### Release verification
 
-**Static analysis (2026-11-15 run on the 0.23.0 zip):** ego-lint reports **0
-failed** — 214 passed, 56 warnings, 10 skipped (280 checks); every warning is
-advisory and explained in the repository. Three of them are new in 0.23.0 and
-follow directly from the Shexli fixes: `async/no-cancellable` +
+The final recorded 0.23.0 run passed 284 automated checks covering document
+logic, file synchronization, compatibility helpers and static guards. The API
+probe reported 59/59 on the GNOME 50 host and the GNOME 46, 47 and 51 VMs.
+
+| GNOME Shell | Recorded manual coverage |
+| --- | --- |
+| 46 and 47 | Short 0.23.0 VM runs. The GNOME 46 record includes the empty-file case. |
+| 48 and 49 | Earlier Wayland runs. The 0.23.0 journal carries forward those results. |
+| 50 | 0.23.0 host run before the final empty-state compatibility adjustment. One disable → enable cycle on that revision. An earlier 0.23.0 preparation run recorded two cycles. |
+| 51 | Full 0.23.0 checklist in the Ubuntu 26.10 VM. |
+
+The current checklist has 20 items. It includes an Orca accessibility check
+and calls for two disable → enable cycles. Earlier drag-and-drop runs also
+covered GNOME 46 on X11 and GNOME 47 and 48.
+
+**Static analysis (2026-11-15 run on the 0.23.0 zip):** ego-lint reported **0
+failed**, 214 passed, 56 warnings, and 10 skipped (280 checks). Warnings
+associated with the changes for Shexli include `async/no-cancellable` and
 `async/missing-cancellable` (the asynchronous read has no `Gio.Cancellable`),
 `quality/constructor-resources` ×2 (`TabBar` connects in its constructor — the
 shape that clears `EGO-L-003`), and `quality/redundant-cleanup` (the explicit
@@ -305,7 +296,7 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
   `todo-md-0.23.0.png`) and the README/EGO reference is updated; the old name does
   not stay behind. Rationale: the README and the EGO upload should point at the
   version being shipped. The cost is that the earlier references to the old name
-  in the historical records (`docs/roadmap.md` §C "Public yüzey", `.goose/handoff.md`)
+  in the maintainer's internal notes
   keep the old path.
 
 ### Candidates that were evaluated (2026-10-11, kept for the record)
@@ -329,7 +320,7 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
 - [x] ego-lint on the extracted zip: 0 failed (252 checks, 213 passed, 29 warnings)
 - [x] Shexli on the zip: **1 error + 3 warnings on 0.22.2** (`pip install shexli
       'tree-sitter==0.25.0'` — 0.26 segfaults; verify with a broken fixture first,
-      the tool is version-gated and fails silently — see docs/verified-apis.md).
+      the tool is version-gated and fails silently).
       The error is `EGO-M-004` on `shell-version` containing `"51"` and is the
       analyzer's version table (stops at 50), not the package — 0.20.3 and
       0.21.0 produced 0 errors / 3 warnings with the same code paths
@@ -376,7 +367,7 @@ Tool: `tools/ego-screenshot.sh [out.png] [WxH+X+Y]` (crop uses ImageMagick).
       skipped (280 checks); every warning is advisory (see the notes above)
 - [x] Shexli on the zip: **1 finding — `EGO-M-004` only, 0 warnings** (`shexli
       0.2.1`, `tree-sitter==0.25.0` — 0.26 segfaults; verify with a broken fixture
-      first, the tool is version-gated and fails silently — see docs/verified-apis.md).
+      first, the tool is version-gated and fails silently).
       `EGO-M-004` is the analyzer's own version table (stops at GNOME 50), not the
       package, and is the documented allowlist entry
 - [x] `metadata.json` version-name matches the CHANGELOG release (0.23.0)

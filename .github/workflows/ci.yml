@@ -48,7 +48,7 @@ jobs:
       # issues need to be addressed first." A finding on the review page's
       # Shexli panel stops the review, so the analyzer must be clean on the
       # built zip. The only allowed finding is EGO-M-004 (a shexli 0.2.1
-      # metadata-table false positive; see docs/roadmap.md).
+      # metadata-table false positive; see docs/ego-submission.md).
       - name: EGO gate (Shexli)
         run: bash tools/ego-gate.sh --install
 
