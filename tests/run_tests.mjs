@@ -173,6 +173,13 @@ function testEditTask() {
     record('editTask: incomplete task text updated',
         openEdit === '# H\n- [ ] a2\n', JSON.stringify(openEdit));
 
+    const multilineEdit = Storage.editTask('# H\r\n- [x] b\r\n- [ ] c\r\n', 1,
+        'edited\r\n## Other\n- [ ] extra\rnote\u2028one\u2029two @due(mon)');
+    record('editTask: collapses line separators in task text and keeps CRLF',
+        multilineEdit === '# H\r\n- [x] edited ## Other - [ ] extra note one two @due(mon)\r\n'
+            + '- [ ] c\r\n',
+        JSON.stringify(multilineEdit));
+
     const nonCheck = Storage.editTask(base, 0, 'renamed heading');
     record('editTask: non-checkbox line replaced as plain text',
         nonCheck === 'renamed heading\n- [ ] a\n- [x] b\n', JSON.stringify(nonCheck));
@@ -194,6 +201,13 @@ function testAddTask() {
     record('addTask: empty file starts clean under # TODO + ## General',
         Storage.addTask('', 'first') === '# TODO\n## General\n- [ ] first\n',
         JSON.stringify(Storage.addTask('', 'first')));
+
+    const multilineAdd = Storage.addTask('# TODO\r\n## Cat\r\n- [x] keep\r\n',
+        'new\n- [ ] extra\r\n\r\n## Other\rnote\u2028one\u2029two @due(mon)', 'Cat');
+    record('addTask: collapses line separators in task text and keeps CRLF',
+        multilineAdd === '# TODO\r\n## Cat\r\n- [x] keep\r\n'
+            + '- [ ] new - [ ] extra ## Other note one two @due(mon)\r\n',
+        JSON.stringify(multilineAdd));
 
     record('addTask: missing trailing newline is normalized',
         Storage.addTask('- [ ] a', 'b') === '# TODO\n## General\n- [ ] a\n- [ ] b\n',

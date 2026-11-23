@@ -4,6 +4,13 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `AGENTS.md`).
 
+## 0.23.1 - 2026-11-23
+
+### Fixed
+
+- Pasting multiline text when adding or editing a task keeps the text on a
+  single Markdown task line.
+
 ## 0.23.0 - 2026-11-15
 
 ### Changed

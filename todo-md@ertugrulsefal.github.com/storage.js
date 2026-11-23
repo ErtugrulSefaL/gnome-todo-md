@@ -376,7 +376,7 @@ export function editTask(content, index, text) {
     const match = (cr ? raw.slice(0, -1) : raw)
         .match(/^(\s*-\s+\[[ xX]\]\s+).*$/);
     if (match) {
-        lines[index] = match[1] + text + cr;
+        lines[index] = match[1] + text.replace(/[\r\n\u2028\u2029]+/g, ' ') + cr;
     } else {
         lines[index] = text + cr;
     }
@@ -412,7 +412,8 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
             break;
         }
     }
-    target.items.splice(insertAt, 0, makeTaskItem(text, false));
+    const singleLine = text.replace(/[\r\n\u2028\u2029]+/g, ' ');
+    target.items.splice(insertAt, 0, makeTaskItem(singleLine, false));
 
     return serializeDocument(doc);
 }
