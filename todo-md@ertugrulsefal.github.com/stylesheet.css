@@ -27,6 +27,41 @@
     text-decoration: line-through;
 }
 
+.todo-task-first-line {
+    spacing: 6px;
+}
+
+.todo-task-due {
+    font-size: 0.9em;
+    margin-left: 32px;
+}
+
+.todo-task-due:rtl {
+    margin-left: 0;
+    margin-right: 32px;
+}
+
+.todo-task-due:hover,
+.todo-task-due:focus {
+    text-decoration: underline;
+}
+
+.todo-task-editor {
+    spacing: 3px;
+}
+
+.todo-editor-actions {
+    spacing: 4px;
+}
+
+.todo-editor-button {
+    padding: 3px 7px;
+}
+
+.todo-editor-message {
+    font-size: 0.9em;
+}
+
 .todo-check {
     min-width: 16px;
     max-width: 16px;

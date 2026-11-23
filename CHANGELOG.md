@@ -4,6 +4,15 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `AGENTS.md`).
 
+## 0.24.0 - 2026-11-23
+
+### Added
+
+- Set a due date from the task menu or in Markdown with `@due(YYYY-MM-DD)`.
+  Due dates appear below task text. Tasks keep their file order.
+- Edit or clear a due date from the menu, with explicit repair actions for
+  invalid or duplicate due tags.
+
 ## 0.23.1 - 2026-11-23
 
 ### Fixed

@@ -153,16 +153,18 @@ export function splitLines(content) {
 // Name of the implicit category for lines before the first '##' heading.
 export const FALLBACK_CATEGORY = 'General';
 
-// Free-form `@key(value)` tags of a raw task text, as an ordered [key, value] list
-const extractTags = raw => {
-    const tagRe = /@(\w+)\(([^)]+)\)/g;
-    const tags = [];
-    let m;
-    while ((m = tagRe.exec(raw)) !== null) {
-        tags.push([m[1], m[2]]);
-    }
-    return tags;
-};
+function taskTagSpans(raw) {
+    return Array.from(raw.matchAll(/@(\w+)\(([^)]*)\)/g), match => ({
+        key: match[1],
+        value: match[2],
+        start: match.index,
+        end: match.index + match[0].length,
+    }));
+}
+
+const extractTags = raw => taskTagSpans(raw)
+    .filter(tag => tag.value !== '')
+    .map(tag => [tag.key, tag.value]);
 
 const deriveText = raw =>
     raw.replace(/@(\w+)\(([^)]+)\)/g, '').replace(/\s+/g, ' ').trim();
@@ -324,16 +326,18 @@ export function serializeDocument(doc) {
 export function readTodoAsync(path, callback) {
     const file = Gio.File.new_for_path(path);
     file.load_contents_async(null, (source, result) => {
-        let content;
+        let content, etag;
         try {
-            const [, bytes] = source.load_contents_finish(result);
+            const [, bytes, loadedEtag] = source.load_contents_finish(result);
+            etag = loadedEtag;
             // Uint8Array.toString() is deprecated and mangles empty contents; use TextDecoder.
             content = bytes ? new TextDecoder().decode(bytes) : '';
         } catch (err) {
-            callback({tasks: [], other: [], raw: '', ok: false});
+            const missing = err.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.NOT_FOUND);
+            callback({tasks: [], other: [], raw: '', ok: false, missing});
             return;
         }
-        callback(parseTodo(content));
+        callback({...parseTodo(content), etag});
     });
 }
 
@@ -344,6 +348,8 @@ export function parseTodo(content, ok = true) {
 }
 
 // Task operations
+const normalizeTaskText = text => text.replace(/[\r\n\u2028\u2029]+/g, ' ');
+
 export function toggleTask(content, index) {
     const lines = content.split('\n');
     const line = lines[index];
@@ -376,7 +382,7 @@ export function editTask(content, index, text) {
     const match = (cr ? raw.slice(0, -1) : raw)
         .match(/^(\s*-\s+\[[ xX]\]\s+).*$/);
     if (match) {
-        lines[index] = match[1] + text.replace(/[\r\n\u2028\u2029]+/g, ' ') + cr;
+        lines[index] = match[1] + normalizeTaskText(text) + cr;
     } else {
         lines[index] = text + cr;
     }
@@ -412,7 +418,7 @@ export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
             break;
         }
     }
-    const singleLine = text.replace(/[\r\n\u2028\u2029]+/g, ' ');
+    const singleLine = normalizeTaskText(text);
     target.items.splice(insertAt, 0, makeTaskItem(singleLine, false));
 
     return serializeDocument(doc);
@@ -579,8 +585,128 @@ export function addTaskTag(content, index, key, value) {
     return content;
 }
 
-// Write content back to the file at `path`.
+export function isDueDate(value) {
+    if (typeof value !== 'string' || value.length !== 10 ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+        return false;
+    }
+    const [year, month, day] = value.split('-').map(Number);
+    if (year === 0 || month < 1 || month > 12 || day < 1) {
+        return false;
+    }
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return day <= daysInMonth[month - 1];
+}
+
+export function getTaskDue(raw) {
+    const dates = taskTagSpans(raw).filter(tag => tag.key === 'due');
+    if (dates.length === 0) {
+        return {status: 'absent'};
+    }
+    if (dates.length > 1) {
+        return {status: 'duplicate'};
+    }
+    const date = dates[0].value;
+    return isDueDate(date) ? {status: 'valid', date} : {status: 'invalid'};
+}
+
+function removeTaskTagSpan(raw, {start, end}) {
+    if (raw[start - 1] === ' ' && (start === 1 || !/\s/.test(raw[start - 2])) &&
+        (end === raw.length || /\s/.test(raw[end]))) {
+        start--;
+    } else if (start === 0 && raw[end] === ' ' && !/\s/.test(raw[end + 1] ?? '')) {
+        end++;
+    }
+    return raw.slice(0, start) + raw.slice(end);
+}
+
+export function getTaskDueValues(raw) {
+    return taskTagSpans(raw).filter(tag => tag.key === 'due').map(tag => tag.value);
+}
+
+// A null date clears the tag. A null result means the draft was rejected.
+export function updateTaskDueText(text, date, {resolveDuplicates = false} = {}) {
+    if (date !== null && !isDueDate(date)) {
+        return null;
+    }
+    const expectedRaw = normalizeTaskText(text);
+    const tags = taskTagSpans(expectedRaw);
+    const due = tags.filter(tag => tag.key === 'due');
+    if (due.length > 1 && !resolveDuplicates) {
+        return null;
+    }
+    if (due.length === 0 && date === null) {
+        return expectedRaw;
+    }
+
+    const replacement = date === null ? '' : `@due(${date})`;
+    const first = due[0];
+    let raw = expectedRaw;
+    if (first) {
+        for (const tag of due.slice(date === null ? 0 : 1).reverse()) {
+            raw = removeTaskTagSpan(raw, tag);
+        }
+        if (date !== null) {
+            raw = raw.slice(0, first.start) + replacement + raw.slice(first.end);
+        }
+    } else {
+        const text = raw.trimEnd();
+        raw = text + (text ? ' ' : '') + replacement + raw.slice(text.length);
+    }
+
+    if (date === null && !deriveText(raw)) {
+        return null;
+    }
+
+    // Splicing a tag can join raw fragments into a token or complete an open tag.
+    const expectedTags = tags.flatMap(tag => {
+        if (tag.key !== 'due') {
+            return [expectedRaw.slice(tag.start, tag.end)];
+        }
+        return tag === first && date !== null ? [replacement] : [];
+    });
+    if (!first) {
+        expectedTags.push(replacement);
+    }
+    const actualTags = taskTagSpans(raw);
+    if (actualTags.length !== expectedTags.length ||
+        !actualTags.every((tag, i) => raw.slice(tag.start, tag.end) === expectedTags[i])) {
+        return null;
+    }
+
+    return raw;
+}
+
+// expectedRaw is the task text from the displayed snapshot.
+export function updateTaskDue(content, index, expectedRaw, date, options) {
+    if (!Number.isInteger(index) || typeof expectedRaw !== 'string') {
+        return content;
+    }
+    const lines = content.split('\n');
+    const line = lines[index];
+    if (line === undefined) {
+        return content;
+    }
+    const cr = line.endsWith('\r') ? '\r' : '';
+    const match = (cr ? line.slice(0, -1) : line)
+        .match(/^(\s*-\s+\[[ xX]\]\s+)(.*)$/);
+    if (!match || match[2] !== expectedRaw) {
+        return content;
+    }
+    const raw = updateTaskDueText(expectedRaw, date, options);
+    if (raw === null) {
+        return content;
+    }
+    lines[index] = match[1] + raw + cr;
+    return lines.join('\n');
+}
+
 export function writeTodo(path, content) {
+    return replaceTodo(path, content).ok;
+}
+
+export function replaceTodo(path, content, expectedEtag = null) {
     // Reject undefined and empty content: GJS marshals an empty Uint8Array to NULL and the write is a silent no-op.
     if (content === undefined || content === '') {
         throw new Error('todo: writeTodo requires a non-empty content string');
@@ -590,11 +716,14 @@ export function writeTodo(path, content) {
     // replace_contents expects a Uint8Array (guint8[]), which TextEncoder yields.
     const bytes = new TextEncoder().encode(content);
     try {
-        file.replace_contents(bytes, null, false, Gio.FileCreateFlags.NONE, null);
-        return true;
+        const [ok, etag] = file.replace_contents(bytes, expectedEtag,
+            false, Gio.FileCreateFlags.NONE, null);
+        return {ok, etag};
     } catch (e) {
-        // Surface failures without crashing; the false return lets the caller keep the user's input.
+        if (e.matches(Gio.IOErrorEnum, Gio.IOErrorEnum.WRONG_ETAG)) {
+            return {ok: false, conflict: true};
+        }
         console.error(`todo: failed to write ${path}: ${e}`);
-        return false;
+        return {ok: false};
     }
 }

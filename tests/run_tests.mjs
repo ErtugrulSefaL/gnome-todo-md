@@ -971,19 +971,19 @@ function testStaticChecks() {
         }
         return null;
     };
-    const addBody = handlerBody('addTask(text, category) {');
-    const editBody = handlerBody('finishEditing(text) {');
+    const checksDraftWrite = body => body !== null
+        && /commitDraft\(updated, snapshot\)\);\n\s*if \(error\) \{\n\s*return error;/.test(body)
+        && body.indexOf('commitDraft(updated, snapshot)')
+            < body.indexOf('this._ext._closeInteractions();');
+    const addBody = handlerBody('addTask(text, category, snapshot, request) {');
+    const editBody = handlerBody('finishEditing(text, task, snapshot, request) {');
     record('static: _addTask keeps the typed task when the write fails',
-        addBody !== null && /if \(!this\._ext\._file\.commit\(/.test(addBody)
-        && addBody.indexOf('if (!this._ext._file.commit(')
-            < addBody.indexOf('this._ext._closeInteractions();'),
+        checksDraftWrite(addBody),
         'a failed write must return BEFORE the inline entry closes, or the '
         + 'text the user typed is gone with no message');
 
     record('static: _finishEditing keeps the edited text when the write fails',
-        editBody !== null && /if \(!this\._ext\._file\.commit\(/.test(editBody)
-        && editBody.indexOf('if (!this._ext._file.commit(')
-            < editBody.indexOf('this._ext._closeInteractions();'),
+        checksDraftWrite(editBody),
         'same rule for the edit commit: the old text stays on disk, the new one '
         + 'stays on screen');
 
@@ -2084,6 +2084,84 @@ function testExtensibilitySkeleton() {
             === '# T\n## C\n- [ ] a\n', '');
 }
 
+// ---- due date tags ------------------------------------------------------
+
+function testTaskDue() {
+    const dueCases = [
+        ['buy milk', 'absent'],
+        ['buy milk @DUE(2026-12-07)', 'absent'],
+        ['buy milk @due(2026-12-07', 'absent'],
+        ['buy milk @note(@due(2026-12-07))', 'absent'],
+        ['buy milk @due(mon)', 'invalid'],
+        ['buy milk @due()', 'invalid'],
+        ['buy milk @due(2026-2-07)', 'invalid'],
+        ['buy milk @due(2026-12-07 )', 'invalid'],
+        ['buy milk @due(0000-01-01)', 'invalid'],
+        ['buy milk @due(0001-01-01)', 'valid', '0001-01-01'],
+        ['buy milk @due(9999-12-31)', 'valid', '9999-12-31'],
+        ['buy milk @due(1900-02-29)', 'invalid'],
+        ['buy milk @due(2000-02-29)', 'valid', '2000-02-29'],
+        ['buy milk @due(2026-04-31)', 'invalid'],
+        ['buy milk @due(2026-00-01)', 'invalid'],
+        ['buy milk @due(2026-12-00)', 'invalid'],
+        ['buy milk @due(2026-12-07) @due()', 'duplicate'],
+        ['buy milk @due(2026-12-07) @due(2026-12-07)', 'duplicate'],
+    ];
+    for (const [raw, status, date] of dueCases) {
+        const result = Storage.getTaskDue(raw);
+        record(`getTaskDue: ${status} for "${raw}"`,
+            result.status === status && result.date === date, JSON.stringify(result));
+    }
+
+    const legacy = '# T\n## C\n- [ ] buy milk @due() @note(x) @due(mon)\n';
+    const task = Storage.categoryTasks(Storage.parseDocument(legacy).categories[0])[0];
+    record('getTaskDue: legacy generic parser and task label still handle empty values as before',
+        task.text === 'buy milk @due()'
+        && JSON.stringify(task.tags) === JSON.stringify([['note', 'x'], ['due', 'mon']]),
+        JSON.stringify(task));
+
+    const date = '2026-12-07';
+    const mutationCases = [
+        ['append before trailing whitespace', 'buy milk @p(1)  ', date, {}, 'buy milk @p(1) @due(2026-12-07)  '],
+        ['replace a legacy value in place', 'buy @due(mon) milk @p(1)', date, {}, 'buy @due(2026-12-07) milk @p(1)'],
+        ['replace an empty value', '@due() buy milk', date, {}, '@due(2026-12-07) buy milk'],
+        ['set the current date', 'buy milk @due(2026-12-07)', date, {}, 'buy milk @due(2026-12-07)'],
+        ['clear a trailing token', 'buy milk @due(2026-12-07)', null, {}, 'buy milk'],
+        ['clear a leading token', '@due(2026-12-07) buy milk', null, {}, 'buy milk'],
+        ['clear a token between words', 'buy @due(2026-12-07)milk', null, {}, 'buy milk'],
+        ['preserve deliberate spacing and unknown tags', 'buy  @due(mon) @p(1)', null, {}, 'buy   @p(1)'],
+        ['ignore missing due on clear', 'buy milk', null, {}, 'buy milk'],
+        ['reject invalid input', 'buy milk', '2026-02-29', {}, 'buy milk'],
+        ['reject date with trailing newline', 'buy milk', '2026-12-07\n', {}, 'buy milk'],
+        ['decline implicit duplicate replacement', 'buy @due(mon) milk @due()', date, {}, 'buy @due(mon) milk @due()'],
+        ['decline implicit duplicate clear', 'buy @due(mon) milk @due()', null, {}, 'buy @due(mon) milk @due()'],
+        ['replace duplicates explicitly', 'buy @due(mon) milk @due() @p(1)', date, {resolveDuplicates: true}, 'buy @due(2026-12-07) milk @p(1)'],
+        ['clear duplicates explicitly', 'buy @due(mon) milk @due() @p(1)', null, {resolveDuplicates: true}, 'buy milk @p(1)'],
+        ['keep a task with no other title', '@due(2026-12-07)', null, {}, '@due(2026-12-07)'],
+        ['keep a tag-only task', '@p(1) @due(2026-12-07)', null, {}, '@p(1) @due(2026-12-07)'],
+        ['reject new token made by a splice', '@du@due(2026-12-07)e(2026-12-10) buy milk', null, {}, '@du@due(2026-12-07)e(2026-12-10) buy milk'],
+        ['do not complete a previously open tag', 'buy @note(', date, {}, 'buy @note('],
+    ];
+    const prefix = '# T\r\n## Other\r\n - [X] untouched\r\n## C\n\t-  [X]\t';
+    for (const [name, raw, value, options, expected] of mutationCases) {
+        for (const ending of ['\r\nextra\r\n', '\nextra\n', '']) {
+            const output = Storage.updateTaskDue(prefix + raw + ending, 4, raw, value, options);
+            record(`updateTaskDue: ${name} with ending ${JSON.stringify(ending)}`,
+                output === prefix + expected + ending, JSON.stringify(output));
+        }
+    }
+
+    const raw = 'buy milk';
+    const content = prefix + raw;
+    record('updateTaskDue: rejects unknown, non-task and stale line targets',
+        Storage.updateTaskDue(content, 99, raw, date) === content
+        && Storage.updateTaskDue(content, 3, '## C', date) === content
+        && Storage.updateTaskDue(content, 4, 'stale task', date) === content
+        && Storage.updateTaskDue(content, '4', raw, date) === content
+        && Storage.updateTaskDue(content, 4, undefined, date) === content,
+        '');
+}
+
 // ---- atomic write path (Faz 2 step 3) ------------------------------------
 
 function testAtomicWritePath() {
@@ -2389,6 +2467,7 @@ testMoveTaskTo();
 testMoveCategoryTo();
 testEmptyState();
 testExtensibilitySkeleton();
+testTaskDue();
 testWriteRead();
 restoreOriginal();
 testParseDocument();
@@ -2485,6 +2564,64 @@ function testFileSyncRace(done) {
     });
 }
 
+async function testFileSyncDraft() {
+    const dir = GLib.dir_make_tmp('todo-draft-XXXXXX');
+    const path = `${dir}/todo.md`;
+    const original = '# T\n- [ ] original\n';
+    const external = '# T\n- [ ] someone else changed the file\n';
+    const draft = '# T\n- [ ] original @due(2026-12-07)\n';
+    const todo = new TodoFile(() => path);
+    const load = () => new Promise(resolve => todo.load(resolve));
+    try {
+        Storage.writeTodo(path, original);
+        await load();
+        const snapshot = todo.read();
+        const inFlight = load();
+        record('draft: a pending read blocks a draft save',
+            todo.commitDraft(draft, snapshot) === 'pending', '');
+        await inFlight;
+
+        GLib.usleep(2000);
+        Storage.writeTodo(path, external);
+        record('draft: an external write before the monitor is protected by ETag',
+            todo.commitDraft(draft, snapshot) === 'conflict'
+            && readTodoSync(path).raw === external, '');
+
+        await load();
+        record('draft: refreshed external content rejects an older draft',
+            todo.commitDraft(draft, snapshot) === 'conflict', '');
+        const current = todo.read();
+        GLib.usleep(2000);
+        Storage.writeTodo(path, external);
+        await load();
+        record('draft: rereading identical content refreshes the ETag',
+            todo.commitDraft(draft, current) === 'saved'
+            && readTodoSync(path).raw === draft, '');
+
+        const sameContent = todo.read();
+        todo.clear();
+        await load();
+        record('draft: a reset invalidates an older draft even for identical content',
+            todo.commitDraft(original, sameContent) === 'conflict', '');
+
+        Gio.File.new_for_path(path).delete(null);
+        await load();
+        const missing = todo.read();
+        Storage.writeTodo(path, external);
+        record('draft: a new file that appeared after an absent read is preserved',
+            todo.commitDraft(draft, missing) === 'conflict'
+            && readTodoSync(path).raw === external, '');
+        Gio.File.new_for_path(path).delete(null);
+        await load();
+        record('draft: a still-missing file can receive its first task',
+            todo.commitDraft(draft, todo.read()) === 'saved'
+            && readTodoSync(path).raw === draft, '');
+    } finally {
+        GLib.unlink(path);
+        GLib.rmdir(dir);
+    }
+}
+
 // The async phase needs the main loop (gjs does not run it for a plain script);
 // the watchdog makes a failure in the phase a FAIL instead of a hang.
 const fsyncLoop = new GLib.MainLoop(null, false);
@@ -2497,9 +2634,13 @@ const fsyncWatchdog = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 10, () => 
     return GLib.SOURCE_REMOVE;
 });
 testFileSyncRace(() => {
-    fsyncDone = true;
-    GLib.Source.remove(fsyncWatchdog);
-    fsyncLoop.quit();
+    testFileSyncDraft().catch(error => {
+        record('draft: test completes', false, String(error));
+    }).finally(() => {
+        fsyncDone = true;
+        GLib.Source.remove(fsyncWatchdog);
+        fsyncLoop.quit();
+    });
 });
 fsyncLoop.run();
 

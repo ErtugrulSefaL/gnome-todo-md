@@ -363,7 +363,7 @@ export class MenuView {
 
             // Renders solely from _addingCategory, so two open adders cannot coexist.
             if (this._ext._addingCategory === categoryName) {
-                const addRow = this._ext._rowFactory.makeAddRow(categoryName);
+                const addRow = this._ext._rowFactory.makeAddRow(categoryName, todo);
                 addRow.row.set_x_expand(true);
                 contentSection.addMenuItem(addRow.row);
                 addRow.entry.grab_key_focus();
@@ -373,7 +373,9 @@ export class MenuView {
             for (const task of tasks) {
                 // Renders solely from _editingIndex, so two open editors cannot coexist.
                 if (task.index === this._ext._editingIndex) {
-                    const editRow = this._ext._rowFactory.makeEditRow(task);
+                    const editRow = this._ext._editingDueOnly
+                        ? this._ext._rowFactory.makeDueEditRow(task, todo)
+                        : this._ext._rowFactory.makeEditRow(task, todo);
                     editRow.row.set_x_expand(true);
                     contentSection.addMenuItem(editRow.row);
                     // An actor that is not yet mapped cannot take key focus.
@@ -382,7 +384,7 @@ export class MenuView {
                 }
 
                 const taskRow = this._ext._rowFactory.makeTaskRow(task,
-                    section.name, prunedColors);
+                    section.name, prunedColors, todo);
                 taskRow.set_x_expand(true);
                 contentSection.addMenuItem(taskRow);
                 if (task.index === focusTarget) {

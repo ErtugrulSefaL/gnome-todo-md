@@ -106,14 +106,21 @@ export default class TodoExtension extends Extension {
             menuWidth: this._settings.get_int('menu-width'),
             onToggle: index => this._tasks.toggleTask(index),
             onEdit: index => this._tasks.startEditing(index),
+            onEditDue: (index, snapshot) => this._tasks.startDueEditing(index, snapshot),
             onDelete: index => this._tasks.deleteTask(index),
             onMove: (index, categoryName, direction) =>
                 this._dnd.moveTask(index, categoryName, direction),
             onDragBegin: (index, categoryName) => this._dnd.onDragBegin(index, categoryName),
             onDragEnd: () => this._dnd.onDragEnd(),
             onDrop: (toIndex, toCategory) => this._dnd.onDrop(toIndex, toCategory),
-            onAddTask: (text, categoryName) => this._tasks.addTask(text, categoryName),
-            onFinishEditing: text => this._tasks.finishEditing(text),
+            onAddTask: (text, categoryName, snapshot, request) =>
+                this._tasks.addTask(text, categoryName, snapshot, request),
+            onFinishEditing: (text, task, snapshot, request) =>
+                this._tasks.finishEditing(text, task, snapshot, request),
+            onCancelEditing: index => {
+                this._focusIndex = index;
+                this._tasks.cancelEditing();
+            },
         });
 
         Main.panel.addToStatusArea(this.uuid, this._indicator);
@@ -268,6 +275,7 @@ export default class TodoExtension extends Extension {
         this._addingNewCategory = false;
         this._renamingCategory = null;
         this._actionsCategory = null;
+        this._editingDueOnly = false;
         this._panel.hide();
     }
 
