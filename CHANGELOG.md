@@ -4,6 +4,32 @@ All notable changes to the Todo extension are documented in this file.
 The project uses Semantic Versioning (0.y.z until 1.0.0); a version is
 assigned only when a phase is completed and approved (see `AGENTS.md`).
 
+## 0.25.0 - 2026-11-23
+
+### Added
+
+- Set a task start date with `@start(YYYY-MM-DD)`. Tasks stay visible and
+  editable before their start date, when completion and reminders become available.
+- Add a local time with `@due(YYYY-MM-DD at HH:MM)`. Date-only deadlines
+  use local midnight for reminders and display the date alone.
+- Edit separate reminder rules and preview their next local date and time.
+  A single `@notify(...)` tag joins rules with `&`. Rules can name a fixed
+  date and time, recur from the start date, or run before the due date.
+- Repeat tasks with `@repeat(every=3d,by=start,anchor=YYYY-MM-DD)` or a
+  monthly interval such as `1mo`. Completion advances the same checkbox
+  line along the original calendar schedule and carries its dates and reminders.
+- Toggle `@starred(1)` from the second line of a task. The menu also reflects
+  stars changed in the Markdown file.
+
+### Fixed
+
+- Cancel pending file reads when the extension is disabled or a newer
+  read supersedes them.
+- Preserve authored Markdown and unrelated tags when editing, adding, and
+  reordering tasks. Show invalid and duplicate tag warnings in the menu.
+- Coalesce simultaneous and missed reminders per task and keep delivery
+  state across Shell sessions.
+
 ## 0.24.0 - 2026-11-23
 
 ### Added

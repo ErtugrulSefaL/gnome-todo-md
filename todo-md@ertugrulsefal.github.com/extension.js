@@ -12,6 +12,8 @@ import {CategoryPanel} from './categoryPanel.js';
 import {DragDrop} from './dragDrop.js';
 import {MenuView} from './menuView.js';
 import {RowFactory} from './rowFactory.js';
+import {NotificationScheduler} from './notificationScheduler.js';
+import {resolveTodoPath} from './storage.js';
 
 export default class TodoExtension extends Extension {
     enable() {
@@ -19,8 +21,10 @@ export default class TodoExtension extends Extension {
 
         // The schema id comes from metadata.json.
         this._settings = this.getSettings();
+        this._notifications = new NotificationScheduler(this._settings);
         this._file = new TodoFile(
-            () => this._settings.get_string('todo-file-path'));
+            () => this._settings.get_string('todo-file-path'),
+            (snapshot, path) => this._notifications.refresh(snapshot, path));
         this._tasks = new TaskActions(this);
         this._panel = new CategoryPanel(this);
         this._dnd = new DragDrop(this);
@@ -35,6 +39,8 @@ export default class TodoExtension extends Extension {
                 this._file.watch(() => this._loadTodo());
                 // The new path is not in the cache: clear and read.
                 this._file.clear();
+                this._notifications.refresh({raw: '', ok: false},
+                    resolveTodoPath(this._settings.get_string('todo-file-path')));
                 this._loadTodo();
                 this._menu.refreshTodoMenu();
             });
@@ -104,13 +110,15 @@ export default class TodoExtension extends Extension {
         // The actions are injected so rowFactory.js keeps no extension state.
         this._rowFactory = new RowFactory({
             menuWidth: this._settings.get_int('menu-width'),
-            onToggle: index => this._tasks.toggleTask(index),
+            onToggle: (index, snapshot) => this._tasks.toggleTask(index, snapshot),
+            onToggleStar: (task, snapshot) => this._tasks.toggleTaskStar(task, snapshot),
             onEdit: index => this._tasks.startEditing(index),
-            onEditDue: (index, snapshot) => this._tasks.startDueEditing(index, snapshot),
-            onDelete: index => this._tasks.deleteTask(index),
-            onMove: (index, categoryName, direction) =>
-                this._dnd.moveTask(index, categoryName, direction),
-            onDragBegin: (index, categoryName) => this._dnd.onDragBegin(index, categoryName),
+            onEditTag: (index, snapshot, key) => this._tasks.startTagEditing(index, snapshot, key),
+            onDelete: (index, snapshot) => this._tasks.deleteTask(index, snapshot),
+            onMove: (index, categoryName, direction, snapshot) =>
+                this._dnd.moveTask(index, categoryName, direction, snapshot),
+            onDragBegin: (index, categoryName, snapshot) =>
+                this._dnd.onDragBegin(index, categoryName, snapshot),
             onDragEnd: () => this._dnd.onDragEnd(),
             onDrop: (toIndex, toCategory) => this._dnd.onDrop(toIndex, toCategory),
             onAddTask: (text, categoryName, snapshot, request) =>
@@ -172,7 +180,10 @@ export default class TodoExtension extends Extension {
     }
 
     disable() {
-        this._file.unwatch();
+        this._file.destroy();
+        this._file = null;
+        this._notifications.destroy();
+        this._notifications = null;
         // Every main loop source must go, even one already returning SOURCE_REMOVE.
         if (this._openIdleId) {
             GLib.Source.remove(this._openIdleId);
@@ -258,10 +269,11 @@ export default class TodoExtension extends Extension {
     }
 
     _loadTodo({closeInteractions = true} = {}) {
-        this._file.load(() => {
+        this._file.load((snapshot, path) => {
             if (!this._indicator) {
                 return;
             }
+            this._notifications.refresh(snapshot, path);
             if (closeInteractions) {
                 this._closeInteractions();
             }
@@ -275,7 +287,7 @@ export default class TodoExtension extends Extension {
         this._addingNewCategory = false;
         this._renamingCategory = null;
         this._actionsCategory = null;
-        this._editingDueOnly = false;
+        this._editingTag = null;
         this._panel.hide();
     }
 

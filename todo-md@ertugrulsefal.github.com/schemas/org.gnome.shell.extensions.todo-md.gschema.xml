@@ -41,5 +41,13 @@
         area scrolls when its content exceeds this height.
       </description>
     </key>
+    <key name="notification-watermarks" type="a{ss}">
+      <default>@a{ss} {}</default>
+      <summary>Last handled reminder occurrences</summary>
+      <description>
+        Maps hashed reminder identities to occurrence timestamps in milliseconds
+        so reminders already handled do not repeat after signing back in.
+      </description>
+    </key>
   </schema>
 </schemalist>

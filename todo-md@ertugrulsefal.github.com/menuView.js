@@ -373,8 +373,8 @@ export class MenuView {
             for (const task of tasks) {
                 // Renders solely from _editingIndex, so two open editors cannot coexist.
                 if (task.index === this._ext._editingIndex) {
-                    const editRow = this._ext._editingDueOnly
-                        ? this._ext._rowFactory.makeDueEditRow(task, todo)
+                    const editRow = this._ext._editingTag
+                        ? this._ext._rowFactory.makeTagEditRow(task, todo, this._ext._editingTag)
                         : this._ext._rowFactory.makeEditRow(task, todo);
                     editRow.row.set_x_expand(true);
                     contentSection.addMenuItem(editRow.row);

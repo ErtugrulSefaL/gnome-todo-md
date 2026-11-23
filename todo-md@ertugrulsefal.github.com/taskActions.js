@@ -1,4 +1,6 @@
 import * as Storage from './storage.js';
+import {validateNotifyDraft} from './reminders.js';
+import {toggleScheduledTask, validateRepeatDraft} from './repeat.js';
 
 function draftWriteError(result) {
     switch (result) {
@@ -13,14 +15,31 @@ function draftWriteError(result) {
     }
 }
 
-function dueDraftError(raw, request) {
-    if (request.date !== null && !Storage.isDueDate(request.date)) {
-        return 'Enter a valid date in YYYY-MM-DD format.';
+function applyTagDraft(raw, request) {
+    const changes = Array.isArray(request) ? request : [request];
+    for (const {key, value, resolveDuplicates} of changes) {
+        if (value !== null && (key === 'start' || key === 'due') &&
+            !Storage.parseTaskDate(value, {allowTime: key === 'due'})) {
+            return {error: key === 'due'
+                ? 'Enter YYYY-MM-DD or YYYY-MM-DD at HH:MM.'
+                : 'Enter a valid start date in YYYY-MM-DD format.'};
+        }
+        const validate = {notify: validateNotifyDraft, repeat: validateRepeatDraft}[key];
+        if (value !== null && validate) {
+            const error = validate(raw, value);
+            if (error) {
+                return {error};
+            }
+        }
+        if (!resolveDuplicates && Storage.getTaskTagValues(raw, key).length > 1) {
+            return {error: `Multiple ${key} tags. Reopen the tag controls to repair them.`};
+        }
+        raw = Storage.updateTaskTagText(raw, key, value, {resolveDuplicates});
+        if (raw === null) {
+            return {error: 'This change would leave an empty title or alter other tags.'};
+        }
     }
-    if (Storage.getTaskDue(raw).status === 'duplicate' && !request.resolveDuplicates) {
-        return 'Multiple due tags. Reopen the date controls to repair them.';
-    }
-    return null;
+    return {raw};
 }
 
 // The inline task interactions (edit / add / toggle / delete). At most one is
@@ -36,14 +55,14 @@ export class TaskActions {
         this._ext._menu.refreshTodoMenu();
     }
 
-    startDueEditing(index, snapshot) {
+    startTagEditing(index, snapshot, key) {
         const current = this._ext._file.read();
         if (!current.ok || current.raw !== snapshot.raw || current.epoch !== snapshot.epoch) {
             return;
         }
         this._ext._closeInteractions();
         this._ext._editingIndex = index;
-        this._ext._editingDueOnly = true;
+        this._ext._editingTag = key;
         this._ext._menu.refreshTodoMenu();
     }
 
@@ -56,7 +75,7 @@ export class TaskActions {
         if (task.index !== this._ext._editingIndex) {
             return 'The editor is no longer open.';
         }
-        const raw = text === task.raw ? task.raw : text.trim();
+        let raw = text;
         if (!raw.trim() && !request) {
             this.cancelEditing();
             return null;
@@ -64,22 +83,14 @@ export class TaskActions {
         if (!raw.trim()) {
             return 'Enter a task title.';
         }
-        let updated = snapshot.raw;
         if (request) {
-            const error = dueDraftError(raw, request);
+            const {raw: next, error} = applyTagDraft(raw, request);
             if (error) {
                 return error;
             }
-            const next = Storage.updateTaskDueText(raw, request.date, request);
-            if (next === null) {
-                return 'This change would leave an empty title or alter other tags.';
-            }
-            updated = raw === task.raw
-                ? Storage.updateTaskDue(snapshot.raw, task.index, task.raw, request.date, request)
-                : Storage.editTask(snapshot.raw, task.index, next);
-        } else if (raw !== task.raw) {
-            updated = Storage.editTask(snapshot.raw, task.index, raw);
+            raw = next;
         }
+        const updated = Storage.replaceTaskText(snapshot.raw, task.index, task.raw, raw);
         const error = draftWriteError(this._ext._file.commitDraft(updated, snapshot));
         if (error) {
             return error;
@@ -103,14 +114,11 @@ export class TaskActions {
             return 'Enter a task title.';
         }
         if (request) {
-            const error = dueDraftError(raw, request);
+            const {raw: next, error} = applyTagDraft(raw, request);
             if (error) {
                 return error;
             }
-            raw = Storage.updateTaskDueText(raw, request.date, request);
-            if (raw === null) {
-                return 'This date would alter other tags in the task.';
-            }
+            raw = next;
         }
         const updated = Storage.addTask(snapshot.raw, raw, category);
         const error = draftWriteError(this._ext._file.commitDraft(updated, snapshot));
@@ -132,19 +140,29 @@ export class TaskActions {
         this._ext._menu.refreshTodoMenu();
     }
 
-    toggleTask(index) {
+    toggleTask(index, snapshot) {
         this._ext._closeInteractions();
-        const parsed = this._ext._file.read();
-        const updated = Storage.toggleTask(parsed.raw, index);
-        this._ext._file.commit(updated);
+        const updated = toggleScheduledTask(snapshot.raw, index);
+        if (updated !== snapshot.raw) {
+            this._ext._file.commitDraft(updated, snapshot);
+        }
         this._ext._menu.refreshTodoMenu();
     }
 
-    deleteTask(index) {
+    toggleTaskStar(task, snapshot) {
+        const updated = Storage.toggleTaskStar(snapshot.raw, task.index, task.raw);
+        if (updated !== snapshot.raw && this._ext._file.commitDraft(updated, snapshot) === 'saved') {
+            this._ext._focusIndex = task.index;
+        }
+        this._ext._menu.refreshTodoMenu();
+    }
+
+    deleteTask(index, snapshot) {
         this._ext._closeInteractions();
-        const parsed = this._ext._file.read();
-        const updated = Storage.deleteTask(parsed.raw, index);
-        this._ext._file.commit(updated);
+        const updated = Storage.deleteTask(snapshot.raw, index);
+        if (updated !== snapshot.raw) {
+            this._ext._file.commitDraft(updated || '\n', snapshot);
+        }
         this._ext._menu.refreshTodoMenu();
     }
 }

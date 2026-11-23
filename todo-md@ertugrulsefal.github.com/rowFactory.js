@@ -8,36 +8,54 @@ import * as DND from 'resource:///org/gnome/shell/ui/dnd.js';
 
 import * as Storage from './storage.js';
 import {setVerticalOrientation} from './compat.js';
+import {makeReminderInputs} from './reminderEditor.js';
+import {getTaskReminderSummary} from './reminders.js';
+import {getTaskRepeatSummary} from './repeat.js';
+import {makeRepeatInputs} from './repeatEditor.js';
 
-function dueLabel(task) {
-    const {status, date} = Storage.getTaskDue(task.raw);
+const TAG_LABELS = {
+    start: 'Start date',
+    due: 'Due date',
+    notify: 'Reminders',
+    repeat: 'Repeat',
+};
+
+function dateLabel(task, key) {
+    const {status, date, time} = key === 'start'
+        ? Storage.getTaskStart(task.raw)
+        : Storage.getTaskDue(task.raw);
     if (status === 'absent') {
         return null;
     }
     if (status === 'invalid') {
-        return 'Invalid due date';
+        return `Invalid ${TAG_LABELS[key].toLowerCase()}`;
     }
     if (status === 'duplicate') {
-        return 'Multiple due tags';
+        return `Multiple ${key} tags`;
     }
+    if (key === 'start') {
+        const due = Storage.getTaskDue(task.raw);
+        return due.status === 'valid' && date > due.date
+            ? `Start is after due date · ${date}` : `Starts ${date}`;
+    }
+    const display = time ? `${date} at ${time}` : date;
     if (task.done) {
-        return `Due ${date}`;
+        return `Due ${display}`;
     }
 
     // Compare calendar dates as UTC midnights so DST does not change the day count.
-    const today = new Date();
-    const todayDay = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate());
+    const todayDay = Date.parse(`${Storage.localDateString()}T00:00:00Z`);
     const days = (Date.parse(`${date}T00:00:00Z`) - todayDay) / 86_400_000;
     if (days < 0) {
-        return `Overdue · ${date}`;
+        return `Overdue · ${display}`;
     }
     if (days === 0) {
-        return `Due today · ${date}`;
+        return `Due today · ${display}`;
     }
     if (days === 1) {
-        return `Due tomorrow · ${date}`;
+        return `Due tomorrow · ${display}`;
     }
-    return days <= 7 ? `Due in ${days} days · ${date}` : `Due ${date}`;
+    return days <= 7 ? `Due in ${days} days · ${display}` : `Due ${display}`;
 }
 
 function onEntryReturn(entry, callback) {
@@ -69,12 +87,13 @@ export function capWidth(actor, menuWidth) {
 // Row builders: task rows, inline add/edit entries.
 // Callbacks are injected; this module keeps no extension state.
 export class RowFactory {
-    constructor({menuWidth, onToggle, onEdit, onEditDue, onDelete, onMove, onDragBegin,
+    constructor({menuWidth, onToggle, onToggleStar, onEdit, onEditTag, onDelete, onMove, onDragBegin,
         onDragEnd, onDrop, onAddTask, onFinishEditing, onCancelEditing}) {
         this._menuWidth = menuWidth;
         this._onToggle = onToggle;
+        this._onToggleStar = onToggleStar;
         this._onEdit = onEdit;
-        this._onEditDue = onEditDue;
+        this._onEditTag = onEditTag;
         this._onDelete = onDelete;
         this._onMove = onMove;
         this._onDragBegin = onDragBegin;
@@ -93,8 +112,13 @@ export class RowFactory {
         // The Shell hands back actors during a drag, so the row carries its identity.
         row._todoIndex = index;
         row._todoCategory = categoryName;
-        const due = dueLabel(task);
-        const firstLine = due ? this.makeDueLines(row, due, task, snapshot) : row;
+        const details = [
+            ['start', dateLabel(task, 'start')],
+            ['due', dateLabel(task, 'due')],
+            ['notify', getTaskReminderSummary(task.raw)],
+            ['repeat', getTaskRepeatSummary(task.raw)],
+        ].filter(([, text]) => text !== null);
+        const firstLine = this.makeTagLines(row, details, task, snapshot);
         const label = new St.Label({
             text: task.text,
             style_class: task.done ? 'todo-text todo-done' : 'todo-text',
@@ -153,7 +177,7 @@ export class RowFactory {
             getDragActorSource: () => row,
         };
         const draggable = DND.makeDraggable(handle);
-        draggable.connect('drag-begin', () => this._onDragBegin(index, categoryName));
+        draggable.connect('drag-begin', () => this._onDragBegin(index, categoryName, snapshot));
         draggable.connect('drag-end', () => this._onDragEnd());
 
         const delBtn = new St.Button({
@@ -165,7 +189,7 @@ export class RowFactory {
             }),
         });
         delBtn.connect('clicked', () => {
-            this._onDelete(index);
+            this._onDelete(index, snapshot);
         });
 
         const editBtn = new St.Button({
@@ -193,7 +217,7 @@ export class RowFactory {
         firstLine.add_child(handle);
 
         row.connect('activate', () => {
-            this._onToggle(index);
+            this._onToggle(index, snapshot);
         });
 
         // true lets the Shell finish the drag (destroy the drag actor, pop the
@@ -210,57 +234,98 @@ export class RowFactory {
                 return Clutter.EVENT_PROPAGATE;
             }
             this._onMove(index, categoryName,
-                symbol === Clutter.KEY_Up ? 'up' : 'down');
+                symbol === Clutter.KEY_Up ? 'up' : 'down', snapshot);
             return Clutter.EVENT_STOP;
         });
         return row;
     }
 
-    makeDueLines(row, due, task, snapshot) {
+    makeTagLines(row, details, task, snapshot) {
         const lines = new St.BoxLayout({x_expand: true});
         setVerticalOrientation(lines, Clutter.Orientation.VERTICAL);
         const firstLine = new St.BoxLayout({style_class: 'todo-task-first-line'});
-        const detail = new St.Label({
-            text: due,
+        lines.add_child(firstLine);
+        const buttons = details.map(([key, text]) => {
+            const detail = this.makeEditorLabel(text);
+            const button = new St.Button({
+                child: detail,
+                style_class: 'todo-task-tag',
+                x_align: Clutter.ActorAlign.START,
+                can_focus: true,
+                accessible_name: `Edit ${TAG_LABELS[key].toLowerCase()}: ${text}`,
+            });
+            button.connect('clicked', () => this._onEditTag(task.index, snapshot, key));
+            return button;
         });
-        const button = new St.Button({
-            child: detail,
-            style_class: 'todo-task-due',
-            x_align: Clutter.ActorAlign.START,
-            can_focus: true,
-            accessible_name: `Edit due date: ${due}`,
-        });
-        button.connect('clicked', () => this._onEditDue(task.index, snapshot));
+        const secondLine = new St.BoxLayout({style_class: 'todo-task-details'});
+        const star = this.makeStarButton(task, snapshot);
+        const firstTag = buttons[0];
+        if (firstTag) {
+            firstTag.set_x_expand(true);
+            secondLine.add_child(firstTag);
+        } else {
+            secondLine.set_x_align(Clutter.ActorAlign.END);
+        }
+        secondLine.add_child(star);
+        lines.add_child(secondLine);
+        for (const button of buttons.slice(1)) {
+            lines.add_child(button);
+        }
+        buttons.splice(firstTag ? 1 : 0, 0, star);
         // St skips the children of a widget that is itself focusable.
         const modifiers = Clutter.ModifierType.MODIFIER_MASK
             & ~(Clutter.ModifierType.LOCK_MASK | Clutter.ModifierType.MOD2_MASK);
         row.connect('key-press-event', (_actor, event) => {
             if (row.has_key_focus() && event.get_key_symbol() === Clutter.KEY_Tab
                 && (event.get_state() & modifiers) === 0) {
-                button.grab_key_focus();
+                buttons[0].grab_key_focus();
                 return Clutter.EVENT_STOP;
             }
             return Clutter.EVENT_PROPAGATE;
         });
-        button.connect('key-press-event', (_actor, event) => {
-            const key = event.get_key_symbol();
-            const state = event.get_state() & modifiers;
-            const backwards = (key === Clutter.KEY_Tab && state === Clutter.ModifierType.SHIFT_MASK)
-                || (key === Clutter.KEY_ISO_Left_Tab
-                    && (state === 0 || state === Clutter.ModifierType.SHIFT_MASK));
-            if (backwards) {
-                row.grab_key_focus();
-                return Clutter.EVENT_STOP;
-            }
-            return Clutter.EVENT_PROPAGATE;
-        });
-        this.capWidth(detail);
-        detail.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
-        lines.add_child(firstLine);
-        lines.add_child(button);
+        for (const [index, button] of buttons.entries()) {
+            button.connect('key-press-event', (_actor, event) => {
+                const key = event.get_key_symbol();
+                const state = event.get_state() & modifiers;
+                const backwards = (key === Clutter.KEY_Tab && state === Clutter.ModifierType.SHIFT_MASK)
+                    || (key === Clutter.KEY_ISO_Left_Tab
+                        && (state === 0 || state === Clutter.ModifierType.SHIFT_MASK));
+                if (backwards) {
+                    (buttons[index - 1] ?? row).grab_key_focus();
+                    return Clutter.EVENT_STOP;
+                }
+                const next = buttons[index + 1];
+                if (key === Clutter.KEY_Tab && state === 0 && next) {
+                    next.grab_key_focus();
+                    return Clutter.EVENT_STOP;
+                }
+                return Clutter.EVENT_PROPAGATE;
+            });
+        }
         row.add_child(lines);
-        row.get_accessible().set_description(due);
+        row.get_accessible().set_description(details.map(([, text]) => text).join('. '));
         return firstLine;
+    }
+
+    makeStarButton(task, snapshot) {
+        const {status} = Storage.getTaskStarred(task.raw);
+        const activate = () => this._onToggleStar(task, snapshot);
+        if (status === 'duplicate' || status === 'invalid') {
+            const warning = status === 'duplicate' ? 'Multiple starred tags' : 'Invalid starred tag';
+            return editorButton(warning, activate, `${warning}. Set one star tag.`);
+        }
+        const starred = status === 'valid';
+        const button = new St.Button({
+            style_class: 'todo-icon-button button',
+            accessible_name: starred ? 'Remove star' : 'Add star',
+            can_focus: true,
+            child: new St.Icon({
+                icon_name: starred ? 'starred-symbolic' : 'non-starred-symbolic',
+                style_class: 'system-status-icon',
+            }),
+        });
+        button.connect('clicked', activate);
+        return button;
     }
 
     // Cap to menu-width: typing must not widen the menu.
@@ -279,35 +344,49 @@ export class RowFactory {
         return {row, box};
     }
 
-    makeEditorLabel(text, styleClass) {
+    makeEditorLabel(text, styleClass = '') {
         const label = new St.Label({text, style_class: styleClass});
         this.capWidth(label);
         label.clutter_text.set_ellipsize(Pango.EllipsizeMode.END);
         return label;
     }
 
-    makeDueControls(raw, onSave, onCancel, isNew = false) {
-        const box = new St.BoxLayout({style_class: 'todo-task-editor'});
-        setVerticalOrientation(box, Clutter.Orientation.VERTICAL);
-        const values = Storage.getTaskDueValues(raw);
-        const duplicates = values.length > 1;
-        if (duplicates || (values.length === 1 && !Storage.isDueDate(values[0]))) {
-            const tags = values.map(value => `@due(${value})`).join(', ');
-            const status = duplicates ? 'Multiple due tags' : 'Invalid due date';
-            box.add_child(this.makeEditorLabel(`${status}: ${tags}`, 'todo-editor-message'));
-        }
+    makeEditorEntry(name, hint, value = '') {
         const entry = new St.Entry({
-            accessible_name: 'Due date',
-            hint_text: 'YYYY-MM-DD',
+            accessible_name: name,
+            hint_text: hint,
             style_class: 'todo-edit-entry',
         });
+        entry.set_text(value);
         entry.set_x_expand(true);
         this.capWidth(entry);
-        if (values.length === 1 && Storage.isDueDate(values[0])) {
-            entry.set_text(values[0]);
-        }
-        box.add_child(entry);
+        return entry;
+    }
 
+    makeDateInputs({key, box, values, onSubmit, makeEntry}) {
+        const hint = key === 'due' ? 'YYYY-MM-DD or YYYY-MM-DD at HH:MM' : 'YYYY-MM-DD';
+        const entry = makeEntry(TAG_LABELS[key], hint, values.length === 1 ? values[0] : '');
+        onEntryReturn(entry, onSubmit);
+        box.add_child(entry);
+        return {entry, getValue: () => entry.get_text().trim()};
+    }
+
+    makeTagControls(key, getRaw, onSave, onCancel, isNew = false, rawEntry = null) {
+        const box = new St.BoxLayout({style_class: 'todo-task-editor'});
+        setVerticalOrientation(box, Clutter.Orientation.VERTICAL);
+        const raw = getRaw();
+        const values = Storage.getTaskTagValues(raw, key);
+        const duplicates = values.length > 1;
+        const label = TAG_LABELS[key];
+        const isDate = key === 'start' || key === 'due';
+        const invalidDate = isDate && values.length === 1 &&
+            !Storage.parseTaskDate(values[0], {allowTime: key === 'due'});
+        const status = duplicates ? `Multiple ${key} tags`
+            : invalidDate ? `Invalid ${label.toLowerCase()}` : null;
+        if (status) {
+            const tags = values.map(value => `@${key}(${value})`).join(', ');
+            box.add_child(this.makeEditorLabel(`${status}: ${tags}`, 'todo-editor-message'));
+        }
         const message = this.makeEditorLabel('', 'todo-editor-message');
         message.visible = false;
         const report = error => {
@@ -317,14 +396,18 @@ export class RowFactory {
             }
         };
         const save = resolveDuplicates => {
-            const date = entry.get_text().trim();
-            if (!date && !isNew) {
-                report(values.length > 0
-                    ? 'Enter a date, or use the clear button to remove it.'
-                    : 'Enter a date in YYYY-MM-DD format.');
-            } else {
-                report(onSave(date ? {date, resolveDuplicates} : undefined));
+            const input = getValue();
+            if (input.error) {
+                report(input.error);
+                return;
             }
+            const {value, companion = []} = typeof input === 'string' ? {value: input} : input;
+            if (!value && !isNew) {
+                report(values.length > 0
+                    ? 'Enter a value, or use Clear to remove the tag.' : `Enter a ${label.toLowerCase()}.`);
+                return;
+            }
+            report(onSave(value ? [...companion, {key, value, resolveDuplicates}] : undefined));
         };
         const submitQuick = () => {
             if (duplicates) {
@@ -333,56 +416,63 @@ export class RowFactory {
                 save(false);
             }
         };
-        onEntryReturn(entry, submitQuick);
+        const options = {
+            key, box, values, getRaw, rawEntry, onEntryReturn,
+            onSubmit: submitQuick,
+            makeEntry: this.makeEditorEntry.bind(this),
+            makeLabel: (text, styleClass = 'todo-editor-message') => this.makeEditorLabel(text, styleClass),
+            makeButton: editorButton,
+        };
+        const makeInputs = {
+            notify: makeReminderInputs,
+            repeat: makeRepeatInputs,
+        }[key] ?? this.makeDateInputs;
+        const {entry, getValue} = makeInputs(options);
+
         const actions = new St.BoxLayout({style_class: 'todo-editor-actions'});
         actions.add_child(editorButton(duplicates ? 'Replace all' : 'Save',
-            () => save(duplicates), duplicates ? 'Replace all due tags' : 'Save due date'));
+            () => save(duplicates), duplicates ? `Replace all ${key} tags` : `Save ${label.toLowerCase()}`));
         if (values.length > 0) {
             actions.add_child(editorButton(duplicates ? 'Clear all' : 'Clear',
-                () => report(onSave({date: null, resolveDuplicates: duplicates})),
-                duplicates ? 'Clear all due tags' : 'Clear due date'));
+                () => report(onSave({key, value: null, resolveDuplicates: duplicates})),
+                duplicates ? `Clear all ${key} tags` : `Clear ${label.toLowerCase()}`));
         }
-        actions.add_child(editorButton('Cancel', onCancel, 'Cancel due date edit'));
+        actions.add_child(editorButton('Cancel', onCancel, `Cancel ${label.toLowerCase()} edit`));
         box.add_child(actions);
         box.add_child(message);
         return {box, entry, submitQuick};
     }
 
-    makeTaskEditor(raw, hint, disclosureText, onSave, isNew = false) {
+    makeTaskEditor(raw, hint, onSave, isNew = false) {
         const {row, box} = this.makeEditor();
-        const entry = new St.Entry({
-            hint_text: hint,
-            accessible_name: isNew ? 'New task title' : 'Task text',
-            style_class: 'todo-edit-entry',
-        });
-        entry.set_text(raw);
-        entry.set_x_expand(true);
-        this.capWidth(entry);
+        const entry = this.makeEditorEntry(isNew ? 'New task title' : 'Task text', hint, raw);
         box.add_child(entry);
 
         const message = this.makeEditorLabel('', 'todo-editor-message');
         message.visible = false;
-        let due = null;
-        const disclosure = editorButton(disclosureText, () => {
-            due = this.makeDueControls(entry.get_text(), request => onSave(entry.get_text(), request),
-                () => {
-                    const controls = due.box;
-                    due = null;
-                    controls.destroy();
-                    disclosure.visible = true;
-                    entry.grab_key_focus();
-                }, isNew);
-            disclosure.visible = false;
-            message.visible = false;
-            box.add_child(due.box);
-            due.entry.grab_key_focus();
-        });
-        disclosure.set_x_align(Clutter.ActorAlign.START);
+        const disclosure = new St.BoxLayout({style_class: 'todo-editor-actions'});
+        let controls = null;
+        for (const [key, label] of Object.entries(TAG_LABELS)) {
+            disclosure.add_child(editorButton(label, () => {
+                controls = this.makeTagControls(key, () => entry.get_text(),
+                    request => onSave(entry.get_text(), request), () => {
+                        const editorBox = controls.box;
+                        controls = null;
+                        editorBox.destroy();
+                        disclosure.visible = true;
+                        entry.grab_key_focus();
+                    }, isNew, entry);
+                disclosure.visible = false;
+                message.visible = false;
+                box.add_child(controls.box);
+                controls.entry.grab_key_focus();
+            }));
+        }
         box.add_child(disclosure);
         box.add_child(message);
         onEntryReturn(entry, () => {
-            if (due) {
-                due.submitQuick();
+            if (controls) {
+                controls.submitQuick();
                 return;
             }
             const error = onSave(entry.get_text());
@@ -396,21 +486,21 @@ export class RowFactory {
 
     makeEditRow(task, snapshot) {
         // Prefilling raw text preserves Markdown tags during a task text edit.
-        return this.makeTaskEditor(task.raw, 'Task text', 'Due date',
+        return this.makeTaskEditor(task.raw, 'Task text',
             (text, request) => this._onFinishEditing(text, task, snapshot, request));
     }
 
     makeAddRow(categoryName, snapshot) {
-        return this.makeTaskEditor('', `Add to "${categoryName}"…`, 'Add tags',
+        return this.makeTaskEditor('', `Add to "${categoryName}"…`,
             (text, request) => this._onAddTask(text, categoryName, snapshot, request), true);
     }
 
-    makeDueEditRow(task, snapshot) {
+    makeTagEditRow(task, snapshot, key) {
         const {row, box} = this.makeEditor();
         if (task.text) {
             box.add_child(this.makeEditorLabel(task.text, 'todo-text'));
         }
-        const {box: controls, entry} = this.makeDueControls(task.raw,
+        const {box: controls, entry} = this.makeTagControls(key, () => task.raw,
             request => this._onFinishEditing(task.raw, task, snapshot, request),
             () => this._onCancelEditing(task.index));
         box.add_child(controls);

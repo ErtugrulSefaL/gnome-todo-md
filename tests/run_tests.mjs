@@ -24,6 +24,9 @@ import Gio from 'gi://Gio';
 import * as Storage from '../todo-md@ertugrulsefal.github.com/storage.js';
 import {TodoFile} from '../todo-md@ertugrulsefal.github.com/fileSync.js';
 import {popupArgs} from '../todo-md@ertugrulsefal.github.com/compat.js';
+import {testTaskDatesAndStars} from './task-dates-and-stars.mjs';
+import {testRepeat} from './repeat-tests.mjs';
+import {testReminders} from './reminder-tests.mjs';
 
 // The extension's storage module no longer reads the disk (the Shell's read
 // path is async), so the suite keeps its own synchronous read. This file is
@@ -212,6 +215,17 @@ function testAddTask() {
     record('addTask: missing trailing newline is normalized',
         Storage.addTask('- [ ] a', 'b') === '# TODO\n## General\n- [ ] a\n- [ ] b\n',
         JSON.stringify(Storage.addTask('- [ ] a', 'b')));
+
+    const authored = '# Title\n  -  [X]  **keep** @other(1)  \r\nnotes\n';
+    record('addTask: implicit General gains its heading without rewriting authored lines',
+        Storage.addTask(authored, 'New @starred(1)') ===
+            '# Title\n## General\r\n  -  [X]  **keep** @other(1)  \r\n- [ ] New @starred(1)\r\nnotes\n',
+        '');
+
+    record('addTask: adding a new category preserves authored lines in the implicit category',
+        Storage.addTask(authored, 'New @starred(1)', 'New') ===
+            '# Title\n## General\r\n  -  [X]  **keep** @other(1)  \r\nnotes\n## New\r\n- [ ] New @starred(1)\r\n',
+        '');
 }
 
 // ---- addTask: General fallback (Faz 2 step 4) -------------------------------
@@ -258,6 +272,17 @@ function testAddTaskCategorized() {
     record('addTaskCategorized: named category receives the task after its last task',
         Storage.addTask('# T\n## A\n- [ ] a1\n- [ ] a2\n## B\n- [ ] b\n', 'a3', 'A')
             === '# T\n## A\n- [ ] a1\n- [ ] a2\n- [ ] a3\n## B\n- [ ] b\n', '');
+
+    const rawBlock = '## Work  \r\n  -  [X]  **existing task** @project(x)  \nextra\r\n## Notes';
+    record('addTaskCategorized: explicit-category insertion preserves authored lines and heading spacing',
+        Storage.addTask(rawBlock, 'New @start(2099-01-01)', 'Work') ===
+        rawBlock.replace('extra', '- [ ] New @start(2099-01-01)\r\nextra'));
+    record('addTaskCategorized: empty explicit General takeover adds below its heading',
+        Storage.addTask('  -  [X]  existing\r\n## General  \r\ntrailing', 'New') ===
+        '  -  [X]  existing\r\n## General  \r\n- [ ] New\r\ntrailing');
+    record('addTaskCategorized: existing category at unterminated CRLF EOF keeps no final newline',
+        Storage.addTask('## Work\r\n- [ ] Existing', 'New', 'Work') ===
+        '## Work\r\n- [ ] Existing\r\n- [ ] New');
 
     record('addTaskCategorized: missing named category is created explicitly at the end',
         Storage.addTask('# T\n## A\n- [ ] a\n', 'x', 'Yeni')
@@ -461,7 +486,8 @@ function testStaticChecks() {
     noMatch('static: no legacy imports.* API',
         all, /\bimports\./, 'GNOME 45+ is ESM; imports.* is removed in Shell');
     noMatch('static: no legacy .add( child call in the Shell-side UI',
-        ui, /\.add\(/, 'use add_child() on Clutter/St actors; GTK4 prefs may use add()');
+        ui.replaceAll('Main.messageTray.add(', ''), /\.add\(/,
+        'use add_child() on Clutter/St actors; the Shell message tray uses add()');
 
     // Faz 2 step 3: the write path must stay atomic (temp + rename) — the
     // ONLY permitted write mechanism is Gio.File.replace_contents.
@@ -1898,6 +1924,17 @@ function testMoveTaskTo() {
             === '# T\n\n## W\n- [ ] b\n- [ ] a\n',
         JSON.stringify(Storage.moveTaskTo('# T\n\n## W\n- [ ] a\n- [ ] b\n', 3, 4)));
 
+    const rawLine = '  -  [ ]  **raw title**  @start(2099-01-01) @other(A)  ';
+    const authored = `## Work  \r\n${rawLine}\r\nAn interleaved note\n\t- [X] other`;
+    const reordered = `## Work  \r\nAn interleaved note\n\t- [X] other\r\n${rawLine}`;
+    const movedBack = `## Work  \r\nAn interleaved note\n${rawLine}\r\n\t- [X] other`;
+    record('moveTaskTo: moving a future task preserves authored Markdown and line endings without a title',
+        Storage.moveTaskTo(authored, 1, 3) === reordered &&
+        Storage.moveTaskTo(reordered, 3, 2) === movedBack);
+    record('moveTaskTo: reordering above an explicit General heading keeps the tasks above it',
+        Storage.moveTaskTo('- [ ] a\n- [ ] b\n## General\n- [ ] c\n', 0, 1)
+            === '- [ ] b\n- [ ] a\n## General\n- [ ] c\n');
+
     // Every moved output is canonical.
     const moved = Storage.moveTaskTo(FOUR, 2, 5);
     record('moveTaskTo: output round-trips byte-identical',
@@ -2468,6 +2505,8 @@ testMoveCategoryTo();
 testEmptyState();
 testExtensibilitySkeleton();
 testTaskDue();
+testTaskDatesAndStars(record);
+testRepeat(record);
 testWriteRead();
 restoreOriginal();
 testParseDocument();
@@ -2481,6 +2520,7 @@ testPathParams();
 testResolveTodoPath();
 testCategoryColors();
 testCompatPopupArgs();
+testReminders(record);
 testStaticChecks();
 
 // Final integrity check against the pre-test snapshot.
@@ -2496,9 +2536,6 @@ record('teardown: ~/todo.md is untouched by the test suite',
     'the file must survive the suite byte-for-byte');
 
 // ---- fileSync: a read in flight must not clobber newer state -------------
-// F1 (found while reviewing 0.23.0's async read; docs/lessons.md L-062). A read
-// result is only valid if no write and no clear() happened after the read
-// started; comparing content cannot see staleness, only the generation can.
 // Phase A is deterministic: clear() is a state change, not a disk race, so the
 // in-flight result is stale with respect to it every time. Phase B is
 // adversarial: whether the read captures the bytes before the write depends on
@@ -2622,6 +2659,50 @@ async function testFileSyncDraft() {
     }
 }
 
+async function testFileSyncCancel() {
+    const dir = GLib.dir_make_tmp('todo-cancel-XXXXXX');
+    const path = `${dir}/todo.md`;
+    const original = '- [ ] first session\n';
+    const updated = '- [ ] second session\n';
+    const first = new TodoFile(() => path);
+    const second = new TodoFile(() => path);
+    let staleCallback = false;
+    try {
+        Storage.writeTodo(path, original);
+        first.watch(() => {});
+        first.load(() => {
+            staleCallback = true;
+        });
+        const shutdownRead = first._readCancellable;
+        first.destroy();
+        record('fileSync: shutdown cancels the Gio read and clears pending',
+            shutdownRead.is_cancelled() && !first.pending, '');
+
+        Storage.writeTodo(path, updated);
+        second.load(() => {
+            staleCallback = true;
+        });
+        const supersededRead = second._readCancellable;
+        await new Promise(resolve => second.load(resolve));
+        record('fileSync: a new load cancels an older Gio read',
+            supersededRead.is_cancelled() && !second.pending, '');
+
+        await new Promise(resolve => {
+            GLib.timeout_add(GLib.PRIORITY_DEFAULT, 50, () => {
+                resolve();
+                return GLib.SOURCE_REMOVE;
+            });
+        });
+        record('fileSync: canceled reads cannot change either session or invoke callbacks',
+            first.read().raw === '' && second.read().raw === updated && !staleCallback, '');
+    } finally {
+        first.destroy();
+        second.destroy();
+        GLib.unlink(path);
+        GLib.rmdir(dir);
+    }
+}
+
 // The async phase needs the main loop (gjs does not run it for a plain script);
 // the watchdog makes a failure in the phase a FAIL instead of a hang.
 const fsyncLoop = new GLib.MainLoop(null, false);
@@ -2634,8 +2715,8 @@ const fsyncWatchdog = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 10, () => 
     return GLib.SOURCE_REMOVE;
 });
 testFileSyncRace(() => {
-    testFileSyncDraft().catch(error => {
-        record('draft: test completes', false, String(error));
+    testFileSyncDraft().then(testFileSyncCancel).catch(error => {
+        record('fileSync: async tests complete', false, String(error));
     }).finally(() => {
         fsyncDone = true;
         GLib.Source.remove(fsyncWatchdog);

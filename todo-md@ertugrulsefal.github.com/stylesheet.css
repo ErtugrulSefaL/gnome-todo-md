@@ -31,18 +31,22 @@
     spacing: 6px;
 }
 
-.todo-task-due {
+.todo-task-details {
+    spacing: 4px;
+}
+
+.todo-task-tag {
     font-size: 0.9em;
     margin-left: 32px;
 }
 
-.todo-task-due:rtl {
+.todo-task-tag:rtl {
     margin-left: 0;
     margin-right: 32px;
 }
 
-.todo-task-due:hover,
-.todo-task-due:focus {
+.todo-task-tag:hover,
+.todo-task-tag:focus {
     text-decoration: underline;
 }
 

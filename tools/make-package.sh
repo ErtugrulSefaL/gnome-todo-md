@@ -4,7 +4,8 @@
 # The zip root must contain only runtime files (EGO review rules):
 #   extension.js metadata.json prefs.js storage.js tabBar.js rowFactory.js
 #   fileSync.js taskActions.js categoryPanel.js dragDrop.js menuView.js
-#   compat.js stylesheet.css schemas/<id>.gschema.xml  LICENSE
+#   compat.js repeat.js repeatEditor.js reminders.js reminderEditor.js
+#   notificationScheduler.js stylesheet.css schemas/<id>.gschema.xml LICENSE
 # README.md / CHANGELOG.md / tests/ / docs/ / *.compiled are never packaged.
 #
 # Usage:  bash tools/make-package.sh
@@ -48,6 +49,11 @@ FILES=(
     "$EXT_DIR/tabBar.js"
     "$EXT_DIR/rowFactory.js"
     "$EXT_DIR/compat.js"
+    "$EXT_DIR/repeat.js"
+    "$EXT_DIR/repeatEditor.js"
+    "$EXT_DIR/reminders.js"
+    "$EXT_DIR/reminderEditor.js"
+    "$EXT_DIR/notificationScheduler.js"
     "$EXT_DIR/stylesheet.css"
     "$SCHEMA_FILE"
     "LICENSE"
@@ -80,6 +86,7 @@ rm -f "$OUT"
 EXPECTED=$(printf '%s\n' \
     extension.js metadata.json prefs.js storage.js fileSync.js taskActions.js \
     categoryPanel.js dragDrop.js menuView.js tabBar.js rowFactory.js compat.js \
+    repeat.js repeatEditor.js reminders.js reminderEditor.js notificationScheduler.js \
     stylesheet.css "schemas/$(basename "$SCHEMA_FILE")" LICENSE | sort)
 ACTUAL=$(unzip -Z1 "$OUT" | grep -v '/$' | sort)
 if [ "$EXPECTED" != "$ACTUAL" ]; then

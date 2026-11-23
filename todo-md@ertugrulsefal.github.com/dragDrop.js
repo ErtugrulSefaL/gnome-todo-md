@@ -42,8 +42,8 @@ export class DragDrop {
         }
     }
 
-    onDragBegin(index, categoryName) {
-        this._ext._dragging = {kind: 'task', index, category: categoryName};
+    onDragBegin(index, categoryName, snapshot) {
+        this._ext._dragging = {kind: 'task', index, category: categoryName, snapshot};
         DND.addDragMonitor(this._ext._dragMonitor);
         this.raiseDragActors();
     }
@@ -85,19 +85,17 @@ export class DragDrop {
         if (this._ext._dragging?.kind === 'category') {
             return this.onCategoryDrop();
         }
-        if (!this._ext._dragging
-            || this._ext._dragging.category !== toCategory
-            || this._ext._dragging.index === toIndex) {
+        const drag = this._ext._dragging;
+        if (!drag || drag.category !== toCategory || drag.index === toIndex) {
             return false;
         }
-        const parsed = this._ext._file.read();
-        const updated = Storage.moveTaskTo(parsed.raw, this._ext._dragging.index, toIndex);
-        if (updated === parsed.raw) {
+        const updated = Storage.moveTaskTo(drag.snapshot.raw, drag.index, toIndex);
+        if (updated === drag.snapshot.raw ||
+            this._ext._file.commitDraft(updated, drag.snapshot) !== 'saved') {
             return false;
         }
         // The move shifts line indexes: an open editor would re-anchor to another task.
         this._ext._closeInteractions();
-        this._ext._file.commit(updated);
         return true;
     }
 
@@ -324,9 +322,8 @@ export class DragDrop {
 
     // Alt+↑ / Alt+↓: the adjacent task is the target, so one press is one step.
     // The moved row keeps the key focus (handed back as _focusIndex).
-    moveTask(index, categoryName, direction) {
-        const parsed = this._ext._file.read();
-        const section = Storage.renderSections(Storage.parseDocument(parsed.raw))
+    moveTask(index, categoryName, direction, snapshot) {
+        const section = Storage.renderSections(Storage.parseDocument(snapshot.raw))
             .find(candidate => candidate.name === categoryName);
         const pos = section
             ? section.tasks.findIndex(task => task.index === index)
@@ -335,14 +332,13 @@ export class DragDrop {
         if (pos === -1 || other < 0 || other >= section.tasks.length) {
             return;
         }
-        const updated = Storage.moveTaskTo(parsed.raw, index, section.tasks[other].index);
-        if (updated === parsed.raw) {
+        const updated = Storage.moveTaskTo(snapshot.raw, index, section.tasks[other].index);
+        if (updated === snapshot.raw || this._ext._file.commitDraft(updated, snapshot) !== 'saved') {
             return;
         }
         // Close interactions only once the move happens: without a refresh the menu
         // would show a row that is already gone.
         this._ext._closeInteractions();
-        this._ext._file.commit(updated);
         // moveTaskTo lands the task at `other` in the new document; remember its
         // line index for the focus hand-back.
         const moved = Storage.renderSections(Storage.parseDocument(updated))

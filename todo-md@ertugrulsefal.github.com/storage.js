@@ -215,8 +215,9 @@ export function parseDocument(content) {
                 // An explicit '## General' takes over the fallback bucket; `preCount` records the boundary.
                 current.implicit = false;
                 current.preCount = current.items.length;
+                current.headingIndex = i;
             } else {
-                current = {name, items: [], implicit: false};
+                current = {name, items: [], implicit: false, headingIndex: i};
                 doc.categories.push(current);
             }
             continue;
@@ -323,9 +324,9 @@ export function serializeDocument(doc) {
     return lines.join(eol) + eol;
 }
 
-export function readTodoAsync(path, callback) {
+export function readTodoAsync(path, callback, cancellable = null) {
     const file = Gio.File.new_for_path(path);
-    file.load_contents_async(null, (source, result) => {
+    file.load_contents_async(cancellable, (source, result) => {
         let content, etag;
         try {
             const [, bytes, loadedEtag] = source.load_contents_finish(result);
@@ -350,7 +351,7 @@ export function parseTodo(content, ok = true) {
 // Task operations
 const normalizeTaskText = text => text.replace(/[\r\n\u2028\u2029]+/g, ' ');
 
-export function toggleTask(content, index) {
+export function toggleTask(content, index, now = new Date()) {
     const lines = content.split('\n');
     const line = lines[index];
     if (line === undefined) {
@@ -360,13 +361,16 @@ export function toggleTask(content, index) {
     // A CRLF line keeps a trailing '\r'; match without it, then put it back.
     const cr = line.endsWith('\r') ? '\r' : '';
     const match = (cr ? line.slice(0, -1) : line)
-        .match(/^(\s*-\s+\[)([ xX])(\]\s+.*)$/);
+        .match(/^(\s*-\s+\[)([ xX])(\]\s+)(.*)$/);
     if (!match) {
         return content;
     }
 
-    const newMark = match[2].toLowerCase() === 'x' ? ' ' : 'x';
-    lines[index] = match[1] + newMark + match[3] + cr;
+    const done = match[2].toLowerCase() === 'x';
+    if (!done && isBeforeTaskStart(match[4], now)) {
+        return content;
+    }
+    lines[index] = match[1] + (done ? ' ' : 'x') + match[3] + match[4] + cr;
     return lines.join('\n');
 }
 
@@ -402,66 +406,75 @@ export function deleteTask(content, index) {
 
 export function addTask(content, text, categoryName = FALLBACK_CATEGORY) {
     const doc = parseDocument(content);
-    let target = doc.categories.find(category => category.name === categoryName);
-    if (!target) {
-        target = categoryName === FALLBACK_CATEGORY
-            ? {name: FALLBACK_CATEGORY, items: [], implicit: true}
-            : {name: categoryName, items: [], implicit: false};
-        doc.categories.push(target);
-    }
+    const categoryIndex = doc.categories.findIndex(category => category.name === categoryName);
+    const target = doc.categories[categoryIndex];
+    const lines = content.split('\n');
+    const lastTask = target && categoryTasks(target).at(-1);
+    const cr = doc.eol === '\r\n' ? '\r' : '';
+    const taskLine = `- [ ] ${normalizeTaskText(text)}`;
 
-    // Insert after the last task item, or at the end when the category holds only extras.
-    let insertAt = target.items.length;
-    for (let i = target.items.length - 1; i >= 0; i--) {
-        if (target.items[i].type === 'task') {
-            insertAt = i + 1;
-            break;
+    if (target?.headingIndex !== undefined) {
+        const end = doc.categories[categoryIndex + 1]?.headingIndex ??
+            (content.endsWith('\n') ? lines.length - 1 : lines.length);
+        const nextLine = lastTask ? (target.items.indexOf(lastTask) + 1 === target.preCount
+            ? target.headingIndex : lastTask.index) + 1 : end;
+
+        // At an unterminated EOF the prior line needs a separator and the new last line has none.
+        if (nextLine === lines.length && !lines[nextLine - 1].endsWith('\r')) {
+            lines[nextLine - 1] += cr;
         }
+        lines.splice(nextLine, 0, taskLine + (nextLine < lines.length ? cr : ''));
+        return lines.join('\n');
     }
-    const singleLine = normalizeTaskText(text);
-    target.items.splice(insertAt, 0, makeTaskItem(singleLine, false));
 
-    return serializeDocument(doc);
+    // Adding the document scaffold does not require reserializing existing tasks.
+    if (lines.at(-1) === '') {
+        lines.pop();
+    } else if (!lines.at(-1).endsWith('\r')) {
+        lines[lines.length - 1] += cr;
+    }
+    if (target) {
+        const nextLine = lastTask ? lastTask.index + 1
+            : doc.categories[categoryIndex + 1]?.headingIndex ?? lines.length;
+        lines.splice(nextLine, 0, taskLine + cr);
+    } else {
+        lines.push(`## ${categoryName}${cr}`, taskLine + cr);
+    }
+    const first = doc.categories[0];
+    if (first?.implicit && (first === target || categoryTasks(first).length > 0)) {
+        lines.splice(doc.title === null ? 0 : 1, 0, `## ${FALLBACK_CATEGORY}${cr}`);
+    }
+    if (doc.title === null) {
+        lines.unshift(`# TODO${cr}`);
+    }
+    return lines.join('\n') + '\n';
 }
 
 export function moveTaskTo(content, fromIndex, toIndex) {
-    const doc = parseDocument(content);
-    for (const category of doc.categories) {
-        const tasks = categoryTasks(category);
-        const fromPos = tasks.findIndex(task => task.index === fromIndex);
-        const toPos = tasks.findIndex(task => task.index === toIndex);
-        if (fromPos === -1 || toPos === -1 || fromPos === toPos) {
-            continue;
-        }
-
-        const items = category.items;
-        const moving = tasks[fromPos];
-        const target = tasks[toPos];
-        const ia = items.indexOf(moving);
-
-        // Re-insert after the target when moving down, before it when moving up.
-        items.splice(ia, 1);
-        const targetAt = items.indexOf(target);
-        const insertAt = fromPos < toPos ? targetAt + 1 : targetAt;
-        items.splice(insertAt, 0, moving);
-
-        // Re-derive `preCount` from where the item landed relative to the boundary.
-        if (category.preCount !== undefined) {
-            const wasPre = ia < category.preCount;
-            const boundary = category.preCount - (wasPre ? 1 : 0);
-            const isPre = insertAt < boundary;
-            if (wasPre && !isPre) {
-                category.preCount -= 1;
-            } else if (!wasPre && isPre) {
-                category.preCount += 1;
-            }
-            if (category.preCount >= items.length) {
-                category.preCount = 0;
-            }
-        }
-        return serializeDocument(doc);
+    if (fromIndex === toIndex) {
+        return content;
     }
-    return content;
+    const doc = parseDocument(content);
+    const sameCategory = doc.categories.some(category => {
+        const tasks = categoryTasks(category);
+        return tasks.some(task => task.index === fromIndex) && tasks.some(task => task.index === toIndex);
+    });
+    if (!sameCategory) {
+        return content;
+    }
+
+    const lines = content.split('\n');
+    const last = lines.length - 1;
+    const [moving] = lines.splice(fromIndex, 1);
+    lines.splice(toIndex, 0, moving);
+
+    // On a file without a final newline, transfer a trailing CR to the line that now needs the separator.
+    if (Math.max(fromIndex, toIndex) === last && lines[last].endsWith('\r')) {
+        const oldLast = fromIndex === last ? toIndex : last - 1;
+        lines[oldLast] += '\r';
+        lines[last] = lines[last].slice(0, -1);
+    }
+    return lines.join('\n');
 }
 
 // Category Operations
@@ -599,16 +612,80 @@ export function isDueDate(value) {
     return day <= daysInMonth[month - 1];
 }
 
-export function getTaskDue(raw) {
-    const dates = taskTagSpans(raw).filter(tag => tag.key === 'due');
-    if (dates.length === 0) {
+export function parseTaskDate(value, {allowTime = false} = {}) {
+    if (typeof value !== 'string') {
+        return null;
+    }
+    const match = /^(\d{4}-\d{2}-\d{2})(?: at ([01]\d|2[0-3]):([0-5]\d))?$/u.exec(value);
+    if (!match || match[0] !== value || !isDueDate(match[1]) || (!allowTime && match[2])) {
+        return null;
+    }
+    const [, date, hours, minutes] = match;
+    return hours ? {date, time: `${hours}:${minutes}`} : {date};
+}
+
+export function getTaskTagValues(raw, key) {
+    return taskTagSpans(raw).filter(tag => tag.key === key).map(tag => tag.value);
+}
+
+export function mapTaskTagValues(raw, key, update) {
+    let next = raw;
+    for (const tag of taskTagSpans(raw).reverse()) {
+        if (tag.key === key) {
+            const value = update(tag.value);
+            if (typeof value !== 'string' || /[)\r\n\u2028\u2029]/.test(value)) {
+                return null;
+            }
+            next = next.slice(0, tag.start) + `@${key}(${value})` + next.slice(tag.end);
+        }
+    }
+    return next;
+}
+
+export function getTaskTag(raw, key, parse) {
+    const values = getTaskTagValues(raw, key);
+    if (values.length === 0) {
         return {status: 'absent'};
     }
-    if (dates.length > 1) {
+    if (values.length > 1) {
         return {status: 'duplicate'};
     }
-    const date = dates[0].value;
-    return isDueDate(date) ? {status: 'valid', date} : {status: 'invalid'};
+    const parsed = parse(values[0]);
+    return parsed ? {...parsed, status: 'valid'} : {status: 'invalid'};
+}
+
+export function getTaskStart(raw) {
+    return getTaskTag(raw, 'start', parseTaskDate);
+}
+
+export function getTaskDue(raw) {
+    return getTaskTag(raw, 'due', value => parseTaskDate(value, {allowTime: true}));
+}
+
+export function getTaskStarred(raw) {
+    return getTaskTag(raw, 'starred', value => value === '1' ? {starred: true} : null);
+}
+
+export function taskDates(raw) {
+    const start = getTaskStart(raw);
+    const {status, ...due} = getTaskDue(raw);
+    return {start: start.date ?? null, due: status === 'valid' ? due : null};
+}
+
+export function localDateString(date = new Date()) {
+    const year = String(date.getFullYear()).padStart(4, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+export function localTaskTimestamp(date, time = '00:00') {
+    return Date.parse(`${date}T${time}:00`);
+}
+
+export function isBeforeTaskStart(raw, now = new Date()) {
+    const {date} = getTaskStart(raw);
+    return date !== undefined && localDateString(now) < date;
 }
 
 function removeTaskTagSpan(raw, {start, end}) {
@@ -622,32 +699,33 @@ function removeTaskTagSpan(raw, {start, end}) {
 }
 
 export function getTaskDueValues(raw) {
-    return taskTagSpans(raw).filter(tag => tag.key === 'due').map(tag => tag.value);
+    return getTaskTagValues(raw, 'due');
 }
 
-// A null date clears the tag. A null result means the draft was rejected.
-export function updateTaskDueText(text, date, {resolveDuplicates = false} = {}) {
-    if (date !== null && !isDueDate(date)) {
+// A null value clears the tag. A null result means the draft was rejected.
+export function updateTaskTagText(text, key, value, {resolveDuplicates = false} = {}) {
+    if (!/^\w+$/.test(key) || (value !== null &&
+        (typeof value !== 'string' || !value || /[)\r\n\u2028\u2029]/.test(value)))) {
         return null;
     }
     const expectedRaw = normalizeTaskText(text);
     const tags = taskTagSpans(expectedRaw);
-    const due = tags.filter(tag => tag.key === 'due');
-    if (due.length > 1 && !resolveDuplicates) {
+    const targets = tags.filter(tag => tag.key === key);
+    if (targets.length > 1 && !resolveDuplicates) {
         return null;
     }
-    if (due.length === 0 && date === null) {
+    if (targets.length === 0 && value === null) {
         return expectedRaw;
     }
 
-    const replacement = date === null ? '' : `@due(${date})`;
-    const first = due[0];
+    const replacement = value === null ? '' : `@${key}(${value})`;
+    const first = targets[0];
     let raw = expectedRaw;
     if (first) {
-        for (const tag of due.slice(date === null ? 0 : 1).reverse()) {
+        for (const tag of targets.slice(value === null ? 0 : 1).reverse()) {
             raw = removeTaskTagSpan(raw, tag);
         }
-        if (date !== null) {
+        if (value !== null) {
             raw = raw.slice(0, first.start) + replacement + raw.slice(first.end);
         }
     } else {
@@ -655,16 +733,16 @@ export function updateTaskDueText(text, date, {resolveDuplicates = false} = {}) 
         raw = text + (text ? ' ' : '') + replacement + raw.slice(text.length);
     }
 
-    if (date === null && !deriveText(raw)) {
+    if (value === null && !deriveText(raw)) {
         return null;
     }
 
     // Splicing a tag can join raw fragments into a token or complete an open tag.
     const expectedTags = tags.flatMap(tag => {
-        if (tag.key !== 'due') {
+        if (tag.key !== key) {
             return [expectedRaw.slice(tag.start, tag.end)];
         }
-        return tag === first && date !== null ? [replacement] : [];
+        return tag === first && value !== null ? [replacement] : [];
     });
     if (!first) {
         expectedTags.push(replacement);
@@ -678,9 +756,16 @@ export function updateTaskDueText(text, date, {resolveDuplicates = false} = {}) 
     return raw;
 }
 
+export function updateTaskDueText(text, date, options) {
+    if (date !== null && !parseTaskDate(date, {allowTime: true})) {
+        return null;
+    }
+    return updateTaskTagText(text, 'due', date, options);
+}
+
 // expectedRaw is the task text from the displayed snapshot.
-export function updateTaskDue(content, index, expectedRaw, date, options) {
-    if (!Number.isInteger(index) || typeof expectedRaw !== 'string') {
+export function replaceTaskText(content, index, expectedRaw, nextRaw) {
+    if (!Number.isInteger(index) || typeof expectedRaw !== 'string' || typeof nextRaw !== 'string') {
         return content;
     }
     const lines = content.split('\n');
@@ -694,12 +779,25 @@ export function updateTaskDue(content, index, expectedRaw, date, options) {
     if (!match || match[2] !== expectedRaw) {
         return content;
     }
-    const raw = updateTaskDueText(expectedRaw, date, options);
-    if (raw === null) {
+    lines[index] = match[1] + normalizeTaskText(nextRaw) + cr;
+    return lines.join('\n');
+}
+
+export function updateTaskDue(content, index, expectedRaw, date, options) {
+    if (typeof expectedRaw !== 'string') {
         return content;
     }
-    lines[index] = match[1] + raw + cr;
-    return lines.join('\n');
+    return replaceTaskText(content, index, expectedRaw, updateTaskDueText(expectedRaw, date, options));
+}
+
+export function toggleTaskStar(content, index, expectedRaw) {
+    if (typeof expectedRaw !== 'string') {
+        return content;
+    }
+    const {status} = getTaskStarred(expectedRaw);
+    const value = status === 'valid' ? null : '1';
+    const next = updateTaskTagText(expectedRaw, 'starred', value, {resolveDuplicates: true});
+    return replaceTaskText(content, index, expectedRaw, next);
 }
 
 export function writeTodo(path, content) {
